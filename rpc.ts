@@ -755,7 +755,9 @@ export function assets<
  * origin isn't provided in the redirect url, the origin of the request will be
  * used. Paths can also be relative; if the path starts with a ".", the path
  * will be joined with the pathname of the request using the std path.join()
- * function. If the status isn't provided, 302 is used.
+ * function. If the status isn't provided, 302 is used. Note that paths with
+ * trailing slashes will be redirected first to the path without the trailing
+ * slash before being redirect to the specified destination. (2 hops)
  */
 export function redirect(to: string, status?: number): Rpc<{
   path: "*";

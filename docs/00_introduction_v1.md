@@ -1,3 +1,11 @@
+<!--
+
+I don't like this one. I feel like I'm absorbing and spewing marketing tactics.
+
+Not how I want this to go.
+
+-->
+
 # Introduction
 
 ```ts
@@ -202,7 +210,7 @@ Additionally, Cav includes a browser-compatible `fetch()` wrapper that you can
 plug server-side types into. This is where end-to-end TypeScript comes in handy.
 
 Here's a Preact example building on the Tasks API created in the previous
-section (CSS omitted for brevity):
+section (CSS and error handling omitted for brevity):
 
 ```html
 <!-- Path: <root>/assets/index.html -->
