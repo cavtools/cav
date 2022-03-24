@@ -107,7 +107,7 @@ http://localhost:8000.
 Listening on port 8000
 ```
 
-![Screenshot of http://localhost:8000 in a browser window. The text "Hello, world!" is in the top left corner. It's in that stupid serif font you get when you fail to properly link the font CSS. (Is it rude to say stuff like that in an alt text?)](./assets/00_getting_started_00.png)
+![Screenshot of http://localhost:8000 in a browser window. The text "Hello, world!" is in the top left corner. It's in that stupid serif font you get when you fail to properly link the font CSS. (Is it rude to say stuff like that in an alt text?)](./assets/00_getting_started_hello.png)
 
 Pat yourself on the back for surviving a gestating-baby joke. You did it! 🥳
 
@@ -118,8 +118,9 @@ good cry and psych up for the brutal cost-to-benefit ratio that's barrelling
 your way. Don't let it catch you off guard... *it can smell fear.*)
 
 Create a wireframe for the interface using your favorite design software. I'm no
-designer, but [Figma](https://figma.com) doesn't care. Here's a video of me
-using it to make a really basic prototype:
+designer, but [Figma](https://figma.com) doesn't care. Below is a video of me
+using it to make a really basic prototype. (I sped it up to 1.5x because I'm a
+Figma noob. Gotta start somewhere, eh?)
 
 ## 3. Build the interface
 
