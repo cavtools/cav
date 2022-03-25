@@ -4,8 +4,9 @@ These docs assume you're a TypeScript developer with some experience using Deno
 and Preact.
 
 I suggest leaving your right-click menu at home. Typing everything manually aids
-the learning process, and it's how Cav is intended to be used. You can expand
-the "⚡️ Breakdown" drop-downs to get a closer look at what's happening.
+the learning process, and that's how Cav is intended to be used. (Stick shift,
+baby!) You can expand the "⚡️ Breakdown" drop-downs to get a closer look at
+what's happening.
 
 To start, we're going to do To-Dos. (It's tradition.)
 
@@ -119,7 +120,7 @@ Listening on port 8000
 ![Screenshot of http://localhost:8000 in a browser window. The text "Hello,
 world!" is in the top left corner. It's in that stupid serif font you get when
 you fail to properly link the font CSS. (Serious question: Is it rude to say stuff like that in an
-alt text?)](./assets/00_getting_started_hello.png)
+alt text?)](./assets/getting_started_hello.png)
 
 Pat yourself on the back for surviving a gestating-baby joke. You did it! 🥳
 
@@ -137,7 +138,7 @@ enough" outline that I struggled through. The font is
 ![Prototype of the interface we'll be making. It has three to-dos on it, each
 demonstrating the different styles for the three different states of to-dos: 🥚
 unstarted, 🐥 in-progress, and 🐓
-finished.](./assets/00_getting_started_prototype.png)
+finished.](./assets/getting_started_prototype.png)
 
 <details><summary>
 Take a deep breath, a gulp of water, and let that negative energy leave your
