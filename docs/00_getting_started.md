@@ -192,9 +192,9 @@ export function App() {
 > (To learn more about the `@jsxImportSource` pragma, [click
 > here](https://deno.land/manual/jsx_dom/jsx).)
 > 
-> It's important that this module doesn't get imported by server code, and
-> vice-versa. I like to keep my project structure as flat as possible though,
-> with all the files more or less mixed together. To delineate between server
+> It's important that this module doesn't get imported by server code, or
+> vice-versa. I like to keep my project structure as flat as possible, though,
+> with all the modules more or less mixed together. To delineate between server
 > and browser modules, you may have noticed that I include a comment at the top
 > of each module which states where the module is intended to be used. Following
 > the example set by [Deno's contributor style
@@ -256,7 +256,6 @@ render(<App />, document.body);
 > API](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports),
 > which is supported by [most
 > browsers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#browser_compatibility).
-> 
 > Dependencies imported with `await import()` will not be included in the served
 > bundle. However, these dependencies must come from a location that is
 > accessible to the browser, such as a remote URL or from inside the assets
