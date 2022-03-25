@@ -79,7 +79,6 @@ console.log("Listening on port 8000");
 
 TODO 🥚
 
----
 </details>
 
 Now go to your terminal and make that file executable. This lets you easily
@@ -147,7 +146,6 @@ body. The rest of this is super fun, I promise. 😇
 
 🤞
 
----
 </details>
 
 ## 3. Build the interface
@@ -219,7 +217,6 @@ You don't have to do what I do. With Cav, you can organize your code however you
 like, more or less. Just remember to keep your browser-only code and server-only
 code away from each other on the dependency graph.
 
----
 </details>
 
 Let's render the `App` to the page using a `<root>/assets/bundle.tsx` file:
@@ -270,7 +267,6 @@ const { notBundled } = await import("./inside/assets/mod.ts");
 
 Pretty cool, eh? (God, I love Deno.)
 
----
 </details>
 
 Next, link the bundle in the `index.html` with a `<script type="module">` tag:
@@ -343,7 +339,6 @@ internet. (tsk tsk)
 I'm pretty sure I've seen this joke somewhere, and I'm dying to get links to any
 originals. [@](https://twitter.com/connorlogin) me if you know of any.
 
----
 </details>
 
 You're seeing errors in the terminal and the web console because we modified the
@@ -365,7 +360,6 @@ If you do...
 Great job! You've earned yourself a water break. (and maybe a cookie
 or something idk, whatever gets you going)
 
----
 </details>
 
 <details><summary>
@@ -379,10 +373,8 @@ issue](https://github.com/connorlogin/cav/issues). I'll try to help out if I
 can. This thing is just getting started (ha) so there's bound to be some bugs.
 Sorry about that!
 
----
 </details>
 
----
 </details>
 
 ## 4. API the business logic
