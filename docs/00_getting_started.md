@@ -154,7 +154,7 @@ Cav is capable of working with many frontend libraries, thanks to [Deno's
 runtime compiler API](https://deno.land/manual@main/typescript/runtime). For
 this project, we're going to use [Preact](https://preactjs.com).
 
-Export the Preact dependency from a standalone module. If you're familiar with
+Export the Preact dependency from a dedicated module. If you're familiar with
 Deno, then you're familiar with the [`deps.ts`
 pattern](https://deno.land/manual/examples/manage_dependencies). This is like
 that, but we'll call it `<root>/preact.ts`:
@@ -189,33 +189,33 @@ export function App() {
 ⚡️ Breakdown
 </summary>
 
->To learn more about the `@jsxImportSource` pragma, [click
->here](https://deno.land/manual/jsx_dom/jsx).
->
->It's important that this module doesn't get imported by server code, and
->vice-versa. I like to keep my project structure as flat as possible though,
->with all the files more or less mixed together. To delineate between server and
->browser modules, you may have noticed that I include a comment at the top of
->each module which states where the module is intended to be used. Following the
->example set by [Deno's contributor style
->guide](https://deno.land/manual/contributing/style_guide), I use three
->variations:
->
->```ts
->// This module is browser-only.
->```
->
->```ts
->// This module is browser-compatible.
->```
->
->```ts
->// This module is server-only.
->```
->
->You don't have to do what I do. With Cav, you can organize your code however
->you like. Just remember to keep your browser-only code and server-only code
->away from each other on the dependency graph.
+> (To learn more about the `@jsxImportSource` pragma, [click
+> here](https://deno.land/manual/jsx_dom/jsx).)
+> 
+> It's important that this module doesn't get imported by server code, and
+> vice-versa. I like to keep my project structure as flat as possible though,
+> with all the files more or less mixed together. To delineate between server
+> and browser modules, you may have noticed that I include a comment at the top
+> of each module which states where the module is intended to be used. Following
+> the example set by [Deno's contributor style
+> guide](https://deno.land/manual/contributing/style_guide), I use three
+> variations:
+> 
+> ```ts
+> // This module is browser-only.
+> ```
+> 
+> ```ts
+> // This module is browser-compatible.
+> ```
+> 
+> ```ts
+> // This module is server-only.
+> ```
+> 
+> You don't have to do what I do. With Cav, you can organize your code however
+> you like. Just remember to keep your browser-only code and server-only code
+> away from each other on the dependency graph.
 
 </details>
 
@@ -335,7 +335,7 @@ done.
 
 > <details><summary>
 > Now that you've bought a new computer because the error that occurred caused
-> your old one to spontaneously combust (I'm not liable, check the license), I
+> your old one to spontaneously combust (I'm not liable, check the [license](https://github.com/connorlogin/cav/blob/ff79594bcc29b388c493c59a88de5b351853f6de/LICENSE#L15)), I
 > can tell you what's going on here. But before I do, I must say I really hope
 > you've learned a valuable/expensive lesson about blindly following
 > instructions on the internet. (tsk tsk)
