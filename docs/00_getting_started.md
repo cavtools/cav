@@ -382,6 +382,9 @@ Sorry about that!
 ---
 </details>
 
+---
+</details>
+
 ## 4. API the business logic
 
 ## 5. Pipe the data
