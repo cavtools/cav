@@ -77,7 +77,7 @@ console.log("Listening on port 8000");
 ⚡️ Breakdown
 </summary>
 
-TODO 🥚
+> TODO 🥚
 
 </details>
 
@@ -144,7 +144,7 @@ Take a deep breath, a gulp of water, and let that negative energy leave your
 body. The rest of this is super fun, I promise. 😇
 </summary>
 
-🤞
+> 🤞
 
 </details>
 
@@ -189,33 +189,33 @@ export function App() {
 ⚡️ Breakdown
 </summary>
 
-To learn more about the `@jsxImportSource` pragma, [click
-here](https://deno.land/manual/jsx_dom/jsx).
-
-It's important that this module doesn't get imported by server code, and
-vice-versa. I like to keep my project structure as flat as possible though, with
-all the files more or less mixed together. To delineate between server and
-browser modules, you may have noticed that I include a comment at the top of
-each module which states where the module is intended to be used. Following the
-example set by [Deno's contributor style
-guide](https://deno.land/manual/contributing/style_guide), I use three
-variations:
-
-```ts
-// This module is browser-only.
-```
-
-```ts
-// This module is browser-compatible.
-```
-
-```ts
-// This module is server-only.
-```
-
-You don't have to do what I do. With Cav, you can organize your code however you
-like, more or less. Just remember to keep your browser-only code and server-only
-code away from each other on the dependency graph.
+>To learn more about the `@jsxImportSource` pragma, [click
+>here](https://deno.land/manual/jsx_dom/jsx).
+>
+>It's important that this module doesn't get imported by server code, and
+>vice-versa. I like to keep my project structure as flat as possible though,
+>with all the files more or less mixed together. To delineate between server and
+>browser modules, you may have noticed that I include a comment at the top of
+>each module which states where the module is intended to be used. Following the
+>example set by [Deno's contributor style
+>guide](https://deno.land/manual/contributing/style_guide), I use three
+>variations:
+>
+>```ts
+>// This module is browser-only.
+>```
+>
+>```ts
+>// This module is browser-compatible.
+>```
+>
+>```ts
+>// This module is server-only.
+>```
+>
+>You don't have to do what I do. With Cav, you can organize your code however
+>you like. Just remember to keep your browser-only code and server-only code
+>away from each other on the dependency graph.
 
 </details>
 
@@ -236,36 +236,41 @@ render(<App />, document.body);
 ⚡️ Breakdown
 </summary>
 
-Deno's runtime compiler API will include all static dependencies when bundling
-the `bundle.tsx` file. It'll also do tree-shaking. When Cav serves the bundle to
-the client, it'll have a content-type header set to `application/javascript`.
-
-Static dependencies don't need to be located inside the `assets/` folder. They
-can be imported from anywhere, following Deno's module resolution algorithm.
-
-You should pay close attention to the dependency graph when leveraging
-TypeScript bundling. If you have multiple TypeScript assets that import the same
-dependency, that dependency will be served to the client multiple times, which
-in many cases would be a waste of bandwidth. A good standard practice is to have
-just one bundle in your `assets/` folder that imports everything needed by the
-client-side application. It should also take care of application setup like
-rendering and whatnot.
-
-To avoid bundling a dependency, you can use the [dynamic `import()` API](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports), which is supported by [most browsers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#browser_compatibility).
-
-Dependencies imported with `await import()` will not be included in the served
-bundle. However, these dependencies must come from a location that is accessible
-to the browser, such as a remote URL or from inside the assets folder.
-
-Note that Deno allows for top-level await, so you can do something like this if
-you want:
-
-```ts
-import { bundled } from "../outside/assets/mod.ts";
-const { notBundled } = await import("./inside/assets/mod.ts");
-```
-
-Pretty cool, eh? (God, I love Deno.)
+> Deno's runtime compiler API will include all static dependencies when bundling
+> the `bundle.tsx` file. It'll also do tree-shaking. When Cav serves the bundle
+> to the client, it'll have a content-type header set to
+> `application/javascript`.
+> 
+> Static dependencies don't need to be located inside the `assets/` folder. They
+> can be imported from anywhere, following Deno's module resolution algorithm.
+> 
+> You should pay close attention to the dependency graph when leveraging
+> TypeScript bundling. If you have multiple TypeScript assets that import the
+> same dependency, that dependency will be served to the client multiple times,
+> which in many cases would be a waste of bandwidth. A good standard practice is
+> to have just one bundle in your `assets/` folder that imports everything
+> needed by the client-side application. It should also take care of application
+> setup like rendering and whatnot.
+> 
+> To avoid bundling a dependency, you can use the [dynamic `import()`
+> API](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports),
+> which is supported by [most
+> browsers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#browser_compatibility).
+> 
+> Dependencies imported with `await import()` will not be included in the served
+> bundle. However, these dependencies must come from a location that is
+> accessible to the browser, such as a remote URL or from inside the assets
+> folder.
+> 
+> Note that Deno allows for top-level await, so you can do something like this
+> if you want:
+> 
+> ```ts
+> import { bundled } from "../outside/assets/mod.ts";
+> const { notBundled } = await import("./inside/assets/mod.ts");
+> ```
+> 
+> Pretty cool, eh? (God, I love Deno.)
 
 </details>
 
@@ -328,54 +333,86 @@ your browser to see what happens, and then expand this drop-down when you're
 done.
 </summary>
 
+> <details><summary>
+> Now that you've bought a new computer because the error that occurred caused
+> your old one to spontaneously combust (I'm not liable, check the license), I
+> can tell you what's going on here. But before I do, I must say I really hope
+> you've learned a valuable/expensive lesson about blindly following
+> instructions on the internet. (tsk tsk)
+> </summary>
+> 
+> > I'm pretty sure I've seen this joke somewhere, and I'm dying to get links to
+> > any originals. [@](https://twitter.com/connorlogin) me if you know of any.
+> 
+> </details>
+> 
+> You're seeing errors in the terminal and the web console because we modified
+> the flags the Deno process starts with. Although our code was reloaded, the
+> process itself never restarted. Whenever you change the permission flags or
+> anything else in the `#!`, you'll need to manually restart the server. Any
+> other time, it should successfully reload without manual intervention.
+> 
+> Go back to your terminal and condemn that old hag to death-by-hangup with a
+> `ctrl-c`, then start it up again with `./main.ts`.
+> 
+> Now reload the page in your browser. You should see a "Hello from Preact!"
+> header.
+> 
+> <details><summary>
+> If you do...
+> </summary>
+> 
+> > Great job! You've earned yourself a water break. (and maybe a cookie
+> > or something idk, whatever gets you going)
+> 
+> </details>
+> 
+> <details><summary>
+> If you don't...
+> </summary>
+> 
+> > wtf did you do!?
+> > 
+> > /s You should let me know what's happening in a [GitHub
+> > issue](https://github.com/connorlogin/cav/issues). I'll try to help out if I
+> > can. This thing is just getting started (ha) so there's bound to be some
+> > bugs. Sorry about that!
+> 
+> </details>
+
+</details>
+
+At this point you need to use Preact to build something functional that matches
+the interface you designed. Because this isn't a [Preact
+tutorial](https://preactjs.com/tutorial/), I'm just going to lazily put my
+implementation below without explaining.
+
+Practice makes a perfect habit. Give it a go before checking my answer.
+
 <details><summary>
-Now that you've bought a new computer because the error that occurred caused
-your old one to spontaneously combust (I'm not liable, check the license), I can
-tell you what's going on here. But before I do, I must say I really hope you've
-learned a valuable/expensive lesson about blindly following instructions on the
-internet. (tsk tsk)
+TypeScript
 </summary>
 
-I'm pretty sure I've seen this joke somewhere, and I'm dying to get links to any
-originals. [@](https://twitter.com/connorlogin) me if you know of any.
-
-</details>
-
-You're seeing errors in the terminal and the web console because we modified the
-flags the Deno process starts with. Although our code was reloaded, the process
-itself never restarted. Whenever you change the permission flags or anything
-else in the `#!`, you'll need to manually restart the server. (Any other time,
-it should successfully reload without manual intervention.)
-
-Go back to your terminal and condemn that old hag to death-by-hangup with a
-`ctrl-c`, then start it up again with `./main.ts`.
-
-Now reload the page in your browser. You should see a "Hello from Preact!"
-header.
-
-<details><summary>
-If you do...
-</summary>
-
-Great job! You've earned yourself a water break. (and maybe a cookie
-or something idk, whatever gets you going)
+> TODO
 
 </details>
 
 <details><summary>
-If you don't...
+HTML
 </summary>
 
-wtf did you do!?
-
-/s You should let me know what's happening in a [GitHub
-issue](https://github.com/connorlogin/cav/issues). I'll try to help out if I
-can. This thing is just getting started (ha) so there's bound to be some bugs.
-Sorry about that!
+> TODO
 
 </details>
 
+<details><summary>
+CSS
+</summary>
+
+> TODO
+
 </details>
+
 
 ## 4. API the business logic
 
