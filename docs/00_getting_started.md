@@ -76,6 +76,7 @@ console.log("Listening on port 8000");
 <details><summary>
 ⚡️ Breakdown
 </summary>
+
 TODO 🥚
 </details>
 
@@ -141,6 +142,7 @@ finished.](./assets/00_getting_started_prototype.png)
 Take a deep breath, a gulp of water, and let that negative energy leave your
 body. The rest of this is super fun, I promise. 😇
 </summary>
+
 🤞
 </details>
 
@@ -183,6 +185,7 @@ export function App() {
 
 <details><summary>
 ⚡️ Breakdown
+
 </summary>
 To learn more about the `@jsxImportSource` pragma, [click
 here](https://deno.land/manual/jsx_dom/jsx).
@@ -229,6 +232,7 @@ render(<App />, document.body);
 <details><summary>
 ⚡️ Breakdown
 </summary>
+
 Deno's runtime compiler API will include all static dependencies when bundling
 the `bundle.tsx` file. It'll also do tree-shaking. When Cav serves the bundle to
 the client, it'll have a content-type header set to `application/javascript`.
@@ -319,6 +323,7 @@ But there's a catch: It won't work. You should go ahead and reload the page in
 your browser to see what happens, and then expand this drop-down when you're
 done.
 </summary>
+
 <details><summary>
 Now that you've bought a new computer because the error that occurred caused
 your old one to spontaneously combust (I'm not liable, check the license), I can
@@ -326,6 +331,7 @@ tell you what's going on here. But before I do, I must say I really hope you've
 learned a valuable/expensive lesson about blindly following instructions on the
 internet. (tsk tsk)
 </summary>
+
 I'm pretty sure I've seen this joke somewhere, and I'm dying to get links to any
 originals. [@](https://twitter.com/connorlogin) me if you know of any.
 </details>
@@ -344,6 +350,7 @@ header.
 <details><summary>
 If you do...
 </summary>
+
 Great job! You've earned yourself a water break. (and maybe a cookie
 or something idk, whatever gets you going)
 </details>
@@ -351,6 +358,7 @@ or something idk, whatever gets you going)
 <details><summary>
 If you don't...
 </summary>
+
 wtf did you do!?
 
 /s You should let me know what's happening in a [GitHub
