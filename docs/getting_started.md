@@ -27,7 +27,7 @@ Before we begin, take a big long sip of water. You need it to, like... live and
 stuff.
 
 Now *you* may need water, but *Cav* needs [Deno](https://deno.land). Install
-v1.20 or higher.
+v1.20.3 or higher.
 
 If you're using [Visual Studio Code](https://code.visualstudio.com/), install
 the [vscode_deno
