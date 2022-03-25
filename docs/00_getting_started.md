@@ -334,13 +334,11 @@ done.
 </summary>
 
 > <details><summary>
-> 
 > Now that you've bought a new computer because the error that occurred caused
-> your old one to spontaneously combust (I'm not liable, check the [license](https://github.com/connorlogin/cav/blob/ff79594bcc29b388c493c59a88de5b351853f6de/LICENSE#L15)), I
+> your old one to spontaneously combust (I'm not liable, check the license), I
 > can tell you what's going on here. But before I do, I must say I really hope
 > you've learned a valuable/expensive lesson about blindly following
 > instructions on the internet. (tsk tsk)
-> 
 > </summary>
 > 
 > > I'm pretty sure I've seen this joke somewhere, and I'm dying to get links to
