@@ -22,13 +22,15 @@ To start, we're going to do To-Dos. (It's tradition.)
 
 ## 0. Install Deno
 
-Before we begin, take a big long sip of water. You need it to, like, live and
+Before we begin, take a big long sip of water. You need it to, like... live and
 stuff.
 
 Now *you* may need water, but *Cav* needs [Deno](https://deno.land). Install
 v1.20 or higher.
 
-If you're using [Visual Studio Code](https://code.visualstudio.com/) as your IDE, install the [vscode_deno extension](https://marketplace.visualstudio.com/items?itemName=denoland.vscode-deno).
+If you're using [Visual Studio Code](https://code.visualstudio.com/), install
+the [vscode_deno
+extension](https://marketplace.visualstudio.com/items?itemName=denoland.vscode-deno).
 
 ## 1. Greet the world
 
@@ -71,10 +73,10 @@ serve(mainStack);
 console.log("Listening on port 8000");
 ```
 
-<details><summary>⚡️ Breakdown</summary>
-
+<details><summary>
+⚡️ Breakdown
+</summary>
 TODO 🥚
-
 </details>
 
 Now go to your terminal and make that file executable. This lets you easily
@@ -88,7 +90,8 @@ Next, create an `assets/` folder in `<root>/`, and put an `index.html` file in
 it. This will be the landing page. Keep it minimal for now:
 
 ```html
-<!DOCTYPE html> <!-- <root>/assets/index.html -->
+<!DOCTYPE html>
+<!-- <root>/assets/index.html -->
 <html lang="en"><head>
 
   <meta charset="utf-8">
@@ -113,7 +116,7 @@ Listening on port 8000
 
 ![Screenshot of http://localhost:8000 in a browser window. The text "Hello,
 world!" is in the top left corner. It's in that stupid serif font you get when
-you fail to properly link the font CSS. (Is it rude to say stuff like that in an
+you fail to properly link the font CSS. (Serious question: Is it rude to say stuff like that in an
 alt text?)](./assets/00_getting_started_hello.png)
 
 Pat yourself on the back for surviving a gestating-baby joke. You did it! 🥳
@@ -125,19 +128,20 @@ good cry and psych up for the brutal cost-to-benefit ratio that's barrelling
 your way. Don't let it catch you off guard... *it can smell fear.*)
 
 Create a wireframe for the interface using your favorite design software. I'm no
-designer, but [Figma](https://figma.com) doesn't care. Here's a "good enough"
-outline that I struggled through. The font is [Inter](https://rsms.me/inter/).
+designer, but [Figma](https://figma.com) doesn't discriminate. Here's a "good
+enough" outline that I struggled through. The font is
+[Inter](https://rsms.me/inter/).
 
 ![Prototype of the interface we'll be making. It has three to-dos on it, each
 demonstrating the different styles for the three different states of to-dos: 🥚
 unstarted, 🐥 in-progress, and 🐓
 finished.](./assets/00_getting_started_prototype.png)
 
-<details><summary>Take a deep breath, a gulp of water, and let that negative energy leave your body. The rest
-of this is super fun, I promise. 😇</summary>
-
+<details><summary>
+Take a deep breath, a gulp of water, and let that negative energy leave your
+body. The rest of this is super fun, I promise. 😇
+</summary>
 🤞
-
 </details>
 
 ## 3. Build the interface
@@ -177,14 +181,15 @@ export function App() {
 }
 ```
 
-<details><summary>⚡️ Breakdown</summary>
-
+<details><summary>
+⚡️ Breakdown
+</summary>
 To learn more about the `@jsxImportSource` pragma, [click
 here](https://deno.land/manual/jsx_dom/jsx).
 
 It's important that this module doesn't get imported by server code, and
-vice-versa. I like to keep my project structure as flat as possible, though,
-with all the files more or less mixed together. To delineate between server and
+vice-versa. I like to keep my project structure as flat as possible though, with
+all the files more or less mixed together. To delineate between server and
 browser modules, you may have noticed that I include a comment at the top of
 each module which states where the module is intended to be used. Following the
 example set by [Deno's contributor style
@@ -204,9 +209,8 @@ variations:
 ```
 
 You don't have to do what I do. With Cav, you can organize your code however you
-like. Just remember to keep your browser-only code and server-only code away
-from each other on the dependency graph.
-
+like, more or less. Just remember to keep your browser-only code and server-only
+code away from each other on the dependency graph.
 </details>
 
 Let's render the `App` to the page using a `<root>/assets/bundle.tsx` file:
@@ -222,28 +226,29 @@ import { render } from "../preact.ts";
 render(<App />, document.body);
 ```
 
-<details><summary>⚡️ Breakdown</summary>
+<details><summary>
+⚡️ Breakdown
+</summary>
+Deno's runtime compiler API will include all static dependencies when bundling
+the `bundle.tsx` file. It'll also do tree-shaking. When Cav serves the bundle to
+the client, it'll have a content-type header set to `application/javascript`.
 
-Cav's TypeScript bundling will bundle all dependencies when serving the
-`bundle.tsx` file. The served file will have the correct
-`application/javascript` content-type header.
-
-Bundled dependencies don't need to be located inside the `assets/` folder. They
+Static dependencies don't need to be located inside the `assets/` folder. They
 can be imported from anywhere, following Deno's module resolution algorithm.
 
 You should pay close attention to the dependency graph when leveraging
 TypeScript bundling. If you have multiple TypeScript assets that import the same
 dependency, that dependency will be served to the client multiple times, which
-is a waste of bandwidth. A good standard practice would be to have just one
-bundle in your `assets/` folder that imports everything needed by the
-client-side application, as well as taking care of application setup like
+in many cases would be a waste of bandwidth. A good standard practice is to have
+just one bundle in your `assets/` folder that imports everything needed by the
+client-side application. It should also take care of application setup like
 rendering and whatnot.
 
-To avoid bundling a dependency, you can use the `await import()` feature
-provided by the browser. Dependencies imported with `await import()` will not be
-included in the served bundle. However, these dependencies must come from a
-location that is accessible to the browser, such as a remote URL or from inside
-the assets folder.
+To avoid bundling a dependency, you can use the [dynamic `import()` API](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports), which is supported by [most browsers](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#browser_compatibility).
+
+Dependencies imported with `await import()` will not be included in the served
+bundle. However, these dependencies must come from a location that is accessible
+to the browser, such as a remote URL or from inside the assets folder.
 
 Note that Deno allows for top-level await, so you can do something like this if
 you want:
@@ -254,13 +259,13 @@ const { notBundled } = await import("./inside/assets/mod.ts");
 ```
 
 Pretty cool, eh? (God, I love Deno.)
-
 </details>
 
 Next, link the bundle in the `index.html` with a `<script type="module">` tag:
 
 ```html
-<!DOCTYPE html> <!-- <root>/assets/index.html -->
+<!DOCTYPE html>
+<!-- <root>/assets/index.html -->
 <html lang="en"><head>
 
   <meta charset="utf-8">
@@ -275,17 +280,18 @@ Next, link the bundle in the `index.html` with a `<script type="module">` tag:
 </body></html>
 ```
 
-One more thing before Preact is good to go: Because Cav's TypeScript bundling
-relies on an unstable Deno API as well as temporary files stored on disk, it
-needs to be explicitly enabled using a `tsBundler()` and the `--unstable` and
-`--allow-write` flags. Modify the `<root>/main.ts` file to look like this:
+One more thing before the Preact integration is ready: Because Cav's TypeScript
+bundling relies on an unstable Deno API as well as temporary files stored on
+disk, it needs to be explicitly enabled using a `tsBundler()` and the
+`--allow-write` and `--unstable` flags. Modify the `<root>/main.ts` file to look
+like this:
 
 ```ts
 #!/usr/bin/env deno run --watch --allow-net --allow-read --allow-write --unstable
 // <root>/main.ts
 // This module is server-only.
 
-// Don't forget to add the --allow-write and --unstable flags to the shebang!
+// Don't forget to add the --allow-write and --unstable flags to the #!
 
 import {
   assets,
@@ -306,15 +312,52 @@ console.log("Listening on port 8000");
 ```
 
 After saving your modifications, the server should've reloaded automatically
-thanks to the `--watch` flag. But we added some new flags, so you'll need to
-manually restart the server this time.
+thanks to the `--watch` flag.
 
-Condemn that old hag to death-by-hangup with a `ctrl-c` and start it up again
-with `./main.ts`. Now reload the page in your browser. You should see a "Hello
-from Preact!" header.
+<details><summary>
+But there's a catch: It won't work. You should go ahead and reload the page in
+your browser to see what happens, and then expand this drop-down when you're
+done.
+</summary>
+<details><summary>
+Now that you've bought a new computer because the error that occurred caused
+your old one to spontaneously combust (I'm not liable, check the license), I can
+tell you what's going on here. But before I do, I must say I really hope you've
+learned a valuable/expensive lesson about blindly following instructions on the
+internet. (tsk tsk)
+</summary>
+I'm pretty sure I've seen this joke somewhere, and I'm dying to get links to any
+originals. [@](https://twitter.com/connorlogin) me if you know of any.
+</details>
+You're seeing errors in the terminal and the web console because we modified the
+flags the Deno process starts with. Although our code was reloaded, the process
+itself never restarted. Whenever you change the permission flags or anything
+else in the `#!`, you'll need to manually restart the server. (Any other time,
+it should successfully reload without manual intervention.)
 
-Great job! You've earned yourself a water break. (And maybe a cookie or
-something idk.)
+Go back to your terminal and condemn that old hag to death-by-hangup with a
+`ctrl-c`, then start it up again with `./main.ts`.
+
+Now reload the page in your browser. You should see a "Hello from Preact!"
+header.
+
+<details><summary>
+If you do...
+</summary>
+Great job! You've earned yourself a water break. (and maybe a cookie
+or something idk, whatever gets you going)
+</details>
+
+<details><summary>
+If you don't...
+</summary>
+wtf did you do!?
+
+/s You should let me know what's happening in a [GitHub
+issue](https://github.com/connorlogin/cav/issues). I'll try to help out if I
+can. This thing is just getting started (ha) so there's bound to be some bugs.
+Sorry about that!
+</details>
 
 ## 4. API the business logic
 
