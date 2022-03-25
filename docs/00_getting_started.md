@@ -185,8 +185,8 @@ export function App() {
 
 <details><summary>
 ⚡️ Breakdown
-
 </summary>
+
 To learn more about the `@jsxImportSource` pragma, [click
 here](https://deno.land/manual/jsx_dom/jsx).
 
