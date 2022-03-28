@@ -2,13 +2,14 @@
 // This module is browser-compatible.
 
 // This module is a self-contained alternative for superjson et. al., with zero
-// dependencies! pack.ts is inspired by that library and the other libraries
-// that inspired it. (See their "Prior art", the bullets at the end of their
-// readme.) https://github.com/blitz-js/superjson
+// dependencies. pack.ts is inspired by superjson and the other libraries that
+// inspired it. (See their "Prior art", the bullets at the end of their readme.)
+// https://github.com/blitz-js/superjson
 
-// Also big thanks to json-dry, they had a really good solution to the circular
-// reference problem. I didn't use or read their code, but I did snag the
-// whenDone idea from them. https://github.com/11ways/json-dry
+// Also shout-out to json-dry, they had a really good solution to the circular
+// reference problem. I didn't use or read their code (my answer may be
+// wrong/incomplete), but I did snag the whenDone idea from them.
+// https://github.com/11ways/json-dry
 
 // TODO: Support for ArrayBuffer/View
 
@@ -359,7 +360,10 @@ export function unpack<T = unknown>(value: unknown, packers?: Packers): T {
       const result = packer.unpack(raw, (fn) => {
         whenDones.push(() => fn(packed));
       });
-      if (result && typeof result === "object") {
+      if (result && (
+        typeof result === "object" ||
+        typeof result === "symbol"
+      )) {
         objects.set(path, result);
       }
       packed = recur(raw, `${path}.${tag}`);

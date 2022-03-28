@@ -40,7 +40,7 @@ Create a new folder for the project. (This folder will be referred to as
 
 If you're using Visual Studio Code, create a `.vscode/` folder in `<root>/` and
 put a `settings.json` file in there with the following JSON. (Why? [Click
-here.](https://deno.land/manual@v1.20.1/vscode_deno#deno-enabling-a-workspace))
+here.](https://deno.land/manual@main/vscode_deno#deno-enabling-a-workspace))
 
 ```jsonc
 {
