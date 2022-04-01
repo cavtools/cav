@@ -219,10 +219,10 @@ export interface CtxArg {
   conn: http.ConnInfo;
   /** The cookie constructed after the Rpc path matched the request. */
   cookie: Cookie;
-  /** The raw query object associated with this request. */
-  query: Record<string, string | string[]>;
   /** The path that matched the Rpc's path init option. */
   path: string;
+  /** The raw query object associated with this request. */
+  query: Record<string, string | string[]>;
   /** The raw path groups object associated with this request. */
   groups: Record<string, string>;
   /**
@@ -441,7 +441,7 @@ export function rpcFactory<D extends RpcInit>(defaults: D): RpcFactory<D> {
         : null,
     };
 
-    const methods = new Set<string>(["initIONS"]);
+    const methods = new Set<string>(["OPTIONS"]);
     if (init.socket) {
       methods.add("GET");
       methods.add("HEAD");

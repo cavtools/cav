@@ -249,14 +249,15 @@ export function wrapWebSocket<
  * A Proxied function that wraps `fetch()` with a tailored process for making
  * requests to a Cav server. Each property access on the function itself returns
  * a new Client that extends the URL of the original Client. The periods
- * represent slash dividers and the accessed properties are path segments, like
+ * represent path dividers and the accessed properties are path segments, like
  * this: `client("http://localhost/base").nested["pa.th"]()` will result in a
- * request to "http://localhost/base/nested/pa.th". The type parameter is the
- * type of the handler this client points to, which allows the Client typescript
- * to extract information about what data the Cav server expects to receive and
- * respond with. Special treatment is given to Stacks and Rpcs, the fundamental
- * building blocks of a Cav application. For now, any other type will result in
- * all argument shapes and response types to be `unknown`.
+ * request to "http://localhost/base/nested/pa.th".
+ *
+ * The type parameter is the type of the handler this client points to, which
+ * allows the Client typescript to extract information about what data the Cav
+ * server expects to receive and respond with. Special treatment is given to
+ * Stacks and Rpcs. For now, any other type will result in all argument shapes
+ * and response types to be `unknown`.
  */
 export type Client<T = unknown> = (
   T extends Stack<infer R> ? Client<R>

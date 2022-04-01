@@ -304,7 +304,7 @@ export function tsBundler(): Bundler {
         .filter(m => m.specifier.startsWith("file://"))
         .map(m => path.fromFileUrl(m.specifier));
 
-      (async () => {
+      const respondToUpdates = async () => {
         try {
           for await (const _ of Deno.watchFs(depsList)) {
             break;
@@ -313,16 +313,6 @@ export function tsBundler(): Bundler {
             `INFO: ${filePath} - Module updated, rebundling...`,
           );
 
-          const evict = async () => {
-            tsBundles.delete(filePath);
-            try {
-              await Deno.remove(bundle);
-            } catch {
-              // No need to do anything
-            }
-            console.log(`INFO: ${filePath} - Bundle evicted`);
-          };
-
           try {
             const info = await Deno.stat(filePath);
             if (!info.isFile) {
@@ -330,7 +320,13 @@ export function tsBundler(): Bundler {
             }
           } catch (e) {
             console.log(`INFO: ${filePath} - Failed to stat:`, e);
-            await evict();
+            tsBundles.delete(filePath);
+            try {
+              await Deno.remove(bundle);
+            } catch {
+              // No need to do anything
+            }
+            console.log(`INFO: ${filePath} - Bundle evicted`);
             return;
           }
 
@@ -338,21 +334,24 @@ export function tsBundler(): Bundler {
             await emit(filePath, bundle);
           } catch (e) {
             console.log(`INFO: ${filePath} - Failed to bundle:`, e);
-            await evict();
+            console.log(`INFO: ${filePath} - Waiting for updates...`);
+            respondToUpdates(); // DON'T await this
             return;
           }
 
           console.log(
             `INFO: ${filePath} - Rebundled successfully`,
           );
+          // Don't call respondToUpdates() here
         } catch (e) {
           console.error(
             `ERROR: ${filePath} - File watcher threw an error:`,
             e
           );
         }
-      })();
+      };
 
+      respondToUpdates(); // DON'T await this
       return bundle;
     };
     

@@ -18,7 +18,7 @@ import type { Packers } from "./pack.ts";
  */
 export const NO_MATCH = new HttpError("404 not found", { status: 404 });
 
-/** A singleton metadata object generated for each request. */
+/** A metadata object generated once for every request. */
 export interface RequestData {
   /**
    * Response headers that should be applied to whatever Response ends up being
