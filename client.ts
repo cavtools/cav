@@ -11,7 +11,7 @@ import {
 } from "./pack.ts";
 
 import type { Packers } from "./pack.ts";
-import type { Parser, ParserInput, Rpc, RpcInit } from "./rpc.ts";
+import type { AnyRpc, AnyRpcInit, Parser, ParserInput, Rpc, RpcInit } from "./rpc.ts";
 import type { Stack } from "./stack.ts";
 import type { SocketResponse } from "./http.ts";
 
@@ -261,7 +261,14 @@ export function wrapWebSocket<
  */
 export type Client<T = unknown> = (
   T extends Stack<infer R> ? Client<R>
-  : T extends Rpc<infer I, infer R> ? Endpoint<I, R>
+  : T extends Rpc<
+    infer R,
+    any,
+    any,
+    infer Q,
+    infer M,
+    infer S
+  > ? Endpoint<R, Q, M, S>
   : T extends Record<never, never> ? UnionToIntersection<{
     [K in keyof T]: ExpandPath<K, Client<T[K]>>
   }[keyof T]>
@@ -273,17 +280,18 @@ export type Client<T = unknown> = (
  * determine what the expected arguments and response types are.
  */
 export interface Endpoint<
-  I extends RpcInit,
-  R extends unknown,
-  E = EndpointArg<I>,
+  Resp,
+  Query,
+  Message,
+  SocketFlag,
+  E = EndpointArg<Query, Message, SocketFlag>,
 > {
   (x: { [K in keyof E]: E[K] }): Promise<
-    R extends SocketResponse<infer M> ?
-      I extends RpcInit ?
-        I["message"] extends Parser ? Socket<ParserInput<I["message"]>, M>
-        : Socket<unknown, M>
+    Resp extends SocketResponse<infer M> ? (
+      Message extends Parser ? Socket<ParserInput<Message>, M>
       : Socket<unknown, M>
-    : R
+    )
+    : Resp
   >;
 }
 
@@ -292,7 +300,9 @@ export interface Endpoint<
  * arguments should be in when making requests to a given Rpc.
  */
 export type EndpointArg<
-  I extends RpcInit,
+  Query,
+  Message,
+  SocketFlag,
 > = Clean<{
   /**
    * Additional path segments to use when making a request to this endpoint.
@@ -304,11 +314,11 @@ export type EndpointArg<
    * If the Rpc is socket-type, this value should be set to `true`. The returned
    * value will be the wrapped web socket. Default: `undefined`
    */
-  socket: I["socket"] extends true ? true : never;
+  socket: SocketFlag extends true ? true : never;
   /** The query string parameters expected by the Rpc. Default: `undefined` */
-  query: ParserInput<I["query"]>;
+  query: ParserInput<Query>;
   /** The message expected by the Rpc. Default: `undefined` */
-  message: ParserInput<I["message"]>;
+  message: ParserInput<Message>;
   /**
    * Additional packers that should be used while serializing data. Default:
    * `undefined`
@@ -329,7 +339,7 @@ interface CustomFetchArg {
  * will be used everywhere that data is packed/unpacked when using this client,
  * including web sockets.
  */
-export function client<T extends Stack | Rpc>(
+export function client<T extends Stack | AnyRpc>(
   base = "",
   packers?: Packers,
 ): Client<T> {

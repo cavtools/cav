@@ -82,25 +82,39 @@ export type ParserOutput<T> = (
  * top-level Server, which will log them and respond with a 500 Response.
  */
 export interface Rpc<
-  I extends RpcInit = RpcInit,
-  R extends unknown = unknown,
+  Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
+  Groups extends GroupsConstraint = null,
+  Context extends ContextConstraint = null,
+  Query extends QueryConstraint = null,
+  Message extends MessageConstraint = null,
+  SocketFlag extends SocketFlagConstraint = null,
 > {
   (req: Request, conn: http.ConnInfo): Promise<Response>;
-  /** The resolver function used to construct this Rpc. */
-  readonly resolver: Resolver<I, R>;
   /** The RpcInit options used to construct this Rpc. */
-  readonly init: I;
+  readonly init: RpcInit<Resp, Groups, Context, Query, Message, SocketFlag>;
 }
 
 /**
  * Alias for an Rpc with any resolver or init types. Useful for type
  * constraints.
  */
-// deno-lint-ignore no-explicit-any
-export type AnyRpc = Rpc<any, any>;
+export type AnyRpc = Rpc<any, any, any, any, any, any>;
+
+type GroupsConstraint = Parser<Record<string, string> | undefined> | null;
+type ContextConstraint = Ctx<unknown> | null;
+type QueryConstraint = Parser<Record<string, string | string[]> | undefined> | null;
+type MessageConstraint = Parser | null;
+type SocketFlagConstraint = boolean | null;
 
 /** Initializer options when constructing Rpcs. */
-export interface RpcInit<C extends unknown = unknown>{
+export interface RpcInit<
+  Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
+  Groups extends GroupsConstraint = null,
+  Context extends ContextConstraint = null,
+  Query extends QueryConstraint = null,
+  Message extends MessageConstraint = null,
+  SocketFlag extends SocketFlagConstraint = null,
+>{
   /**
    * If the routed path of the request doesn't match this URLPattern string, a
    * NO_MATCH error will be thrown and the stack will continue searching for
@@ -126,7 +140,7 @@ export interface RpcInit<C extends unknown = unknown>{
    * errors will be suppressed and that fallback value will be used for the
    * ResolverArg whenever an error is thrown. Default: `null`
    */
-  groups?: Parser<Record<string, string> | undefined> | null;
+  groups?: Groups;
   /**
    * Controls what to do when a matching path does or does not have a trailing
    * slash at the end of it. "require" will cause paths to not match if there's
@@ -144,13 +158,13 @@ export interface RpcInit<C extends unknown = unknown>{
    * the ResolverArg. This is only run if the requested path matched. Default:
    * `null`
    */
-  ctx?: Ctx<C> | null;
+  ctx?: Context;
   /**
    * A parser used to parse the "query" object from the RequestData associated
    * with a Request. This data comes from the query string in the url of the
    * request. Default: `null`
    */
-  query?: Parser<Record<string, string | string[]> | undefined> | null;
+  query?: Query;
   /**
    * A parser used to either (1) parse the Request body after it's unpacked
    * using unpackBody or (2) parse the message received if this Rpc results in a
@@ -161,7 +175,7 @@ export interface RpcInit<C extends unknown = unknown>{
    * allowed methods are "GET" and "HEAD". If it does parse `undefined`, all
    * three methods are allowed. Default: `null`
    */
-  message?: Parser | null;
+  message?: Message;
   /**
    * For non-socket Rpcs, this limits the maximum size of the Request body. Note
    * that, currently, the entire Request body is loaded into memory during
@@ -175,7 +189,7 @@ export interface RpcInit<C extends unknown = unknown>{
    * will be limited to "GET" and "HEAD", and the "message" parser will be used
    * for received socket messages instead of request bodies. Default: `false`
    */
-  socket?: boolean | null;
+  socket?: SocketFlag;
   /**
    * Keys used when creating the "cookie" that's available on the ResolverArg.
    * If this isn't provided, a random fallback key will be used. Default: `null`
@@ -195,7 +209,20 @@ export interface RpcInit<C extends unknown = unknown>{
    * error. Default: `null`
    */
   onError?: OnError | null;
+  // FIXME
+  resolve: Resolver<
+    Resp,
+    Groups,
+    Context,
+    Query,
+    Message,
+    SocketFlag
+  >;
 }
+
+// FIXME
+  // deno-lint-ignore no-explicit-any
+export type AnyRpcInit = RpcInit<any, any, any, any, any, any>;
 
 /**
  * In Cav, there is no middleware. To fill the gap, Rpcs can leverage Ctx
@@ -265,14 +292,31 @@ export interface OnErrorArg extends CtxArg {
  * The value returned from the Resolver will be packed with the top-level
  * response() function, i.e. it undergoes packing via packBody().
  */
-export interface Resolver<I extends RpcInit, R extends unknown> {
-  (x: ResolverArg<I>): Promise<R> | R;
+export interface Resolver<
+  Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
+  Groups extends GroupsConstraint,
+  Context extends ContextConstraint,
+  Query extends QueryConstraint,
+  Message extends MessageConstraint,
+  SocketFlag extends SocketFlagConstraint
+> {
+  (x: ResolverArg<
+    Groups,
+    Context,
+    Query,
+    Message,
+    SocketFlag
+  >): Promise<Resp> | Resp;
 }
 
 /** Arguments available to a Resolver function. */
-export interface ResolverArg<I extends RpcInit<unknown>> {
-  /** The RpcInit that was used to construct this Rpc. */
-  init: I;
+export interface ResolverArg<
+  Groups extends GroupsConstraint,
+  Context extends ContextConstraint,
+  Query extends QueryConstraint,
+  Message extends MessageConstraint,
+  SocketFlag extends SocketFlagConstraint,
+> {
   /** The incoming Request this Rpc is handling. */
   req: Request;
   /** Response headers to include when the Response is constructed. */
@@ -284,32 +328,15 @@ export interface ResolverArg<I extends RpcInit<unknown>> {
   /** A Cookie baked with the req and res headers. */
   cookie: Cookie;
   /** The path that matched this Rpc's path init option. */
-  path: (
-    I extends { path?: null } ? "/"
-    : string
-  );
+  path: string;
   /** The parsed path groups object captured while routing the request. */
-  groups: (
-    I extends { groups?: null } ? undefined
-    : ParserOutput<I["groups"]>
-  );
+  groups: ParserOutput<Groups>;
   /** The context created by this Rpc's Ctx function. */
-  ctx: (
-    I extends { ctx?: null } ? undefined
-    : I extends { ctx: Ctx<infer C> } ? C
-    : unknown
-  );
+  ctx: Context extends Ctx<infer C> ? C : unknown;
   /** The parsed query string parameters object. */
-  query: (
-    I extends { query?: null } ? undefined
-    : ParserOutput<I["query"]>
-  );
+  query: ParserOutput<Query>;
   /** If this isn't a socket-type Rpc, this will be the parsed request body. */
-  message: (
-    I extends { socket: true } ? undefined
-    : I extends { message?: null } ? undefined
-    : ParserOutput<I["message"]>
-  );
+  message: SocketFlag extends true ? undefined : ParserOutput<Message>;
   /**
    * If this is a socket-type Rpc, this function is a bound version of the
    * top-level upgradeWebSocket function. It upgrades the request to be a
@@ -318,13 +345,12 @@ export interface ResolverArg<I extends RpcInit<unknown>> {
    * message the socket will send back to the client, so that the client types
    * can know what to expect when the client socket receives messages.
    */
-  upgrade: (
-    I extends { socket: true } ? <SendType extends unknown = unknown>() => {
-      socket: Socket<SendType, I["message"]>;
+  upgrade: SocketFlag extends true ? (
+    <SendType extends unknown = unknown>() => {
+      socket: Socket<SendType, Message>;
       response: SocketResponse<SendType>;
     }
-    : undefined
-  );
+  ): undefined;
   /**
    * Searches for an asset on disk and either returns a Response containing that
    * asset or throws a 404 error if the asset isn't found. See the documentation
@@ -357,7 +383,7 @@ export interface ResolverArg<I extends RpcInit<unknown>> {
 /**
  * A factory function for creating Rpc handlers. Factories are useful for DRY
  * programming; when a lot of the Rpcs you're creating have the same shape, you
- * can create an RpcFactory that will can use a custom set of default RpcInit
+ * can create an RpcFactory that will use a custom set of default RpcInit
  * options. That RpcFactory would then replace each `rpc()` call where you'd
  * like the defaults to be applied. Options provided to the factory on the init
  * argument will still override the factory's default options. The top-level
@@ -365,27 +391,46 @@ export interface ResolverArg<I extends RpcInit<unknown>> {
  * The defaults used to create the factory are available on the `defaults`
  * property.
  */
-export interface RpcFactory<D extends RpcInit> {
+export interface RpcFactory<
+  DGroups extends GroupsConstraint = null,
+  DContext extends ContextConstraint = null,
+  DQuery extends QueryConstraint = null,
+  DMessage extends MessageConstraint = null,
+  DSocketFlag extends SocketFlagConstraint = null,
+> {
   <
-    R extends unknown,
-    I extends RpcInit<unknown> = Record<never, never>,
-    S = ShallowMerge<D, I>,
-    M = { [K in keyof S]: S[K] },
+    Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
+    Groups extends GroupsConstraint = null,
+    Context extends ContextConstraint = null,
+    Query extends QueryConstraint = null,
+    Message extends MessageConstraint = null,
+    SocketFlag extends SocketFlagConstraint = null,
   >(
-    init: I,
-    resolver: Resolver<M, R>,
-  ): Rpc<M, R>;
-  <
-    R extends SocketResponse<unknown>,
-    I extends RpcInit<unknown> & { socket: true },
-    S = ShallowMerge<D, I>,
-    M = { [K in keyof S]: S[K] },
-  >(
-    init: I,
-    resolver: Resolver<M, R>,
-  ): Rpc<M, R>;
+    init: RpcInit<
+      Resp,
+      Groups,
+      Context,
+      Query,
+      Message,
+      SocketFlag
+    >,
+  ): Rpc<
+    Resp,
+    Groups extends null ? DGroups : Groups,
+    Context extends null ? DContext : Context,
+    Query extends null ? DQuery : Query,
+    Message extends null ? DMessage : Message,
+    SocketFlag extends null ? DSocketFlag : SocketFlag
+  >;
   /** The default RpcInit provided when constructing this RpcFactory. */
-  readonly defaults: D;
+  readonly defaults: Omit<RpcInit<
+    any,
+    DGroups,
+    DContext,
+    DQuery,
+    DMessage,
+    DSocketFlag
+  >, "resolve">;
 }
 
 /**
@@ -405,16 +450,40 @@ export const rpc = rpcFactory({});
  * isn't specified in the defaults or the RpcInit, the library fallback will be
  * used.
  */
-export function rpcFactory<D extends RpcInit>(defaults: D): RpcFactory<D> {
+export function rpcFactory<
+  DGroups extends GroupsConstraint = null,
+  DContext extends ContextConstraint = null,
+  DQuery extends QueryConstraint = null,
+  DMessage extends MessageConstraint = null,
+  DSocketFlag extends SocketFlagConstraint = null,
+>(
+  defaults: Omit<RpcInit<
+    any,
+    DGroups,
+    DContext,
+    DQuery,
+    DMessage,
+    DSocketFlag
+  >, "resolve">,
+): RpcFactory<
+  DGroups,
+  DContext,
+  DQuery,
+  DMessage,
+  DSocketFlag
+> {
   const rpcFactory = (
-    _init: RpcInit,
-    resolver: Resolver<RpcInit, unknown>,
-  ): Rpc => {
-    const init: RpcInit<unknown> = { ...defaults };
+    _init: AnyRpcInit,
+  ): AnyRpc => {
+    const init: AnyRpcInit = {
+      ...defaults,
+      resolve: _init.resolve,
+    };
     if (_init) {
       for (const [k, v] of Object.entries(_init)) {
         if (v !== null && typeof v !== "undefined") {
-          init[k as keyof RpcInit] = v;
+          // deno-lint-ignore no-explicit-any
+          (init as any)[k] = v;
         }
       }
     }
@@ -650,8 +719,7 @@ export function rpcFactory<D extends RpcInit>(defaults: D): RpcFactory<D> {
         }
 
         // Resolve to the response body and return the final response
-        const r = await resolver({
-          init,
+        const r = await init.resolve({
           req,
           res,
           url,
@@ -668,7 +736,7 @@ export function rpcFactory<D extends RpcInit>(defaults: D): RpcFactory<D> {
           redirect,
           response: _response,
         // deno-lint-ignore no-explicit-any
-        } as ResolverArg<any>);
+        } as ResolverArg<any, any, any, any, any>);
         await cookie.flush();
         return _response(r, { headers: res });
       } catch (e) {
@@ -714,19 +782,14 @@ export function rpcFactory<D extends RpcInit>(defaults: D): RpcFactory<D> {
       }
     };
 
-    return Object.assign(handler, { init, resolver });
+    return Object.assign(handler, { init });
   }
 
   return Object.assign(rpcFactory, { defaults });
 }
 
 /** Initializer options for the assets() utility function. */
-export interface AssetsInit<
-  I extends RpcInit = Record<never, never>,
-> extends Omit<AssetOptions,"path"> {
-  /** RpcInit options to use when constructing the assets Rpc handler. */
-  rpcInit?: I;
-}
+export type AssetsOptions = Omit<AssetOptions, "path">;
 
 /**
  * Utility function for creating an Rpc handler specifically for serving static
@@ -736,17 +799,16 @@ export interface AssetsInit<
  * the "path" RpcInit option is set to "*" and the "trailingSlash" RpcInit
  * option is set to "allow".
  */
-export function assets<
-  I extends RpcInit = Record<never, never>,
-  S = ShallowMerge<{ path: "*"; trailingSlash: "allow"; }, I>,
-  M = { [K in keyof S]: S[K] },
->(init?: AssetsInit<I>): Rpc<M, Response> {
+export function assets(opt?: AssetsOptions) {
   return rpc({
     path: "*",
     trailingSlash: "allow",
-    ...init?.rpcInit,
-  }, ({ asset, path }) => {
-    return asset({ ...init, path });
+    resolve: x => {
+      return x.asset({
+        ...opt,
+        path: x.path,
+      });
+    },
   });
 }
 
@@ -759,19 +821,11 @@ export function assets<
  * trailing slashes will be redirected first to the path without the trailing
  * slash before being redirect to the specified destination. (2 hops)
  */
-export function redirect(to: string, status?: number): Rpc<{
-  path: "*";
-}, Response> {
-  return rpc({ path: "*" }, ({ redirect }) => {
-    return redirect(to, status || 302);
+export function redirect(to: string, status?: number) {
+  return rpc({
+    path: "*",
+    resolve: x => {
+      return x.redirect(to, status || 302);
+    },
   });
 }
-
-type ShallowMerge<
-  A extends unknown,
-  B extends unknown,
-> = {
-  [K in keyof A | keyof B]: K extends keyof B ? B[K]
-    : K extends keyof A ? A[K]
-    : never;
-};
