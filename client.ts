@@ -11,7 +11,7 @@ import {
 } from "./pack.ts";
 
 import type { Packers } from "./pack.ts";
-import type { AnyRpc, AnyRpcInit, Parser, ParserInput, Rpc, RpcInit } from "./rpc.ts";
+import type { AnyRpc, Parser, ParserInput, Rpc } from "./rpc.ts";
 import type { Stack } from "./stack.ts";
 import type { SocketResponse } from "./http.ts";
 
@@ -263,7 +263,9 @@ export type Client<T = unknown> = (
   T extends Stack<infer R> ? Client<R>
   : T extends Rpc<
     infer R,
+    // deno-lint-ignore no-explicit-any
     any,
+    // deno-lint-ignore no-explicit-any
     any,
     infer Q,
     infer M,

@@ -82,6 +82,7 @@ export type ParserOutput<T> = (
  * top-level Server, which will log them and respond with a 500 Response.
  */
 export interface Rpc<
+  // deno-lint-ignore no-explicit-any
   Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
   Groups extends GroupsConstraint = null,
   Context extends ContextConstraint = null,
@@ -98,6 +99,7 @@ export interface Rpc<
  * Alias for an Rpc with any resolver or init types. Useful for type
  * constraints.
  */
+// deno-lint-ignore no-explicit-any
 export type AnyRpc = Rpc<any, any, any, any, any, any>;
 
 type GroupsConstraint = Parser<Record<string, string> | undefined> | null;
@@ -108,6 +110,7 @@ type SocketFlagConstraint = boolean | null;
 
 /** Initializer options when constructing Rpcs. */
 export interface RpcInit<
+  // deno-lint-ignore no-explicit-any
   Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
   Groups extends GroupsConstraint = null,
   Context extends ContextConstraint = null,
@@ -293,6 +296,7 @@ export interface OnErrorArg extends CtxArg {
  * response() function, i.e. it undergoes packing via packBody().
  */
 export interface Resolver<
+  // deno-lint-ignore no-explicit-any
   Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
   Groups extends GroupsConstraint,
   Context extends ContextConstraint,
@@ -399,6 +403,7 @@ export interface RpcFactory<
   DSocketFlag extends SocketFlagConstraint = null,
 > {
   <
+    // deno-lint-ignore no-explicit-any
     Resp extends SocketFlag extends true ? SocketResponse<unknown> : any,
     Groups extends GroupsConstraint = null,
     Context extends ContextConstraint = null,
@@ -424,6 +429,7 @@ export interface RpcFactory<
   >;
   /** The default RpcInit provided when constructing this RpcFactory. */
   readonly defaults: Omit<RpcInit<
+    // deno-lint-ignore no-explicit-any
     any,
     DGroups,
     DContext,
@@ -458,6 +464,7 @@ export function rpcFactory<
   DSocketFlag extends SocketFlagConstraint = null,
 >(
   defaults: Omit<RpcInit<
+    // deno-lint-ignore no-explicit-any
     any,
     DGroups,
     DContext,
