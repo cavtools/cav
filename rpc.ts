@@ -2,6 +2,8 @@
 // This module is server-only.
 // *butter*
 
+// TODO: accept multiple strings for the path init option
+// TODO: spa() utiltity function that lets you specify multiple paths
 // TODO: files and blobs that flush to disk when a certain memory threshold is
 // reached. Using them works the same as regular files and blobs  
 // TODO: Incorporate the standard library's multipart reader    

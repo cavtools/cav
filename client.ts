@@ -469,11 +469,7 @@ type Clean<
 > = Required & Optional;
 
 /**
- * I really like this one and it's essential for the Client type to work. I'm
- * not sure why it works, but I'm content with my ignorance this time. I first
- * saw it from jcalz on stackoverflow: https://stackoverflow.com/a/50375286. It
- * will convert a type like `{ hello: true } | { world: true }` into `{ hello:
- * true; world: true }`.
+ * https://fettblog.eu/typescript-union-to-intersection/
  */
 type UnionToIntersection<U> = (
   U extends unknown ? (k: U) => void : never
