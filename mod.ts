@@ -2,7 +2,6 @@
 // This module is server-only.
 
 export * from "./asset.ts";
-// Do not export browser.ts here
 export * from "./client.ts";
 export * from "./http.ts";
 export * from "./pack.ts";
