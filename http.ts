@@ -430,6 +430,17 @@ export function response<T = unknown>(
   });
 }
 
+const _socketResponse = Symbol("_socketResponse");
+
+/**
+ * A regular response that gets returned when a socket connection is
+ * established. The type parameter indicates the type of message the client can
+ * expect to receive from the server.
+ */
+export interface SocketResponse<Send> extends Response {
+  [_socketResponse]?: Send; // Imaginary
+}
+
 /**
  * The server-side equivalent of the wrapWebSocket function in the client
  * module. Returns a Response which should be returned by the handler for the
@@ -443,11 +454,11 @@ export function upgradeWebSocket<
   init?: SocketInit<Send, Message>,
 ): Response {
   let raw: WebSocket;
-  let response: Response;
+  let response: SocketResponse<Send>;
   try {
     const upgrade = Deno.upgradeWebSocket(req, { protocol: "json" });
     raw = upgrade.socket;
-    response = upgrade.response;
+    response = upgrade.response as SocketResponse<Send>;
   } catch (e) {
     throw new HttpError("400 bad request", {
       status: 400,

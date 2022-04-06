@@ -24,6 +24,7 @@ import { HttpError, SocketInit } from "./client.ts";
 import type {
   Cookie,
   ServeAssetOptions,
+  SocketResponse,
 } from "./http.ts";
 import type { Packers } from "./pack.ts";
 import type {
@@ -292,10 +293,9 @@ export interface Resolve<
   Query extends QueryParser | null = null,
   Message extends Parser | null = null,
   Upgrade extends boolean | null = null,
-  R = Upgrade extends true ? Response : Resp,
+  R = Upgrade extends true ? SocketResponse<Resp> : Resp,
 > {
   (x: ResolveArg<
-    Resp,
     Groups,
     Context,
     Query,
@@ -306,7 +306,6 @@ export interface Resolve<
 
 /** Arguments available to a Resolver function. */
 export interface ResolveArg<
-  Resp = unknown,
   Groups extends GroupsParser | null = null,
   Context extends Ctx<unknown> | null = null,
   Query extends QueryParser | null = null,
@@ -358,9 +357,9 @@ export interface ResolveArg<
    * `upgrade` init option is `true`. The Response returned by this function
    * should be returned by the Rpc's resolve function.
    */
-  upgrade: (
-    init: Omit<SocketInit<Resp, Message>, "packers" | "message">,
-  ) => Response;
+  upgrade: <Send = unknown>(
+    init: Omit<SocketInit<Send, Message>, "packers" | "message">,
+  ) => SocketResponse<Send>;
 }
 
 /**
@@ -678,7 +677,7 @@ export function rpc<
         response: _response,
         upgrade: init.upgrade ? upgrade : undefined,
       // deno-lint-ignore no-explicit-any
-      } as ResolveArg<any, any, any, any, any, any>);
+      } as ResolveArg<any, any, any, any, any>);
       await cookie.flush();
       return _response(r, { headers: res });
     } catch (e) {
