@@ -1,6 +1,5 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is server-only.
-// *bread*
 
 // TODO: Add support for arrays of handlers  
 // TODO: Don't throw errors when using advanced URLPattern syntax (just use the

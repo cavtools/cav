@@ -1,11 +1,10 @@
 import { assertEquals, assertStrictEquals } from "./deps_test.ts";
 import { pack, unpack, usePackers, packer, Packers } from "./pack.ts";
-const { test } = Deno;
 
 // The following tests are modeled after superjson's tests as of March 28, 2022:
 // https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
 
-test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
+Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
   const data: Record<string, {
     input: unknown;
     output: unknown;

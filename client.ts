@@ -1,19 +1,21 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
+// TODO: The ability to monitor request progress (XMLHttpRequest)
+
 import {
   packBody,
   packJson,
   packer,
-  unpack,
   unpackBody,
   usePackers,
+  unpackJson,
 } from "./pack.ts";
 
 import type { Packers } from "./pack.ts";
-import type { AnyRpc, Parser, ParserInput, Rpc } from "./rpc.ts";
+import type { AnyRpc, Rpc } from "./rpc.ts";
 import type { Stack } from "./stack.ts";
-import type { SocketResponse } from "./http.ts";
+import type { Parser, ParserFunction, ParserInput, ParserOutput } from "./parser.ts";
 
 /** Initializer arguments for constructing HttpErrors. */
 export interface HttpErrorInit {
@@ -62,80 +64,109 @@ usePackers({
 });
 
 /**
- * Wrapper interface providing WebSocket functionality with support for typed
- * messages.
+ * Cav's WebSocket wrapper interface.
  */
-export interface Socket<
-  O extends unknown = unknown,
-  I extends unknown = unknown,
-> {
-  /** The raw underlying WebSocket instance. */
+export interface Socket<Send = unknown> {
   raw: WebSocket;
-  /** Send data to the receiver matching the type it expects to receive. */
-  send(data: O): void;
-  /** Close the socket connection with an optional code / explanation. */
-  close(code?: number, reason?: string): void;
-  /** Register a socket event listener and return the passed-in listener. */
-  on<
-    T extends "open" | "message" | "close" | "error",
-    L extends (
-      T extends "open" ? (ev: Event) => void | Promise<void>
-      : T extends "message" ? (
-        message: I,
-        ev: MessageEvent,
-      ) => void | Promise<void>
-      : T extends "close" ? (ev: CloseEvent) => void | Promise<void>
-      : T extends "error" ? (
-        err: unknown,
-        ev: Event | ErrorEvent,
-      ) => void | Promise<void>
-      : never
-    )
-  >(
-    type: T,
-    listener: L,
-  ): L;
-  /** Turn off a listener for a given event type. */
-  off(
-    type: "open" | "message" | "close" | "error",
-    listener: (...a: unknown[]) => void | Promise<void>,
-  ): void;
+  send: (data: Send) => void;
+  close: (code?: number, reason?: string) => void;
+}
+
+/**
+ * Initializer options to use when upgrading a request into a web socket using
+ * the `upgradeWebSocket` function.
+ */
+export interface SocketInit<
+  Send = unknown,
+  Message extends Parser | null = null,
+> {
+  message?: Message;
+  packers?: Packers | null;
+  onOpen?: SocketHandler<"open", Send>;
+  onClose?: SocketHandler<"close", Send>;
+  onMessage?: SocketHandler<"message", Send, Message>;
+  onError?: SocketHandler<"error", Send>
+}
+
+/**
+ * Handler type for the various socket event listeners on the SocketInit.
+ */
+export type SocketHandler<
+  Type extends "open" | "close" | "message" | "error",
+  Send = unknown,
+  Message extends Parser | null = null,
+> = (x: SocketHandlerArg<Type, Send, Message>) => void;
+
+/**
+* Arguments provided to a SocketHandler. There
+* are four event types: "open", "close", "message", "error". Which properties
+* are available depends on the event type.
+*/
+export interface SocketHandlerArg<
+  Type extends "open" | "close" | "message" | "error",
+  Send = unknown,
+  Message extends Parser | null = null,
+> {
+  type: Type;
+  socket: Socket<Send>;
+  message: Type extends "message" ? (
+    Message extends Parser ? ParserOutput<Message>
+    : unknown
+  ) : undefined;
+  error: Type extends "error" ? unknown : undefined;
+  event: (
+    Type extends "open" ? Event
+    : Type extends "close" ? CloseEvent
+    : Type extends "message" ? MessageEvent
+    : Type extends "error" ? Event | ErrorEvent
+    : never
+  );
 }
 
 const decoder = new TextDecoder();
 
-type Listener = (...a: unknown[]) => void | Promise<void>;
-
 /** Wraps a regular WebSocket with packing functionality and type support. */
 export function wrapWebSocket<
-  O extends unknown = unknown,
-  I extends unknown = unknown,
+  Send = unknown,
+  Message extends Parser | null = null,
 >(
   raw: WebSocket,
-  init?: {
-    /** Optionally parse the message further after unpacking it. */
-    parseMessage?: (message: unknown) => I | Promise<I>;
-    /** Packers to use when packing and unpacking messages. */
-    packers?: Packers;
-  },
-): Socket<O, I> {
-  const listeners = {
-    open: new Set<Listener>(),
-    message: new Set<Listener>(),
-    close: new Set<Listener>(),
-    error: new Set<Listener>(),
+  init?: SocketInit<Send, Message>,
+): void {
+  const socket: Socket<Send> = {
+    raw,
+    send: data => {
+      raw.send(packJson(data, init?.packers));
+    },
+    close: (code, reason) => {
+      raw.close(code, reason);
+    },
   };
 
-  raw.addEventListener("open", async ev => {
-    for (const l of listeners.open.values()) {
-      try {
-        await l(ev);
-      } catch (e) {
-        raw.dispatchEvent(new ErrorEvent("error", { error: e }));
-      }
+  raw.addEventListener("open", ev => {
+    if (!init?.onOpen) {
+      return;
     }
+    init.onOpen({
+      type: "open",
+      socket,
+      event: ev,
+      message: undefined,
+      error: undefined,
+    });
   });
-
+  raw.addEventListener("close", ev => {
+    if (!init?.onClose) {
+      return;
+    }
+    init.onClose({
+      type: "close",
+      socket,
+      event: ev,
+      message: undefined,
+      error: undefined,
+    });
+  });
   raw.addEventListener("message", async ev => {
     const data = ev.data;
     if (
@@ -143,106 +174,47 @@ export function wrapWebSocket<
       !ArrayBuffer.isView(data) &&
       !(data instanceof Blob)
     ) {
-      // This shouldn't happen unless "they" change what data can be sent over
-      // sockets in the browser. As of 2-15-22, it should just be ArrayBuffer
-      // views, strings, and blobs
       throw new Error(`Invalid data received: ${data}`);
     }
 
-    let message: unknown;
-    try {
-      message = unpack((
-        typeof data === "string" ? data
-        : ArrayBuffer.isView(data) ? decoder.decode(data)
-        : await data.text() // Blob
-      ), init?.packers);
-    } catch (e) {
-      raw.dispatchEvent(new ErrorEvent("error", {
-        error: new HttpError("400 bad request", {
-          status: 400,
-          expose: {
-            reason: "Failed to deserialize web socket message",
-            error: e,
-          },
-        }),
-      }));
+    // deno-lint-ignore no-explicit-any
+    let message: any = unpackJson((
+      typeof data === "string" ? data
+      : ArrayBuffer.isView(data) ? decoder.decode(data)
+      : await data.text() // Blob
+    ));
+
+    if (init?.message) {
+      const parse: ParserFunction = typeof init.message === "function" ? init.message : init.message.parse;
+      message = await parse(ev.data);
+    }
+
+    if (message instanceof Error) {
+      throw message;
+    }
+
+    if (init?.onMessage) {
+      init.onMessage({
+        type: "message",
+        socket,
+        event: ev,
+        message,
+        error: undefined,
+      });
+    }
+  });
+  raw.addEventListener("error", ev => {
+    if (!init?.onError) {
       return;
     }
-
-    if (init?.parseMessage) {
-      try {
-        message = await init.parseMessage(ev.data);
-      } catch (e) {
-        // When the server-side socket receives a bad message that doesn't
-        // parse, the parseMessage call above will take care of sending an error
-        // response to the client. Then, it'll throw undefined to indicate the
-        // error got handled but also the message should not continue on to any
-        // message listeners. When that happens, simply return early
-        if (typeof e === "undefined") {
-          return;
-        }
-
-        // In all other cases, the error is dispatched to the socket error
-        // listeners before returning
-        raw.dispatchEvent(new ErrorEvent("error", { error: e }));
-        return;
-      }
-    }
-
-    for (const l of listeners.message.values()) {
-      try {
-        await l(message, ev);
-      } catch (e) {
-        raw.dispatchEvent(new ErrorEvent("error", { error: e }));
-      }
-    }
+    init.onError({
+      type: "error",
+      socket,
+      event: ev,
+      message: undefined,
+      error: (ev as ErrorEvent).error,
+    });
   });
-
-  raw.addEventListener("close", async ev => {
-    for (const l of listeners.close.values()) {
-      try {
-        await l(ev);
-      } catch (e) {
-        raw.dispatchEvent(new ErrorEvent("error", { error: e }));
-      }
-    }
-  });
-
-  raw.addEventListener("error", async ev => {
-    for (const l of listeners.error.values()) {
-      try {
-        await l((ev as ErrorEvent).error, ev);
-      } catch (e) {
-        console.error(
-          `ERROR: An error was thrown during a web socket error listener:`,
-          e,
-        );
-      }
-    }
-  });
-
-  return {
-    raw,
-    send(data) {
-      raw.send(packJson(data, init?.packers));
-    },
-    close(code, reason) {
-      raw.close(code, reason);
-    },
-    on(
-      type: "open" | "message" | "close" | "error",
-      listener: Listener,
-    ) {
-      listeners[type].add(listener);
-      return listener;
-    },
-    off(
-      type: "open" | "message" | "close" | "error",
-      listener: Listener,
-    ) {
-      listeners[type].delete(listener);
-    },
-  } as Socket;
 }
 
 /**
@@ -269,8 +241,8 @@ export type Client<T = unknown> = (
     any,
     infer Q,
     infer M,
-    infer S
-  > ? Endpoint<R, Q, M, S>
+    infer U
+  > ? Endpoint<R, Q, M, U>
   : T extends Record<never, never> ? UnionToIntersection<{
     [K in keyof T]: ExpandPath<K, Client<T[K]>>
   }[keyof T]>
@@ -285,16 +257,10 @@ export interface Endpoint<
   Resp,
   Query,
   Message,
-  SocketFlag,
-  E = EndpointArg<Query, Message, SocketFlag>,
+  Upgrade,
+  E = EndpointArg<Resp, Query, Message, Upgrade>,
 > {
-  (x: { [K in keyof E]: E[K] }): Promise<
-    Resp extends SocketResponse<infer M> ? (
-      Message extends Parser ? Socket<ParserInput<Message>, M>
-      : Socket<unknown, M>
-    )
-    : Resp
-  >;
+  (x: { [K in keyof E]: E[K] }): Promise<Upgrade extends true ? void : Resp extends Response ? unknown : Resp>;
 }
 
 /**
@@ -302,38 +268,65 @@ export interface Endpoint<
  * arguments should be in when making requests to a given Rpc.
  */
 export type EndpointArg<
+  Resp,
   Query,
   Message,
-  SocketFlag,
+  Upgrade,
+  Send = Message extends Parser ? ParserInput<Message> : unknown,
 > = Clean<{
   /**
    * Additional path segments to use when making a request to this endpoint.
-   * Including extra path should only be done if the Rpc expects it. Default:
-   * `undefined`
+   * Including extra path segments should only be done if the Rpc expects it.
+   * Default: `undefined`
    */
   path?: string;
-  /**
-   * If the Rpc is socket-type, this value should be set to `true`. The returned
-   * value will be the wrapped web socket. Default: `undefined`
-   */
-  socket: SocketFlag extends true ? true : never;
   /** The query string parameters expected by the Rpc. Default: `undefined` */
   query: ParserInput<Query>;
-  /** The message expected by the Rpc. Default: `undefined` */
-  message: ParserInput<Message>;
+  /**
+   * If this is not an upgraded request, this is the posted message expected by
+   * the Rpc. Default: `undefined`
+   */
+  message: Upgrade extends true ? never : ParserInput<Message>;
   /**
    * Additional packers that should be used while serializing data. Default:
    * `undefined`
    */
   packers?: Packers;
+  /**
+   * If the Rpc requires upgrading for web sockets, this value should be set to
+   * `true`. Default: `undefined`
+   */
+  upgrade: Upgrade extends true ? true : never;
+  /**
+   * For upgraded requests only. Called when the socket is opened.
+   */
+  onOpen?: Upgrade extends true ? SocketHandler<"open", Send> : never;
+  /**
+   * For upgraded requests only. Called when the socket is closed.
+   */
+  onClose?: Upgrade extends true ? SocketHandler<"close", Send> : never;
+  /**
+   * For upgraded requests only. Called when the socket receives a message.
+   */
+  onMessage?: Upgrade extends true ? SocketHandler<"message", Send, Parser<unknown, Resp>> : never; // REVIEW: Hacky
+  /**
+   * For upgraded requests only. Called when an error occurs during socket
+   * processing or when the socket receives a message that unpacks into an
+   * Error.
+   */
+  onError?: Upgrade extends true ? SocketHandler<"error", Send> : never;
 }>;
 
 interface CustomFetchArg {
   path?: string;
-  socket?: boolean;
-  query?: Record<string, string | string[]> | null;
-  message?: Record<string, unknown>;
+  query?: Record<string, string | string[]>;
+  message?: unknown;
   packers?: Packers;
+  upgrade?: boolean;
+  onOpen?: SocketHandler<"open">;
+  onClose?: SocketHandler<"close">;
+  onMessage?: SocketHandler<"message">;
+  onError?: SocketHandler<"error">;
 }
 
 /**
@@ -377,7 +370,7 @@ export function client<T extends Stack | AnyRpc>(
       }
     }
   
-    if (x.socket) {
+    if (x.upgrade) {
       if (url.protocol === "http:") {
         url.protocol = "ws:";
       } else {
@@ -385,7 +378,13 @@ export function client<T extends Stack | AnyRpc>(
       }
   
       const raw = new WebSocket(url.href, "json");
-      return wrapWebSocket(raw, { packers: x.packers });
+      return wrapWebSocket(raw, {
+        packers: x.packers,
+        onOpen: x.onOpen,
+        onClose: x.onClose,
+        onMessage: x.onMessage,
+        onError: x.onError,
+      });
     }
   
     let body: BodyInit | null = null;
