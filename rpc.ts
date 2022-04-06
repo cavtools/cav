@@ -357,9 +357,9 @@ export interface ResolveArg<
    * `upgrade` init option is `true`. The Response returned by this function
    * should be returned by the Rpc's resolve function.
    */
-  upgrade: <Send = unknown>(
+  upgrade: Upgrade extends true ? <Send = unknown>(
     init: Omit<SocketInit<Send, Message>, "packers" | "message">,
-  ) => SocketResponse<Send>;
+  ) => SocketResponse<Send> : undefined;
 }
 
 /**
@@ -486,12 +486,33 @@ export function rpc<
       return await serveAsset(req, opt);
     };
 
-    const upgrade: ResolveArg["upgrade"] = socketInit => {
+    // deno-lint-ignore no-explicit-any
+    const upgrade: ResolveArg<any, any, any, any, true>["upgrade"] = socketInit => {
       return upgradeWebSocket(req, {
         message: init.message,
         packers: init.packers,
         ...socketInit,
-      })
+        onError: async x => {
+          // If the error was the result of the incoming message not parsing
+          // correctly, send the error back in a message to the client and
+          // suppress it. Otherwise, pass it through to the provided onError
+          // handler. Only send the error if the socket is open, i.e. readyState
+          // === 1
+          if (
+            x.error instanceof HttpError &&
+            x.error.detail.messageParseFailed &&
+            x.socket.raw.readyState === 1
+          ) {
+            // deno-lint-ignore no-explicit-any
+            x.socket.send(x.error as any);
+          } else if (socketInit.onError) {
+            await socketInit.onError(x);
+          } else {
+            // TODO: More detail in the log
+            console.error(`Unhandled socket error:`, x.error);
+          }
+        },
+      });
     }
 
     const redirect = (to: string, status?: number) => {
@@ -641,7 +662,7 @@ export function rpc<
       // If there's no body parser or if this is a socket rpc, skip this step
       // (don't touch the body)
       let message: unknown = undefined;
-      if (parsers.message) {
+      if (!init.upgrade && parsers.message) {
         message = await requestBody(req, {
           maxSize: init.maxBodySize || undefined,
           packers: init.packers || undefined,

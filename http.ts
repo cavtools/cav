@@ -406,18 +406,10 @@ export function response<T = unknown>(
   const headers = new Headers(init?.headers);
 
   if (body instanceof Response) {
-    for (const [k, v] of body.headers.entries()) {
-      headers.append(k, v);
+    for (const [k, v] of headers.entries()) {
+      body.headers.append(k, v);
     }
-    const statusText = (
-      !init?.status || body.status === init.status ? body.statusText
-      : init?.statusText
-    );
-    return new Response(body.body, {
-      status: init?.status || body.status,
-      statusText,
-      headers,
-    })
+    return body;
   }
 
   const { body: b, mime: m } = packBody(body, init?.packers);

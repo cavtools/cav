@@ -9,13 +9,13 @@ import { http } from "./deps.ts";
 import { requestData, NO_MATCH } from "./http.ts";
 
 /**
- * An http.Handler whose sole purpose is routing requests to Rpcs or other
- * Handlers. Stacks are one of two fundamental building blocks of Cav server
- * applications, the other being Rpcs. If a matching handler or Rpc throws the
- * special NO_MATCH error, the stack continues looking for matching handlers to
- * process the request into a response. Stacks can capture path groups while
- * routing the request; the captured groups will become the basis for the
- * ResolverArg's `groups` property inside a matching Rpc (before parsing).
+ * An http.Handler that routes requests to Rpcs or other Handlers. Stacks are
+ * one of two fundamental building blocks of Cav server applications, the other
+ * being Rpcs. If a matching handler or Rpc throws the special NO_MATCH error,
+ * the stack continues looking for matching handlers to process the request into
+ * a response. Stacks can capture path groups while routing the request; the
+ * captured groups will become the basis for the ResolverArg's `groups` property
+ * inside a matching Rpc (before parsing).
  */
 export interface Stack<
   R extends StackRoutes = StackRoutes,

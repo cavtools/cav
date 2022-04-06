@@ -95,7 +95,7 @@ export type SocketHandler<
   Type extends "open" | "close" | "message" | "error",
   Send = unknown,
   Message extends Parser | null = null,
-> = (x: SocketHandlerArg<Type, Send, Message>) => void;
+> = (x: SocketHandlerArg<Type, Send, Message>) => void | Promise<void>;
 
 /**
 * Arguments provided to a SocketHandler. There
@@ -143,77 +143,105 @@ export function wrapWebSocket<
     },
   };
 
-  raw.addEventListener("open", ev => {
+  raw.addEventListener("open", async ev => {
     if (!init?.onOpen) {
       return;
     }
-    init.onOpen({
-      type: "open",
-      socket,
-      event: ev,
-      message: undefined,
-      error: undefined,
-    });
+    try {
+      await init.onOpen({
+        type: "open",
+        socket,
+        event: ev,
+        message: undefined,
+        error: undefined,
+      });
+    } catch (e) {
+      raw.dispatchEvent(new ErrorEvent("error", { error: e }));
+    }
   });
-  raw.addEventListener("close", ev => {
+  raw.addEventListener("close", async ev => {
     if (!init?.onClose) {
       return;
     }
-    init.onClose({
-      type: "close",
-      socket,
-      event: ev,
-      message: undefined,
-      error: undefined,
-    });
-  });
-  raw.addEventListener("message", async ev => {
-    const data = ev.data;
-    if (
-      typeof data !== "string" &&
-      !ArrayBuffer.isView(data) &&
-      !(data instanceof Blob)
-    ) {
-      throw new Error(`Invalid data received: ${data}`);
-    }
-
-    // deno-lint-ignore no-explicit-any
-    let message: any = unpackJson((
-      typeof data === "string" ? data
-      : ArrayBuffer.isView(data) ? decoder.decode(data)
-      : await data.text() // Blob
-    ));
-
-    if (init?.message) {
-      const parse: ParserFunction = typeof init.message === "function" ? init.message : init.message.parse;
-      message = await parse(ev.data);
-    }
-
-    if (message instanceof Error) {
-      throw message;
-    }
-
-    if (init?.onMessage) {
-      init.onMessage({
-        type: "message",
+    try {
+      await init.onClose({
+        type: "close",
         socket,
         event: ev,
-        message,
+        message: undefined,
         error: undefined,
       });
+    } catch (e) {
+      raw.dispatchEvent(new ErrorEvent("error", { error: e }));
     }
   });
-  raw.addEventListener("error", ev => {
+  raw.addEventListener("message", async ev => {
+    try {
+      const data = ev.data;
+      if (
+        typeof data !== "string" &&
+        !ArrayBuffer.isView(data) &&
+        !(data instanceof Blob)
+      ) {
+        throw new Error(`Invalid data received: ${data}`);
+      }
+
+      // deno-lint-ignore no-explicit-any
+      let message: any = unpackJson((
+        typeof data === "string" ? data
+        : ArrayBuffer.isView(data) ? decoder.decode(data)
+        : await data.text() // Blob
+      ));
+
+      if (init?.message) {
+        const parse: ParserFunction = typeof init.message === "function" ? init.message : init.message.parse;
+        try {
+          message = await parse(message);
+        } catch (e) {
+          throw new HttpError("Failed to parse message", {
+            status: 400,
+            detail: {
+              messageParseFailed: true,
+            },
+            expose: e,
+          });
+        }
+      }
+
+      if (message instanceof Error) {
+        throw message;
+      }
+
+      if (init?.onMessage) {
+        await init.onMessage({
+          type: "message",
+          socket,
+          event: ev,
+          message,
+          error: undefined,
+        });
+      }
+    } catch (e) {
+      raw.dispatchEvent(new ErrorEvent("error", { error: e }));
+    }
+  });
+  raw.addEventListener("error", async ev => {
     if (!init?.onError) {
+      console.error(`Unhandled socket error:`, (ev as ErrorEvent).error);
       return;
     }
-    init.onError({
-      type: "error",
-      socket,
-      event: ev,
-      message: undefined,
-      error: (ev as ErrorEvent).error,
-    });
+    try {
+      await init.onError({
+        type: "error",
+        socket,
+        event: ev,
+        message: undefined,
+        error: (ev as ErrorEvent).error,
+      });
+    } catch (e) {
+      // TODO: Something other than just logging?
+      console.error(`Socket error handler threw an error:`, e);
+    }
   });
 }
 
