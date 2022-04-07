@@ -119,9 +119,11 @@ export async function requestBody(req: Request, opt?: {
   );
 
   // TODO: With HTTP/2, it's possible to have a streamed body that has no
-  // content-length. Cav doesn't use these on the client side, but they should
-  // still be supported. Enforcing the maxBodySize in that case would require
-  // buffering and reading the body manually, I think?
+  // content-length. Cav doesn't use streamed bodies on the client side, but
+  // they should still be supported. Enforcing the maxBodySize in that case
+  // would require buffering and reading the body manually, I think? And
+  // throwing an error when the max size has been met? Seems like a pain but not
+  // sure what else to do
   const length = parseInt(req.headers.get("content-length") || "", 10);
   if (isNaN(length)) {
     throw new HttpError("411 length required", { status: 411 });
@@ -133,7 +135,7 @@ export async function requestBody(req: Request, opt?: {
 }
 
 /**
- * Cookie interface. This interface provides synchronous access to cookie
+ * Cav's cookie interface. This interface provides synchronous access to cookie
  * values. The actual signing of signed cookies needs to be asynchronous,
  * however. In order to compensate for this, once you are done accessing and
  * modifying the cookie, you need to call the async "flush()" in order to sync
@@ -376,12 +378,6 @@ export interface TypedResponse<T = unknown> extends Response {
   [_typedResponse]?: T; // Imaginary
 }
 
-/** Extracts the response body type from a TypedResponse. */
-export type ResponseType<R extends Response> = (
-  R extends TypedResponse<infer T> ? T
-  : unknown
-);
-
 /** Initializer options for a TypedResponse. Adds packers to ResponseInit. */
 export interface TypedResponseInit extends ResponseInit {
   /** Additional packers to use when packing the response body. */
@@ -430,7 +426,7 @@ const _socketResponse = Symbol("_socketResponse");
  * expect to receive from the server.
  */
 export interface SocketResponse<Send> extends Response {
-  [_socketResponse]?: Send; // Imaginary
+  [_socketResponse]?: [Send]; // Imaginary
 }
 
 /**
@@ -444,7 +440,7 @@ export function upgradeWebSocket<
 >(
   req: Request,
   init?: SocketInit<Send, Message>,
-): Response {
+): SocketResponse<Send> {
   let raw: WebSocket;
   let response: SocketResponse<Send>;
   try {

@@ -175,18 +175,17 @@ export interface RpcInit<
   message?: Message;
   /**
    * This function is called to resolve the parsed request into a response to
-   * pack and send back to the client. If this Rpc is socketed, this function
-   * isn't used. When this function isn't provided, the default response to send
-   * back is a 204 no content.
+   * pack and send back to the client.
    */
-  resolve?: Resolve<
-    Resp,
+  resolve: Resolve<
+    // deno-lint-ignore no-explicit-any
+    Upgrade extends true ? Resp & SocketResponse<any> : Resp,
     Groups,
     Context,
     Query,
     Message,
     Upgrade
-  > | null;
+  >;
   /**
    * When an error is thrown during processing, this function is meant to handle
    * the error. The return value will be packed into a Response to send back to
@@ -293,7 +292,6 @@ export interface Resolve<
   Query extends QueryParser | null = null,
   Message extends Parser | null = null,
   Upgrade extends boolean | null = null,
-  R = Upgrade extends true ? SocketResponse<Resp> : Resp,
 > {
   (x: ResolveArg<
     Groups,
@@ -301,7 +299,7 @@ export interface Resolve<
     Query,
     Message,
     Upgrade
-  >): Promise<R> | R;
+  >): Promise<Resp> | Resp;
 }
 
 /** Arguments available to a Resolver function. */
@@ -363,9 +361,10 @@ export interface ResolveArg<
 }
 
 /**
- * Error handler function for resolving errors in a non-socket Rpc into
- * responses to send back to the client. If an error is re-thrown, that error
- * will be serialized as the response.
+ * Handler for handling errors that occur during response resolution. Meant to
+ * turn the errors into responses to send back to the client, using the same
+ * serialization process and utilties available in the resolve function. If an
+ * error is re-thrown, that error will be serialized as the response.
  */
  export interface ResolveError {
   (x: ResolveErrorArg): unknown;
@@ -489,9 +488,9 @@ export function rpc<
     // deno-lint-ignore no-explicit-any
     const upgrade: ResolveArg<any, any, any, any, true>["upgrade"] = socketInit => {
       return upgradeWebSocket(req, {
+        ...socketInit,
         message: init.message,
         packers: init.packers,
-        ...socketInit,
         onError: async x => {
           // If the error was the result of the incoming message not parsing
           // correctly, send the error back in a message to the client and

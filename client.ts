@@ -15,7 +15,13 @@ import {
 import type { Packers } from "./pack.ts";
 import type { AnyRpc, Rpc } from "./rpc.ts";
 import type { Stack } from "./stack.ts";
-import type { Parser, ParserFunction, ParserInput, ParserOutput } from "./parser.ts";
+import type {
+  Parser,
+  ParserFunction,
+  ParserInput,
+  ParserOutput,
+} from "./parser.ts";
+import type { SocketResponse, TypedResponse } from "./http.ts";
 
 /** Initializer arguments for constructing HttpErrors. */
 export interface HttpErrorInit {
@@ -85,7 +91,7 @@ export interface SocketInit<
   onOpen?: SocketHandler<"open", Send>;
   onClose?: SocketHandler<"close", Send>;
   onMessage?: SocketHandler<"message", Send, Message>;
-  onError?: SocketHandler<"error", Send>
+  onError?: SocketHandler<"error", Send>;
 }
 
 /**
@@ -111,7 +117,8 @@ export interface SocketHandlerArg<
   socket: Socket<Send>;
   message: Type extends "message" ? (
     Message extends Parser ? ParserOutput<Message>
-    : unknown
+    // deno-lint-ignore no-explicit-any
+    : any
   ) : undefined;
   error: Type extends "error" ? unknown : undefined;
   event: (
@@ -194,7 +201,10 @@ export function wrapWebSocket<
       ));
 
       if (init?.message) {
-        const parse: ParserFunction = typeof init.message === "function" ? init.message : init.message.parse;
+        const parse: ParserFunction = (
+          typeof init.message === "function" ? init.message
+          : init.message.parse
+        );
         try {
           message = await parse(message);
         } catch (e) {
@@ -286,9 +296,13 @@ export interface Endpoint<
   Query,
   Message,
   Upgrade,
-  E = EndpointArg<Resp, Query, Message, Upgrade>,
 > {
-  (x: { [K in keyof E]: E[K] }): Promise<Upgrade extends true ? void : Resp extends Response ? unknown : Resp>;
+  (x: EndpointArg<Resp, Query, Message, Upgrade>): Promise<
+    Upgrade extends true ? void
+    : Resp extends TypedResponse<infer T> ? T
+    : Resp extends Response ? unknown
+    : Resp
+  >;
 }
 
 /**
@@ -301,6 +315,7 @@ export type EndpointArg<
   Message,
   Upgrade,
   Send = Message extends Parser ? ParserInput<Message> : unknown,
+  Receive = Resp extends SocketResponse<infer R> ? R : unknown,
 > = Clean<{
   /**
    * Additional path segments to use when making a request to this endpoint.
@@ -336,7 +351,7 @@ export type EndpointArg<
   /**
    * For upgraded requests only. Called when the socket receives a message.
    */
-  onMessage?: Upgrade extends true ? SocketHandler<"message", Send, Parser<unknown, Resp>> : never; // REVIEW: Hacky
+  onMessage?: Upgrade extends true ? SocketHandler<"message", Send, Parser<unknown, Receive>> : never; // REVIEW: Hacky
   /**
    * For upgraded requests only. Called when an error occurs during socket
    * processing or when the socket receives a message that unpacks into an
