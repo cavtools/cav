@@ -21,7 +21,7 @@ import type {
   ParserInput,
   ParserOutput,
 } from "./parser.ts";
-import type { SocketResponse, TypedResponse } from "./http.ts";
+import type { TypedResponse } from "./http.ts";
 
 /** Initializer arguments for constructing HttpErrors. */
 export interface HttpErrorInit {
@@ -72,62 +72,45 @@ usePackers({
 /**
  * Cav's WebSocket wrapper interface.
  */
-export interface Socket<Send = unknown> {
+export interface Socket<Send = unknown, Message = unknown> {
   raw: WebSocket;
   send: (data: Send) => void;
   close: (code?: number, reason?: string) => void;
+  on(type: "open", cb: SocketListener<"open">): void;
+  on(type: "close", cb: SocketListener<"close">): void;
+  on(type: "message", cb: SocketListener<"message", Message>): void;
+  on(type: "error", cb: SocketListener<"error">): void;
+  off(
+    type?: "open" | "close" | "message" | "error",
+    /** If this isn't specified, all registered listeners will be removed. */
+    cb?: (ev: Event) => void | Promise<void>,
+  ): void;
 }
+
+/**
+ * Type that matches any socket. Useful for type constraints.
+ */
+// deno-lint-ignore no-explicit-any
+export type AnySocket = Socket<any, any>;
+
+export type SocketListener<
+  Type extends "open" | "close" | "message" | "error",
+  Message = unknown,
+> = (ev: (
+  Type extends "open" ? Event
+  : Type extends "close" ? CloseEvent
+  : Type extends "message" ? MessageEvent & { message: Message }
+  : Type extends "error" ? Event | ErrorEvent
+  : never
+)) => void | Promise<void>;
 
 /**
  * Initializer options to use when upgrading a request into a web socket using
  * the `upgradeWebSocket` function.
  */
-export interface SocketInit<
-  Send = unknown,
-  Message extends Parser | null = null,
-> {
+export interface SocketInit<Message extends Parser | null = null> {
   message?: Message;
   packers?: Packers | null;
-  onOpen?: SocketHandler<"open", Send>;
-  onClose?: SocketHandler<"close", Send>;
-  onMessage?: SocketHandler<"message", Send, Message>;
-  onError?: SocketHandler<"error", Send>;
-}
-
-/**
- * Handler type for the various socket event listeners on the SocketInit.
- */
-export type SocketHandler<
-  Type extends "open" | "close" | "message" | "error",
-  Send = unknown,
-  Message extends Parser | null = null,
-> = (x: SocketHandlerArg<Type, Send, Message>) => void | Promise<void>;
-
-/**
-* Arguments provided to a SocketHandler. There
-* are four event types: "open", "close", "message", "error". Which properties
-* are available depends on the event type.
-*/
-export interface SocketHandlerArg<
-  Type extends "open" | "close" | "message" | "error",
-  Send = unknown,
-  Message extends Parser | null = null,
-> {
-  type: Type;
-  socket: Socket<Send>;
-  message: Type extends "message" ? (
-    Message extends Parser ? ParserOutput<Message>
-    // deno-lint-ignore no-explicit-any
-    : any
-  ) : undefined;
-  error: Type extends "error" ? unknown : undefined;
-  event: (
-    Type extends "open" ? Event
-    : Type extends "close" ? CloseEvent
-    : Type extends "message" ? MessageEvent
-    : Type extends "error" ? Event | ErrorEvent
-    : never
-  );
 }
 
 const decoder = new TextDecoder();
@@ -138,9 +121,16 @@ export function wrapWebSocket<
   Message extends Parser | null = null,
 >(
   raw: WebSocket,
-  init?: SocketInit<Send, Message>,
-): void {
-  const socket: Socket<Send> = {
+  init?: SocketInit<Message>,
+): Socket<Send, Message extends Parser ? ParserOutput<Message> : unknown> {
+  const listeners = {
+    open: new Set<(ev: Event) => unknown>(),
+    close: new Set<(ev: CloseEvent) => unknown>(),
+    message: new Map<unknown, (ev: MessageEvent) => unknown>(),
+    error: new Set<(ev: Event | ErrorEvent) => unknown>(),
+  };
+
+  return {
     raw,
     send: data => {
       raw.send(packJson(data, init?.packers));
@@ -148,111 +138,84 @@ export function wrapWebSocket<
     close: (code, reason) => {
       raw.close(code, reason);
     },
-  };
-
-  raw.addEventListener("open", async ev => {
-    if (!init?.onOpen) {
-      return;
-    }
-    try {
-      await init.onOpen({
-        type: "open",
-        socket,
-        event: ev,
-        message: undefined,
-        error: undefined,
-      });
-    } catch (e) {
-      raw.dispatchEvent(new ErrorEvent("error", { error: e }));
-    }
-  });
-  raw.addEventListener("close", async ev => {
-    if (!init?.onClose) {
-      return;
-    }
-    try {
-      await init.onClose({
-        type: "close",
-        socket,
-        event: ev,
-        message: undefined,
-        error: undefined,
-      });
-    } catch (e) {
-      raw.dispatchEvent(new ErrorEvent("error", { error: e }));
-    }
-  });
-  raw.addEventListener("message", async ev => {
-    try {
-      const data = ev.data;
-      if (
-        typeof data !== "string" &&
-        !ArrayBuffer.isView(data) &&
-        !(data instanceof Blob)
-      ) {
-        throw new Error(`Invalid data received: ${data}`);
+    on: (type, cb) => {
+      // Only message gets a special process
+      if (type !== "message") {
+        listeners[type].add(cb as (ev: Event) => unknown);
+        raw.addEventListener(type, cb as (ev: Event) => unknown);
+        return;
       }
 
-      // deno-lint-ignore no-explicit-any
-      let message: any = unpackJson((
-        typeof data === "string" ? data
-        : ArrayBuffer.isView(data) ? decoder.decode(data)
-        : await data.text() // Blob
-      ));
-
-      if (init?.message) {
-        const parse: ParserFunction = (
-          typeof init.message === "function" ? init.message
-          : init.message.parse
-        );
-        try {
-          message = await parse(message);
-        } catch (e) {
-          throw new HttpError("Failed to parse message", {
-            status: 400,
-            detail: {
-              messageParseFailed: true,
-            },
-            expose: e,
-          });
+      const messageListener = async (ev: MessageEvent) => {
+        const data = ev.data;
+        if (
+          typeof data !== "string" &&
+          !ArrayBuffer.isView(data) &&
+          !(data instanceof Blob)
+        ) {
+          throw new Error(`Invalid data received: ${data}`);
         }
+  
+        // deno-lint-ignore no-explicit-any
+        let message: any = unpackJson((
+          typeof data === "string" ? data
+          : ArrayBuffer.isView(data) ? decoder.decode(data)
+          : await data.text() // Blob
+        ));
+  
+        if (init?.message) {
+          const parse: ParserFunction = (
+            typeof init.message === "function" ? init.message
+            : init.message.parse
+          );
+          message = await parse(message);
+        }
+
+        Object.assign(ev, { message });
+        (cb as (ev: Event) => void)(ev);
+      };
+
+      listeners.message.set(cb, messageListener);
+      raw.addEventListener(type, messageListener);
+    },
+    off: (type, cb) => {
+      // If the callback isn't defined, turn off everything for the given type.
+      // If the given type also isn't defined, turn off everything
+      if (!cb) {
+        const turnOff = (t: Exclude<typeof type, undefined>) => {
+          for (const listener of listeners[t].values()) {
+            raw.removeEventListener(t, listener as (ev: Event) => unknown);
+          }
+          listeners[t].clear();
+        };
+        if (!type) {
+          for (const k of Object.keys(listeners)) {
+            turnOff(k as keyof typeof listeners);
+          }
+          return;
+        }
+        turnOff(type);
+        return;
       }
 
-      if (message instanceof Error) {
-        throw message;
+      if (!type) {
+        throw new Error("If a callback is specified, the event type must also be specified");
       }
 
-      if (init?.onMessage) {
-        await init.onMessage({
-          type: "message",
-          socket,
-          event: ev,
-          message,
-          error: undefined,
-        });
+      // Otherwise, only turn off the listener if it was registered with this
+      // interface. Don't forget to remove it from the listeners, and that
+      // message listeners are stored in a map instead of a set
+      const listener = (
+        type === "message" ? listeners[type].get(cb) as (ev: Event) => unknown
+        : listeners[type].has(cb) ? cb
+        : undefined
+      );
+      if (listener) {
+        listeners[type].delete(cb);
+        raw.removeEventListener(type, listener);
       }
-    } catch (e) {
-      raw.dispatchEvent(new ErrorEvent("error", { error: e }));
-    }
-  });
-  raw.addEventListener("error", async ev => {
-    if (!init?.onError) {
-      console.error(`Unhandled socket error:`, (ev as ErrorEvent).error);
-      return;
-    }
-    try {
-      await init.onError({
-        type: "error",
-        socket,
-        event: ev,
-        message: undefined,
-        error: (ev as ErrorEvent).error,
-      });
-    } catch (e) {
-      // TODO: Something other than just logging?
-      console.error(`Socket error handler threw an error:`, e);
-    }
-  });
+    },
+  };
 }
 
 /**
@@ -297,12 +260,17 @@ export interface Endpoint<
   Message,
   Upgrade,
 > {
-  (x: EndpointArg<Resp, Query, Message, Upgrade>): Promise<
-    Upgrade extends true ? void
-    : Resp extends TypedResponse<infer T> ? T
-    : Resp extends Response ? unknown
-    : Resp
-  >;
+  (x: EndpointArg<Query, Message, Upgrade>): (
+    Upgrade extends true ? (
+      Resp extends Socket<infer S, infer M> ? Socket<M, S>
+      : never
+    )
+    : Promise<
+      Resp extends TypedResponse<infer T> ? T
+      : Resp extends Response ? unknown
+      : Resp
+    >
+  );
 }
 
 /**
@@ -310,12 +278,9 @@ export interface Endpoint<
  * arguments should be in when making requests to a given Rpc.
  */
 export type EndpointArg<
-  Resp,
   Query,
   Message,
   Upgrade,
-  Send = Message extends Parser ? ParserInput<Message> : unknown,
-  Receive = Resp extends SocketResponse<infer R> ? R : unknown,
 > = Clean<{
   /**
    * Additional path segments to use when making a request to this endpoint.
@@ -340,24 +305,6 @@ export type EndpointArg<
    * `true`. Default: `undefined`
    */
   upgrade: Upgrade extends true ? true : never;
-  /**
-   * For upgraded requests only. Called when the socket is opened.
-   */
-  onOpen?: Upgrade extends true ? SocketHandler<"open", Send> : never;
-  /**
-   * For upgraded requests only. Called when the socket is closed.
-   */
-  onClose?: Upgrade extends true ? SocketHandler<"close", Send> : never;
-  /**
-   * For upgraded requests only. Called when the socket receives a message.
-   */
-  onMessage?: Upgrade extends true ? SocketHandler<"message", Send, Parser<unknown, Receive>> : never; // REVIEW: Hacky
-  /**
-   * For upgraded requests only. Called when an error occurs during socket
-   * processing or when the socket receives a message that unpacks into an
-   * Error.
-   */
-  onError?: Upgrade extends true ? SocketHandler<"error", Send> : never;
 }>;
 
 interface CustomFetchArg {
@@ -366,10 +313,6 @@ interface CustomFetchArg {
   message?: unknown;
   packers?: Packers;
   upgrade?: boolean;
-  onOpen?: SocketHandler<"open">;
-  onClose?: SocketHandler<"close">;
-  onMessage?: SocketHandler<"message">;
-  onError?: SocketHandler<"error">;
 }
 
 /**
@@ -381,23 +324,7 @@ export function client<T extends Stack | AnyRpc>(
   base = "",
   packers?: Packers,
 ): Client<T> {
-  const proxy = (path: string, packers?: Packers): unknown => {
-    return new Proxy((x: CustomFetchArg) => customFetch(path, {
-      ...x,
-      packers: { ...packers, ...x.packers },
-    }), {
-      get(_, property) {
-        if (typeof property !== "string") {
-          throw new TypeError("Symbol segments can't be used on the client");
-        }
-  
-        const append = property.split("/").filter(p => !!p).join("/");
-        return proxy(path.endsWith("/") ? path + append : path + "/" + append);
-      }
-    });
-  };
-  
-  const customFetch = async (path: string, x: CustomFetchArg = {}) => {
+  const customFetch = (path: string, x: CustomFetchArg = {}) => {
     // If there is an explicit origin in the path, it should override the second
     // argument. i.e. the second argument is just a fallback
     const url = new URL(path, window.location.origin);
@@ -421,57 +348,69 @@ export function client<T extends Stack | AnyRpc>(
       }
   
       const raw = new WebSocket(url.href, "json");
-      return wrapWebSocket(raw, {
-        packers: x.packers,
-        onOpen: x.onOpen,
-        onClose: x.onClose,
-        onMessage: x.onMessage,
-        onError: x.onError,
-      });
+      return wrapWebSocket(raw, { packers: x.packers });
     }
   
-    let body: BodyInit | null = null;
-    let mime = "";
-    if (x.message) {
-      const pb = packBody(x.message, x.packers);
-      body = pb.body;
-      mime = pb.mime;
-    }
-  
-    const method = body === null ? "GET" : "POST";
-    const res = await fetch(url.href, {
-      method,
-      headers: mime ? { "content-type": mime } : {},
-      body,
-    });
-  
-    let resBody: unknown = undefined;
-    if (res.body) {
-      resBody = await unpackBody(res, x.packers);
-    }
-  
-    if (!res.ok) {
-      const detail = { body: resBody };
-      let message: string;
-      let status: number;
-      let expose: unknown;
-      if (resBody instanceof HttpError) {
-        message = resBody.message;
-        status = resBody.status;
-        expose = resBody.expose;
-      } else if (typeof resBody === "string") {
-        message = resBody;
-        status = res.status;
-        expose = undefined;
-      } else {
-        message = res.statusText;
-        status = res.status;
-        expose = undefined;
+    return (async () => {
+      let body: BodyInit | null = null;
+      let mime = "";
+      if (x.message) {
+        const pb = packBody(x.message, x.packers);
+        body = pb.body;
+        mime = pb.mime;
       }
-      throw new HttpError(message, { status, expose, detail });
-    }
+    
+      const method = body === null ? "GET" : "POST";
+      const res = await fetch(url.href, {
+        method,
+        headers: mime ? { "content-type": mime } : {},
+        body,
+      });
+    
+      let resBody: unknown = undefined;
+      if (res.body) {
+        resBody = await unpackBody(res, x.packers);
+      }
+    
+      if (!res.ok) {
+        const detail = { body: resBody };
+        let message: string;
+        let status: number;
+        let expose: unknown;
+        if (resBody instanceof HttpError) {
+          message = resBody.message;
+          status = resBody.status;
+          expose = resBody.expose;
+        } else if (typeof resBody === "string") {
+          message = resBody;
+          status = res.status;
+          expose = undefined;
+        } else {
+          message = res.statusText;
+          status = res.status;
+          expose = undefined;
+        }
+        throw new HttpError(message, { status, expose, detail });
+      }
+    
+      return resBody;
+    })();
+  };
+
+  const proxy = (path: string, packers?: Packers): unknown => {
+    return new Proxy((x: CustomFetchArg) => customFetch(path, {
+      ...x,
+      packers: { ...packers, ...x.packers },
+    }), {
+      get(_, property) {
+        if (typeof property !== "string") {
+          throw new TypeError("Symbol segments can't be used on the client");
+        }
   
-    return resBody;
+        const append = property.split("/").filter(p => !!p).join("/");
+        return proxy(path.endsWith("/") ? path + append : path + "/" + append);
+      }
+    });
   };
 
   return proxy(base, packers) as Client<T>;

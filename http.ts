@@ -3,12 +3,14 @@
 
 import { base64, http, path, fileServer, graph } from "./deps.ts";
 import { packBody, unpackBody } from "./pack.ts";
-import { HttpError, SocketInit, wrapWebSocket } from "./client.ts";
+import { HttpError, Socket, SocketInit, wrapWebSocket } from "./client.ts";
 
 import type { Packers } from "./pack.ts";
-import type { Parser } from "./parser.ts";
+import type { Parser, ParserOutput } from "./parser.ts";
 
-// TODO: Ability to turn bundle watching off
+// TODO: Ability to turn bundle watching off  
+// TODO: When permissions like --allow-write and --unstable aren't granted,
+// there should be a graceful fallback?  
 
 /**
  * A special 404 HttpError that should be thrown whenever a handler is refusing
@@ -18,13 +20,25 @@ import type { Parser } from "./parser.ts";
  */
 export const NO_MATCH = new HttpError("404 not found", { status: 404 });
 
+/**
+ * A ResponseInit applied to the Rpc response after resolving and packing the
+ * value to send to the client. The Headers object is always available. If the
+ * resolved value is a Response object already, the status and statusText will
+ * be ignored but the headers will still be applied.
+ */
+export interface Res extends ResponseInit {
+  headers: Headers;
+}
+
 /** A metadata object generated once for every request. */
 export interface RequestData {
   /**
-   * Response headers that should be applied to whatever Response ends up being
-   * sent back to the client.
+   * A ResponseInit applied to the Rpc response after resolving and packing the
+   * value to send to the client. The Headers object is always available. If the
+   * resolved value is a Response object already, the status and statusText will
+   * be ignored but the headers will still be applied.
    */
-  res: Headers;
+  res: Res;
   /** WHATWG URL object generated from the request.url. */
   url: URL;
   /**
@@ -59,14 +73,23 @@ const _requestData = Symbol("_requestData");
  * the RequestData object is generated and returned. Every other time the
  * request passes through this function, the same object generated on the first
  * call is returned without further modification.
+ *
+ * If the request should be redirected before being processed, a Response will
+ * be returned instead.
  */
-export function requestData(request: Request): RequestData {
+export function requestData(request: Request): RequestData | Response {
   const req = request as Request & Record<typeof _requestData, RequestData>;
   if (req[_requestData]) {
     return req[_requestData];
   }
 
   const url = new URL(req.url);
+  const path = `/${url.pathname.split("/").filter(p => !!p).join("/")}`;
+  if (path !== url.pathname) {
+    url.pathname = path;
+    return Response.redirect(url.href, 302);
+  }
+
   const query: Record<string, string | string[]> = {};
   url.searchParams.forEach((v, k) => {
     const old = query[k];
@@ -79,10 +102,12 @@ export function requestData(request: Request): RequestData {
     }
   });
 
+  
+
   const data: RequestData = {
-    res: new Headers(),
+    res: { headers: new Headers() },
     url,
-    path: url.pathname,
+    path,
     groups: {},
     query,
   };
@@ -199,7 +224,7 @@ const fallbackKeys: [string, ...string[]] = [base64.encode(rand)];
  */
 export async function bakeCookie(init: { // Using just "cookie" was annoying
   req: Request;
-  res: Headers;
+  headers: Headers;
   keys?: [string, ...string[]];
 }): Promise<Cookie> {
   const keys = init.keys || fallbackKeys;
@@ -288,17 +313,17 @@ export async function bakeCookie(init: { // Using just "cookie" was annoying
       let u = updates.shift();
       while (u) {
         if (u.op === "delete") {
-          http.deleteCookie(init.res, u.name, u.opt);
+          http.deleteCookie(init.headers, u.name, u.opt);
         }
 
         if (u.op === "set") {
-          http.setCookie(init.res, {
+          http.setCookie(init.headers, {
             ...u.opt,
             name: u.name,
             value: u.value,
           });
           if (u.opt?.signed) {
-            http.setCookie(init.res, {
+            http.setCookie(init.headers, {
               ...u.opt,
               name: `${u.name}.sig`,
               value: await sign(u.value, keys[0]),
@@ -418,17 +443,6 @@ export function response<T = unknown>(
   });
 }
 
-const _socketResponse = Symbol("_socketResponse");
-
-/**
- * A regular response that gets returned when a socket connection is
- * established. The type parameter indicates the type of message the client can
- * expect to receive from the server.
- */
-export interface SocketResponse<Send> extends Response {
-  [_socketResponse]?: [Send]; // Imaginary
-}
-
 /**
  * The server-side equivalent of the wrapWebSocket function in the client
  * module. Returns a Response which should be returned by the handler for the
@@ -439,14 +453,21 @@ export function upgradeWebSocket<
   Message extends Parser | null = null,
 >(
   req: Request,
-  init?: SocketInit<Send, Message>,
-): SocketResponse<Send> {
-  let raw: WebSocket;
-  let response: SocketResponse<Send>;
+  init?: SocketInit<Message>,
+): {
+  socket: Socket<Send, (
+    Message extends Parser ? ParserOutput<Message> : unknown
+  )>;
+  response: Response;
+} {
   try {
-    const upgrade = Deno.upgradeWebSocket(req, { protocol: "json" });
-    raw = upgrade.socket;
-    response = upgrade.response as SocketResponse<Send>;
+    const { socket, response } = Deno.upgradeWebSocket(req, {
+      protocol: "json"
+    });
+    return {
+      socket: wrapWebSocket(socket, init),
+      response,
+    }
   } catch (e) {
     throw new HttpError("400 bad request", {
       status: 400,
@@ -456,9 +477,6 @@ export function upgradeWebSocket<
       },
     });
   }
-
-  wrapWebSocket(raw, init);
-  return response;
 }
 
 const _server = Symbol("_server");
@@ -502,7 +520,10 @@ export function server<H extends http.Handler>(
     port: 8000,
     ...init,
     handler: async (req, conn) => {
-      const data = requestData(req)
+      const data = requestData(req);
+      if (data instanceof Response) { // Handle malformed path redirect
+        return data;
+      }
       
       let err: unknown = null;
       try {
@@ -517,12 +538,12 @@ export function server<H extends http.Handler>(
       // error, continue to bugtracing below.
       if (err === NO_MATCH) {
         const e = err as HttpError;
-        const headers = data.res;
+        const headers = data.res.headers;
         headers.append("content-length", e.message.length.toString());
         headers.append("content-type", "text/plain");
         return new Response(req.method === "HEAD" ? null : e.message, {
           status: e.status, // 404
-          headers: data.res,
+          headers: data.res.headers,
         });
       }
 
@@ -534,13 +555,13 @@ export function server<H extends http.Handler>(
         err, // REVIEW
       );
       const body = `500 internal server error [${bugtrace}]`;
-      data.res.append("content-length", body.length.toString());
+      data.res.headers.append("content-length", body.length.toString());
       return new Response(req.method === "HEAD" ? null : body, {
         status: (
           err instanceof HttpError && err.status >= 500 ? err.status
           : 500
         ),
-        headers: data.res,
+        headers: data.res.headers,
       });
     },
   });
@@ -585,7 +606,7 @@ export interface ServeAssetOptions {
    * found inside that directory, that file will be served instead of a 404
    * error. Default: `["index.html"]`
    */
-  indexes?: string[];
+  // rewrittenIndexes?: string[];
   /**
    * When a requested file isn't found, each of these extensions will be
    * appended to the request path and checked for existence. If the request path
@@ -601,19 +622,42 @@ export interface ServeAssetOptions {
   path404?: string;
   /**
    * Once a request's on-disk file path is calculated, the file path will be
-   * passed through each of these provided bundlers. If a bundler returns a
-   * Response, that Response will be served instead of the on-disk file and the
-   * bundling process is halted. Bundlers are responsible for their own caching
-   * techniques. If no array is specified, files are served as-is from disk.
-   * Default: `undefined`
+   * passed through each of these provided bundlers. If a bundler returns a new
+   * file path, that path will be served instead and the bundling process is
+   * halted. (Order matters.) Bundlers are responsible for their own caching
+   * techniques. The default behavior enables TypeScript bundling. To turn it
+   * off, specify an empty array or an array without a `tsBundler()` in it.
+   * Default: `[tsBundler()]`
    */
   bundlers?: Bundler[];
 }
 
+// When a requested path without a trailing slash resolves to a directory and
+// that directory has an index file in it, relative links in the html need to be
+// rewritten to account for the lack of trailing slash. This regex is used to
+// rewrite them.  
+const htmlRelativeLinks = /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
+
+// Rewritten index files are cached to disk, and need to be deleted when the
+// server shuts down. (Be careful)
+const rewrittenIndexes = new Map<string, {
+  mtime: Date;
+  servePath: string;
+}>();
+self.addEventListener("unload", () => {
+  for (const [_, v] of rewrittenIndexes.entries()) {
+    try {
+      Deno.removeSync(v.servePath);
+    } catch {
+      // Skip
+    }
+  }
+});
+
 /**
  * Response factory for serving static assets. Asset resolution uses the
- * provided ServeAssetOptions, the Request is only used for caching headers like ETag
- * etc.
+ * provided ServeAssetOptions, the Request is only used for caching headers like
+ * ETag etc.
  */
 export async function serveAsset(
   req: Request,
@@ -622,9 +666,9 @@ export async function serveAsset(
   let cwd = opt.cwd || ".";
   const dir = opt.dir || "assets";
   const filePath = opt.path;
-  const indexes = opt.indexes || ["index.html"];
   const tryExtensions = opt.tryExtensions || ["html"];
   const path404 = opt.path404;
+  const bundlers = opt.bundlers || [tsBundler()];
 
   // This allows you to, for example, specify import.meta.url as a cwd. If cwd
   // is a file:// url, the last path segment (the basename of the "current"
@@ -633,8 +677,23 @@ export async function serveAsset(
     cwd = path.join(path.fromFileUrl(cwd), "..");
   }
 
+  // If it's an auto-indexable file, redirect to the path without the
+  // basename. i.e. a request to /hello/index.html would redirect to /hello
+  const url = new URL(req.url);
+  const [fn, ext] = path.basename(url.pathname).split(".", 2);
+  if (
+    fn === "index" &&
+    tryExtensions.includes(ext) &&
+    filePath.endsWith(`/index.${ext}`) // REVIEW: Not sure about this one
+  ) {
+    const url = new URL(req.url);
+    url.pathname = path.join(url.pathname, "../").slice(0, -1);
+    return Response.redirect(url.href, 302);
+  }
+
   // Wrap the processing procedure because it gets used multiple times when
-  // there's a 404
+  // there's a 404  
+  // REVIEW: This is definitely too complicated. Find a simpler way
   const process = async (filePath: string) => {
     // Get the full file path by joining the cwd, dir, and resolved path
     filePath = path.join(
@@ -645,6 +704,7 @@ export async function serveAsset(
   
     // Look for the file to serve
     let fileInfo: Deno.FileInfo | null = null;
+    let wasAutoIndexed = false;
     try {
       fileInfo = await Deno.stat(filePath);
     } catch {
@@ -664,14 +724,20 @@ export async function serveAsset(
       }
     }
     if (fileInfo && fileInfo.isDirectory) {
-      // It was a directory, look for index files
-      for (const index of indexes) {
+      // It was a directory, look for index files. Don't forget to reset
+      // fileInfo to null or you'll miss a bug where the directory is passed
+      // into the bundle process and an incomplete 200 response comes back.
+      // (I should look into that further but idk lots to do)
+      fileInfo = null;
+
+      for (const ext of tryExtensions) {
         try {
-          const p = path.join(filePath, index);
+          const p = path.join(filePath, `index.${ext}`);
           const info = await Deno.stat(p);
           if (info.isFile) {
             filePath = p;
             fileInfo = info;
+            wasAutoIndexed = true;
             break;
           }
         } catch {
@@ -684,40 +750,96 @@ export async function serveAsset(
     }
     
     // Bundling procedure
-    if (opt.bundlers) {
-      for (const b of opt.bundlers) {
-        const resp = await b(req, filePath);
-        if (resp) {
-          return resp;
-        }
+    for (const b of bundlers) {
+      const bundle = await b(req, filePath);
+      if (bundle) {
+        return { servePath: bundle, wasAutoIndexed };
       }
     }
 
     // Just serve the file if no bundlers took care of it
-    try {
-      return await fileServer.serveFile(req, filePath);
-    } catch (e) {
-      if (e.message === "404 not found") {
-        throw new HttpError("404 not found", { status: 404 });
-      }
-      throw e;
-    }
+    return { servePath: filePath, wasAutoIndexed };
   };
 
   // Serve the asset. If the asset wasn't found and an error page was specified,
   // serve that instead. If that also wasn't found, throw a 500 error with
   // details
+  let servePath = "";
   try {
-    return await process(filePath);
+    const p = await process(filePath);
+    servePath = p.servePath;
+
+    // If this isn't an auto-index file, no need to go further
+    if (!p.wasAutoIndexed) {
+      return await fileServer.serveFile(req, servePath);
+    }
+
+    // At this point, the requested path was "auto-indexed", i.e. a directory
+    // was requested and it had an index file in it. I/Cav prefer/s to not have
+    // trailing slashes on any URLs, so we need to accomadate this by rewriting
+    // auto-index files when necessary
+    const fileInfo = await Deno.stat(servePath);
+    const cache = rewrittenIndexes.get(servePath);
+    if (cache && (!fileInfo.mtime || fileInfo.mtime < cache.mtime)) {
+      return await fileServer.serveFile(req, cache.servePath);
+    }
+
+    // If there was a cached version but it's stale, attempt to delete it in a
+    // separate event tick and suppress the error if that fails
+    if (cache) {
+      (async () => {
+        try {
+          await Deno.remove(cache.servePath);
+        } catch {
+          // Suppress
+        }
+      })();
+    }
+
+    if (url.pathname.endsWith("/")) {
+      // No need to rebase the relative links if the path ends with a /
+      return await fileServer.serveFile(req, servePath);
+    }
+
+    // Otherwise, because the trailing slash isn't there, you need to rebase
+    // the href and src links in the returned index html
+    const basename = path.basename(url.pathname);
+
+    // Rewrite the content
+    let content = await Deno.readTextFile(servePath);
+    content = content.replaceAll(htmlRelativeLinks, (match, group) => {
+      const newGroup = group.replace(
+        /^(?:src|href)=(?:"|')(\..*)(?:"|')$/g,
+        (m: string, g: string) => m.replace(g, (
+          g.startsWith("./") ? `./${basename}/${g.slice(2)}`
+          : g.startsWith("../") ? `./${g.slice(3)}`
+          : g
+        )),
+      );
+      return match.replace(group, newGroup);
+    });
+
+    // Cache the rewrite before serving the temp file
+    const tmp = await Deno.makeTempFile({ suffix: ".html" });
+    await Deno.writeTextFile(tmp, content);
+    rewrittenIndexes.set(servePath, {
+      mtime: fileInfo.mtime || new Date(),
+      servePath: tmp,
+    });
+    return await fileServer.serveFile(req, tmp);  
   } catch (e1) {
-    if (e1 instanceof HttpError && e1.status === 404) {
+    if (e1.message === "404 not found") {
       if (path404) {
         try {
-          return await process(path404);
+          const servePath = (await process(path404)).servePath;
+          return await fileServer.serveFile(req, servePath);
         } catch (e2) {
           throw new HttpError("Couldn't serve 404 error page", {
             status: 500,
-            detail: { e1, e2 },
+            detail: {
+              servePath,
+              error: e2,
+            },
           });
         }
       }
@@ -730,12 +852,11 @@ export async function serveAsset(
 /**
  * Bundlers, when provided to the assets() function, will receive the on-disk
  * path of a requested file. The bundler can then return null if it doesn't
- * apply to the requested file, or it can return a Response to serve instead of
- * using the standard library's fileServer to serve the file from disk. Bundlers
- * are responsible for handling their own caching techniques.
+ * apply to the requested file, or it can return a new file path to serve
+ * instead. Bundlers are responsible for handling their own caching techniques.
  */
 export interface Bundler {
-  (req: Request, filePath: string): Promise<Response | null> | Response | null;
+  (req: Request, filePath: string): Promise<string | null> | string | null;
 }
 
 // Used below to cache the location of compiled typescript bundles, which are
@@ -751,6 +872,7 @@ self.addEventListener("unload", () => {
   }
 });
 
+// TODO: Update this doc
 /**
  * Constructs an asset Bundler for .ts and .tsx files. This uses Deno's runtime
  * compiler API under the hood, which requires the --unstable flag.
@@ -818,7 +940,7 @@ self.addEventListener("unload", () => {
  * - `--allow-write` (required for writing the bundles to temporary files)
  */
 export function tsBundler(): Bundler {
-  return async (req: Request, filePath: string) => {
+  return async (_, filePath: string) => {
     const ext = path.extname(filePath);
     if (ext !== ".ts" && ext !== ".tsx") {
       return null;
@@ -826,10 +948,10 @@ export function tsBundler(): Bundler {
 
     let bundle = tsBundles.get(filePath) || "";
     if (bundle) {
-      return await fileServer.serveFile(req, bundle);
+      return bundle;
     }
 
-    const emit = async (filePath: string, overwrite?: string) => {
+    const emit = async (filePath: string, bundlePath?: string) => {
       const js = (await Deno.emit(filePath, {
         bundle: "module",
         check: false,
@@ -843,7 +965,7 @@ export function tsBundler(): Bundler {
           ],
         },
       })).files["deno:///bundle.js"];
-      bundle = overwrite || await Deno.makeTempFile({ suffix: ".js" });
+      bundle = bundlePath || await Deno.makeTempFile({ suffix: ".js" });
       await Deno.writeTextFile(bundle, js);
       tsBundles.set(filePath, bundle);
 
@@ -906,6 +1028,6 @@ export function tsBundler(): Bundler {
       return bundle;
     };
     
-    return await fileServer.serveFile(req, await emit(filePath));
+    return await emit(filePath);
   };
 }

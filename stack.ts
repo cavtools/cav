@@ -140,6 +140,9 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     conn: http.ConnInfo,
   ): Promise<Response> => {
     const data = requestData(req);
+    if (data instanceof Response) { // Handle malformed path redirect
+      return data;
+    }
 
     for (const [pattern, handler] of patterns.entries()) {
       const match = pattern.exec(data.path, "http://_._");

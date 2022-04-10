@@ -1,6 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is server-only.
 
+// TODO: What happens when you try to upgrade for an assets request?
 // TODO: accept multiple strings for the path init option
 // TODO: spa() utiltity function that lets you specify multiple paths
 // TODO: files and blobs that flush to disk when a certain memory threshold is
@@ -19,12 +20,12 @@ import {
   serveAsset,
   upgradeWebSocket,
 } from "./http.ts";
-import { HttpError, SocketInit } from "./client.ts";
+import { HttpError, Socket } from "./client.ts";
 
 import type {
   Cookie,
   ServeAssetOptions,
-  SocketResponse,
+  Res,
 } from "./http.ts";
 import type { Packers } from "./pack.ts";
 import type {
@@ -125,7 +126,12 @@ export interface RpcInit<
    * slash. This setting is ignored if the requested path is the root path "/".
    * Default: `"redirect"`
    */
-  trailingSlash?: TrailingSlashOpt | null;
+  // REVIEW: I decided to remove the ability to change this behavior. I like the
+  // consistency and aesthetic of "no trailing slashes", and there's code in
+  // http.ts to account for re-based index files. There may be edge cases and it
+  // might still be true that banning trailing slashes is a mistake, so I'm just
+  // commenting the code out for now instead of removing it.  
+  // trailingSlash?: TrailingSlashOpt | null;
   /**
    * This limits the maximum size of the Request body. Note that, currently, the
    * entire Request body is loaded into memory during request processing.
@@ -178,8 +184,7 @@ export interface RpcInit<
    * pack and send back to the client.
    */
   resolve: Resolve<
-    // deno-lint-ignore no-explicit-any
-    Upgrade extends true ? Resp & SocketResponse<any> : Resp,
+    Resp,
     Groups,
     Context,
     Query,
@@ -230,11 +235,10 @@ export type AnyRpcInit = RpcInit<
   boolean | null
 >;
 
-// TODO: Convert to an enum?
 /**
  * Controls whether an Rpc redirects, allows, requires, or rejects paths with trailing slashes.
  */
-export type TrailingSlashOpt = "redirect" | "allow" | "require" | "reject";
+// export type TrailingSlashOpt = "redirect" | "allow" | "require" | "reject";
 
 /**
  * In Cav, there is no middleware. To fill the gap, Rpcs can leverage Ctx
@@ -251,8 +255,13 @@ export interface Ctx<Val = unknown> {
 export interface CtxArg {
   /** The incoming Request. */
   req: Request;
-  /** The outgoing Headers, applied before a Response is returned. */
-  res: Headers;
+  /**
+   * A ResponseInit applied to the Rpc response after resolving and packing the
+   * value to send to the client. The Headers object is always available. If the
+   * resolved value is a Response object already, the status and statusText will
+   * be ignored but the headers will still be applied.
+   */
+  res: Res;
   /** The WHATWG URL for the current Request. */
   url: URL;
   /** The Deno-provided ConnInfo associated with the request. */
@@ -312,8 +321,13 @@ export interface ResolveArg<
 > {
   /** The incoming Request this Rpc is handling. */
   req: Request;
-  /** Response headers to include when the Response is constructed. */
-  res: Headers;
+  /**
+   * A ResponseInit applied to the Rpc response after resolving and packing the
+   * value to send to the client. The Headers object is always available. If the
+   * resolved value is a Response object already, the status and statusText will
+   * be ignored but the headers will still be applied.
+   */
+  res: Res;
   /** The WHATWG URL for this request. */
   url: URL;
   /** Connection information provided by Deno. */
@@ -338,11 +352,9 @@ export interface ResolveArg<
    */
   asset: (opt: ServeAssetOptions) => Promise<Response>;
   /**
-   * Packs a response to return. Because the return value of the resolver is
-   * already processed and packed, you should only need this if you want to set
-   * status/Text explicitly.
+   * Packs a response to return. 
    */
-  response: typeof response;
+  // response: typeof response; // REVIEW: I don't think this is needed now
   /**
    * Returns a redirect Response. If the redirect path doesn't specify an
    * origin, the origin of the current request is used. If the path starts with
@@ -355,9 +367,9 @@ export interface ResolveArg<
    * `upgrade` init option is `true`. The Response returned by this function
    * should be returned by the Rpc's resolve function.
    */
-  upgrade: Upgrade extends true ? <Send = unknown>(
-    init: Omit<SocketInit<Send, Message>, "packers" | "message">,
-  ) => SocketResponse<Send> : undefined;
+  upgrade: Upgrade extends true ? <Send = unknown>() => Socket<Send, (
+    Message extends Parser ? ParserOutput<Message> : unknown
+  )> : undefined;
 }
 
 /**
@@ -396,13 +408,11 @@ export interface ResolveErrorArg extends CtxArg {
    * Only provided if this is a non-socket Rpc. Packs a response to return. Use
    * this if you need to set status/Text.
    */
-  response: typeof response;
+  // response: typeof response;
 }
 
 /**
- * Creates an Rpc handler that either resolves a Request into a Response or
- * throws an error if something breaks or if the Rpc isn't supposed to respond
- * to given request (it'll throw an HttpError with a 404 status code).
+ * Creates an endpoint handler for resolving Requests into Responses.
  */
 export function rpc<
   Resp = unknown,
@@ -478,6 +488,10 @@ export function rpc<
 
   const handler = async (req: Request, conn: http.ConnInfo) => {
     const data = requestData(req);
+    if (data instanceof Response) { // Handle malformed path redirect
+      return data;
+    }
+    
     const { res, url, path: _path } = data;
     const path = useFullPath ? url.pathname : _path;
 
@@ -485,33 +499,38 @@ export function rpc<
       return await serveAsset(req, opt);
     };
 
+    let socket: Socket | null = null;
+    let socketResponse: Response | null = null;
     // deno-lint-ignore no-explicit-any
-    const upgrade: ResolveArg<any, any, any, any, true>["upgrade"] = socketInit => {
-      return upgradeWebSocket(req, {
-        ...socketInit,
-        message: init.message,
-        packers: init.packers,
-        onError: async x => {
-          // If the error was the result of the incoming message not parsing
-          // correctly, send the error back in a message to the client and
-          // suppress it. Otherwise, pass it through to the provided onError
-          // handler. Only send the error if the socket is open, i.e. readyState
-          // === 1
-          if (
-            x.error instanceof HttpError &&
-            x.error.detail.messageParseFailed &&
-            x.socket.raw.readyState === 1
-          ) {
-            // deno-lint-ignore no-explicit-any
-            x.socket.send(x.error as any);
-          } else if (socketInit.onError) {
-            await socketInit.onError(x);
-          } else {
-            // TODO: More detail in the log
-            console.error(`Unhandled socket error:`, x.error);
+    const upgrade: ResolveArg<any, any, any, any, true>["upgrade"] = () => {
+      if (socket) {
+        throw new Error(
+          "upgrade() should only be called once for every upgraded request"
+        );
+      }
+      const u = upgradeWebSocket(req, {
+        message: async (m: unknown) => {
+          if (!init.message) {
+            return m;
+          }
+          try {
+            return (
+              typeof init.message === "function" ? await init.message(m)
+              : typeof init.message === "object" ? await init.message.parse(m)
+              : m
+            );
+          } catch (e) {
+            socket!.send(new HttpError("400 bad request", {
+              status: 400,
+              expose: e,
+            }));
           }
         },
+        packers: init.packers,
       });
+      socket = u.socket;
+      socketResponse = u.response;
+      return u.socket;
     }
 
     const redirect = (to: string, status?: number) => {
@@ -549,33 +568,40 @@ export function rpc<
 
     // Now that there's for sure a match, handle trailing slashes
     if (url.pathname !== "/") {
-      switch (init.trailingSlash) {
-      case "require":
-        if (!url.pathname.endsWith("/")) {
-          throw NO_MATCH;
-        }
-        break;
-      case "allow":
-        break;
-      case "reject":
-        if (url.pathname.endsWith("/")) {
-          throw NO_MATCH;
-        }
-        break;
-      case "redirect":
-      default:
-        if (url.pathname.endsWith("/")) {
-          const u = new URL(url.href);
-          u.pathname = u.pathname.slice(0, u.pathname.length - 1);
-          return Response.redirect(u.href, 302);
-        }
-        break;
+      if (url.pathname.endsWith("/")) {
+        const u = new URL(url.href);
+        u.pathname = u.pathname.slice(0, u.pathname.length - 1);
+        return Response.redirect(u.href, 302);
       }
+
+      // REVIEW: See the other REVIEW up top regarding trailingSlash
+      // switch (init.trailingSlash) {
+      // case "require":
+      //   if (!url.pathname.endsWith("/")) {
+      //     throw NO_MATCH;
+      //   }
+      //   break;
+      // case "allow":
+      //   break;
+      // case "reject":
+      //   if (url.pathname.endsWith("/")) {
+      //     throw NO_MATCH;
+      //   }
+      //   break;d
+      // case "redirect":
+      // default:
+      //   if (url.pathname.endsWith("/")) {
+      //     const u = new URL(url.href);
+      //     u.pathname = u.pathname.slice(0, u.pathname.length - 1);
+      //     return Response.redirect(u.href, 302);
+      //   }
+      //   break;
+      // }
     }
 
     const cookie = await bakeCookie({
       req,
-      res,
+      headers: res.headers,
       keys: init.keys || undefined,
     });
 
@@ -587,7 +613,8 @@ export function rpc<
     const _response: typeof response = (body, _init) => {
       const resp = response(body, {
         ..._init,
-        packers: _init?.packers || init.packers || undefined,
+        headers: res.headers,
+        packers: init.packers || undefined,
       });
       if (req.method === "HEAD") {
         return new Response(null, { headers: resp.headers });
@@ -623,14 +650,14 @@ export function rpc<
 
       // If it's an OPTIONS request, handle it and return early  
       if (req.method === "OPTIONS") {
-        res.append(
+        res.headers.append(
           "Allow",
           Array.from(methods.values()).join(", "),
         );
         await cookie.flush();
         return _response(null, {
           status: 204,
-          headers: res,
+          headers: res.headers,
         });
       }
 
@@ -694,12 +721,17 @@ export function rpc<
         message,
         asset,
         redirect,
-        response: _response,
+        // response: _response,
         upgrade: init.upgrade ? upgrade : undefined,
       // deno-lint-ignore no-explicit-any
       } as ResolveArg<any, any, any, any, any>);
+
+      if (init.upgrade && (!socket || r !== socket)) {
+        throw new Error("Upgraded Rpcs must resolve to the Socket returned by the upgrade() utility");
+      }
+
       await cookie.flush();
-      return _response(r, { headers: res });
+      return _response(init.upgrade ? socketResponse : r);
     } catch (e) {
       let e2: unknown = e;
       if (init.resolveError) {
@@ -707,11 +739,11 @@ export function rpc<
           const r = await init.resolveError({
             ...ctxArg,
             asset,
-            response: _response,
+            // response: _response,
             error: e,
           });
           await cookie.flush();
-          return _response(r, { headers: res });
+          return _response(r);
         } catch (e3) {
           e2 = e3;
         }
@@ -733,7 +765,7 @@ export function rpc<
       }
 
       // If it's an HttpError, send it back as a response
-      return _response(e2, { status: e2.status, headers: res });
+      return _response(e2, { status: e2.status });
     } finally {
       let fn = whenDones.pop();
       while (fn) {
@@ -758,13 +790,12 @@ export type AssetsInit = Omit<ServeAssetOptions, "path">;
 export function assets(init?: AssetsInit) {
   return rpc({
     path: "*",
-    trailingSlash: "allow",
-    resolve: x => {
-      return x.asset({
-        ...init,
-        path: x.path,
-      });
-    },
+    // REVIEW: See the other REVIEW up top regarding trailingSlash
+    // trailingSlash: "allow",
+    resolve: x => x.asset({
+      ...init,
+      path: x.path,
+    }),
   });
 }
 
