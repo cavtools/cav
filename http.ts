@@ -1,28 +1,14 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is server-only.
 
-import { base64, http, path, fileServer, graph } from "./deps.ts";
+import { base64, http, path, fileServer } from "./deps.ts";
 import { packBody, unpackBody } from "./pack.ts";
 import { HttpError, Socket, SocketInit, wrapWebSocket } from "./client.ts";
+// import { tsBundler } from "./bundle.ts";
 
 import type { Packers } from "./pack.ts";
 import type { Parser, ParserOutput } from "./parser.ts";
-
-// FIXME: For now, don't store the contents of rewritten index files. Just
-// rewrite and send back with the etag headers returned by the default file
-// server. This means index files will be a little bit slower than other files,
-// but that's okay; this is what http caching is for
-
-// FIXME: If a requested typescript asset has a javascript file of the same name
-// in the same parent folder, serve that file instead of even attempting to
-// bundle the typescript. If a requested javascript file doesn't exist but
-// there's a typescript file of the same name, try to bundle it. This means you
-// can use either a .js or .ts extension to get the bundle, it doesn't really
-// matter. If both a javascript and typescript file share the same name, the
-// javascript is preferred and the typescript will be inaccessible to clients.
-// To prebundle assets, simply use the deno bundling api to output a javascript
-// asset of the same name. --allow-write and --unstable would not be required if
-// prebundling was done, which would mean deno deploy is back on the table.
+// import type { Bundler } from "./bundle.ts";
   
 // TODO: Ability to turn bundle watching off  
 
@@ -115,8 +101,6 @@ export function requestData(request: Request): RequestData | Response {
       query[k] = v;
     }
   });
-
-  
 
   const data: RequestData = {
     res: { headers: new Headers() },
@@ -515,7 +499,7 @@ export interface Server<H extends http.Handler> extends http.Server {
 export interface ServerInit<
   H extends http.Handler = http.Handler,
 > extends Omit<http.ServerInit, "onError"> {
-  /** The port to bind to. Default: `8000` */
+  /** The port to bind to. Default: `80` */
   port?: number;
   handler: H;
 }
@@ -531,7 +515,6 @@ export function server<H extends http.Handler>(
   init: ServerInit<H>,
 ): Server<H> {
   return new http.Server({
-    port: 8000,
     ...init,
     handler: async (req, conn) => {
       const data = requestData(req);
@@ -581,21 +564,25 @@ export function server<H extends http.Handler>(
   });
 }
 
+/** The ServerInit options available when using the serve() shorthand function. */
+export type ServeOpt = Omit<ServerInit<http.Handler>, "handler">;
+
 /**
  * Shorthand function for quickly serving a Handler. This function is a
  * one-liner:
  *
  * ```ts
- * return await server({ ...init, handler }).listenAndServe();
+ * return await server({ ...opt, handler }).listenAndServe();
  * ```
  */
-export async function serve(
-  handler: http.Handler,
-  init?: Omit<ServerInit<http.Handler>, "handler">,
-): Promise<void> {
-  return await server({ ...init, handler }).listenAndServe();
+export async function serve(handler: http.Handler, opt?: ServeOpt): Promise<void> {
+  return await server({ ...opt, handler }).listenAndServe();
 }
 
+// TODO: Add an "unsafePath" option that supercedes the cwd+dir+path
+// calculation. The unsafePath would be relative to the cwd of the process
+// unless it started with an /, in which case it's relative to root. The "path"
+// option would not be required when "unsafePath" is used
 /** Options controlling how assets are found and served. */
 export interface ServeAssetOptions {
   /**
@@ -620,14 +607,14 @@ export interface ServeAssetOptions {
    * found inside that directory, that file will be served instead of a 404
    * error. Default: `["index.html"]`
    */
-  // rewrittenIndexes?: string[];
+  // indexes?: string[];
   /**
    * When a requested file isn't found, each of these extensions will be
    * appended to the request path and checked for existence. If the request path
    * plus one of these extensions is found, that file will be served instead of
    * a 404 error. Default: `["html"]`
    */
-  tryExtensions?: string[];
+  // tryExtensions?: string[];
   /**
    * Path to use when the provided path results in a 404 error. Use this to
    * serve a 404 page. If this isn't specified, 404 errors will bubble. Default:
@@ -643,8 +630,9 @@ export interface ServeAssetOptions {
    * off, specify an empty array or an array without a `tsBundler()` in it.
    * Default: `[tsBundler()]`
    */
-  bundlers?: Bundler[];
+  // bundlers?: Bundler[];
 }
+
 
 // When a requested path without a trailing slash resolves to a directory and
 // that directory has an index file in it, relative links in the html need to be
@@ -652,21 +640,22 @@ export interface ServeAssetOptions {
 // rewrite them.  
 const htmlRelativeLinks = /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
 
+// FIXME: This is old, delete it when you're sure you don't need it
 // Rewritten index files are cached to disk, and need to be deleted when the
 // server shuts down. (Be careful)
-const rewrittenIndexes = new Map<string, {
-  mtime: Date;
-  servePath: string;
-}>();
-self.addEventListener("unload", () => {
-  for (const [_, v] of rewrittenIndexes.entries()) {
-    try {
-      Deno.removeSync(v.servePath);
-    } catch {
-      // Skip
-    }
-  }
-});
+// const rewrittenIndexes = new Map<string, {
+//   mtime: Date;
+//   servePath: string;
+// }>();
+// self.addEventListener("unload", () => {
+//   for (const [_, v] of rewrittenIndexes.entries()) {
+//     try {
+//       Deno.removeSync(v.servePath);
+//     } catch {
+//       // Skip
+//     }
+//   }
+// });
 
 /**
  * Response factory for serving static assets. Asset resolution uses the
@@ -680,9 +669,9 @@ export async function serveAsset(
   let cwd = opt.cwd || ".";
   const dir = opt.dir || "assets";
   const filePath = opt.path;
-  const tryExtensions = opt.tryExtensions || ["html"];
+  // const tryExtensions = opt.tryExtensions || ["html"];
   const path404 = opt.path404;
-  const bundlers = opt.bundlers || [tsBundler()];
+  // const bundlers = opt.bundlers || [tsBundler()];
 
   // This allows you to, for example, specify import.meta.url as a cwd. If cwd
   // is a file:// url, the last path segment (the basename of the "current"
@@ -691,15 +680,11 @@ export async function serveAsset(
     cwd = path.join(path.fromFileUrl(cwd), "..");
   }
 
-  // If it's an auto-indexable file, redirect to the path without the
-  // basename. i.e. a request to /hello/index.html would redirect to /hello
+  // If the path was an index.html, redirect to the path without the last path
+  // segment. i.e. /hello/index.html -> /hello
   const url = new URL(req.url);
-  const [fn, ext] = path.basename(url.pathname).split(".", 2);
-  if (
-    fn === "index" &&
-    tryExtensions.includes(ext) &&
-    filePath.endsWith(`/index.${ext}`) // REVIEW: Not sure about this one
-  ) {
+  const base = path.basename(url.pathname);
+  if (base === "index.html") {
     const url = new URL(req.url);
     url.pathname = path.join(url.pathname, "../").slice(0, -1);
     return Response.redirect(url.href, 302);
@@ -716,60 +701,52 @@ export async function serveAsset(
       path.resolve(path.join("/", filePath)),
     );
   
-    // Look for the file to serve
     let fileInfo: Deno.FileInfo | null = null;
-    let wasAutoIndexed = false;
     try {
       fileInfo = await Deno.stat(filePath);
     } catch {
-      // It didn't exist, try the extensions
-      for (const ext of tryExtensions) {
-        try {
-          const p = `${filePath}.${ext}`;
-          const info = await Deno.stat(p);
-          if (info.isFile) {
-            filePath = p;
-            fileInfo = info;
-            break;
-          }
-        } catch {
-          continue;
+      // It didn't exist, try adding an .html
+      try {
+        const p = `${filePath}.html`;
+        const info = await Deno.stat(p);
+        if (info.isFile) {
+          filePath = p;
+          fileInfo = info;
         }
+      } catch {
+        // continue
       }
     }
+
+    let wasAutoIndexed = false;
     if (fileInfo && fileInfo.isDirectory) {
       // It was a directory, look for index files. Don't forget to reset
-      // fileInfo to null or you'll miss a bug where the directory is passed
-      // into the bundle process and an incomplete 200 response comes back.
-      // (I should look into that further but idk lots to do)
+      // fileInfo to null or you'll miss a bug, see the next block
       fileInfo = null;
-
-      for (const ext of tryExtensions) {
-        try {
-          const p = path.join(filePath, `index.${ext}`);
-          const info = await Deno.stat(p);
-          if (info.isFile) {
-            filePath = p;
-            fileInfo = info;
-            wasAutoIndexed = true;
-            break;
-          }
-        } catch {
-          continue;
+      try {
+        const p = path.join(filePath, "index.html");
+        const info = await Deno.stat(p);
+        if (info.isFile) {
+          filePath = p;
+          fileInfo = info;
+          wasAutoIndexed = true;
         }
+      } catch {
+        // continue
       }
     }
+
     if (fileInfo === null) {
       throw new HttpError("404 not found", { status: 404 });
     }
     
     // Bundling procedure
-    for (const b of bundlers) {
-      const bundle = await b(req, filePath);
-      if (bundle) {
-        return { servePath: bundle, wasAutoIndexed };
-      }
-    }
+    // for (const b of bundlers) {
+    //   const bundle = await b(req, filePath);
+    //   if (bundle) {
+    //     return { servePath: bundle, wasAutoIndexed };
+    //   }
+    // }
 
     // Just serve the file if no bundlers took care of it
     return { servePath: filePath, wasAutoIndexed };
@@ -782,37 +759,38 @@ export async function serveAsset(
   try {
     const p = await process(filePath);
     servePath = p.servePath;
+    const originalResponse = await fileServer.serveFile(req, servePath);
 
     // If this isn't an auto-index file, no need to go further
     if (!p.wasAutoIndexed) {
-      return await fileServer.serveFile(req, servePath);
+      return originalResponse;
     }
 
     // At this point, the requested path was "auto-indexed", i.e. a directory
     // was requested and it had an index file in it. I/Cav prefer/s to not have
     // trailing slashes on any URLs, so we need to accomadate this by rewriting
     // auto-index files when necessary
-    const fileInfo = await Deno.stat(servePath);
-    const cache = rewrittenIndexes.get(servePath);
-    if (cache && (!fileInfo.mtime || fileInfo.mtime < cache.mtime)) {
-      return await fileServer.serveFile(req, cache.servePath);
-    }
+    // const fileInfo = await Deno.stat(servePath);
+    // const cache = rewrittenIndexes.get(servePath);
+    // if (cache && (!fileInfo.mtime || fileInfo.mtime < cache.mtime)) {
+    //   return await fileServer.serveFile(req, cache.servePath);
+    // }
 
     // If there was a cached version but it's stale, attempt to delete it in a
     // separate event tick and suppress the error if that fails
-    if (cache) {
-      (async () => {
-        try {
-          await Deno.remove(cache.servePath);
-        } catch {
-          // Suppress
-        }
-      })();
-    }
+    // if (cache) {
+    //   (async () => {
+    //     try {
+    //       await Deno.remove(cache.servePath);
+    //     } catch {
+    //       // Suppress
+    //     }
+    //   })();
+    // }
 
     if (url.pathname.endsWith("/")) {
       // No need to rebase the relative links if the path ends with a /
-      return await fileServer.serveFile(req, servePath);
+      return originalResponse;
     }
 
     // Otherwise, because the trailing slash isn't there, you need to rebase
@@ -834,13 +812,24 @@ export async function serveAsset(
     });
 
     // Cache the rewrite before serving the temp file
-    const tmp = await Deno.makeTempFile({ suffix: ".html" });
-    await Deno.writeTextFile(tmp, content);
-    rewrittenIndexes.set(servePath, {
-      mtime: fileInfo.mtime || new Date(),
-      servePath: tmp,
-    });
-    return await fileServer.serveFile(req, tmp);  
+    // const tmp = await Deno.makeTempFile({ suffix: ".html" });
+    // await Deno.writeTextFile(tmp, content);
+    // rewrittenIndexes.set(servePath, {
+    //   mtime: fileInfo.mtime || new Date(),
+    //   servePath: tmp,
+    // });
+    // return await fileServer.serveFile(req, tmp);  
+    
+    // If the original response is a 200, return a new response with the same
+    // headers but the rewritten content. If the original response is anything
+    // else, return it. Make sure you delete the content-length header on the
+    // originalResponse.headers before using them for the new response, so that
+    // the content-length can be recalculated
+    if (originalResponse.status !== 200) {
+      return originalResponse;
+    }
+    originalResponse.headers.delete("content-length");
+    return new Response(content, { headers: originalResponse.headers });
   } catch (e1) {
     if (e1.message === "404 not found") {
       if (path404) {
@@ -861,187 +850,4 @@ export async function serveAsset(
     }
     throw e1;
   }
-}
-
-/**
- * Bundlers, when provided to the assets() function, will receive the on-disk
- * path of a requested file. The bundler can then return null if it doesn't
- * apply to the requested file, or it can return a new file path to serve
- * instead. Bundlers are responsible for handling their own caching techniques.
- */
-export interface Bundler {
-  (req: Request, filePath: string): Promise<string | null> | string | null;
-}
-
-// Used below to cache the location of compiled typescript bundles, which are
-// stored on disk as temporary files
-const tsBundles = new Map<string, string>();
-self.addEventListener("unload", () => {
-  for (const [_, v] of tsBundles.entries()) {
-    try {
-      Deno.removeSync(v);
-    } catch {
-      // continue
-    }
-  }
-});
-
-// TODO: Update this doc
-/**
- * Constructs an asset Bundler for .ts and .tsx files. This uses Deno's runtime
- * compiler API under the hood, which requires the --unstable flag.
- * (https://deno.land/manual/typescript/runtime)
- *
- * Bundles are cached into temporary files on disk, which requires the
- * --allow-write flag. The temporary files are removed from disk when the server
- * process is asked to shut down gracefully.
- *
- * Files that get bundled will have themselves and their dependencies watched
- * for file changes using Deno.watchFs(). If changes are made and the file is
- * still present, its cached bundle will be rebuilt. If problems occur during
- * re-bundling, the cached bundle will be evicted and the bundle will be rebuilt
- * the next time it's requested.
- *
- * Bundled typescript can be imported with module script tags in HTML, like
- * this: `<script type="module" src="/bundle.ts"></script>`. The mime type will
- * be correctly served as "application/javascript", despite the extension. The
- * "lib" typescript option while bundling is equivalent to using the following
- * deno.json config:
- *
- * ```json
- * {
- *   "compilerOptions": {
- *     "lib": [
- *      "dom",
- *      "dom.iterable",
- *      "dom.asynciterable",
- *      "esnext"
- *     ]
- *   }
- * }
- * ```
- *
- * The typescript assets can be thought of as "gateways" into your client-side
- * application code. They can import from anywhere, not just the assets folder,
- * and all dependencies will be bundled into the served file. Take this into
- * account when thinking about code splitting; having multiple typescript asset
- * files include the same dependency means that dependency will be served
- * multiple times to the client, which will waste bandwidth. A good standard
- * practice would be to have just one bundle.ts file in your assets folder which
- * imports/exports everything the browser application needs.
- *
- * To avoid bundling a dependency, you can import it asynchronously using the
- * import() function. Dependencies imported this way will not be bundled in the
- * served file, but remember the importing happens inside the browser, which
- * follows different resolution rules; you won't be able to import files from
- * outside the assets folder like you can with regular imports. Tip: Top-level
- * await works in Deno, making it easy to import non-bundled dependencies in the
- * same place you import bundled dependencies. Like this:
- *
- * ```ts
- * // <root>/assets/bundle.ts
- * import { bundled1 } from "../outside/assets.ts";
- * import { bundled2 } from "https://null1.localhost/remote.ts";
- * const { notBundled1 } = await import("./inside/assets.ts");
- * const { notBundled2 } = await import("https://null2.localhost/remote.js");
- * // ... the rest of your browser code ...
- * ```
- *
- * Here's a list of every flag required for this to work:
- * - `--unstable` (required for Deno.emit(), which does the bundling)
- * - `--allow-net` (required by all of Cav)
- * - `--allow-read` (required whenever assets are served)
- * - `--allow-write` (required for writing the bundles to temporary files)
- */
-export function tsBundler(): Bundler {
-  return async (_, filePath: string) => {
-    const ext = path.extname(filePath);
-    if (ext !== ".ts" && ext !== ".tsx") {
-      return null;
-    }
-
-    let bundle = tsBundles.get(filePath) || "";
-    if (bundle) {
-      return bundle;
-    }
-
-    const emit = async (filePath: string, bundlePath?: string) => {
-      const js = (await Deno.emit(filePath, {
-        bundle: "module",
-        check: false,
-        compilerOptions: {
-          // https://deno.land/manual@v1.19.2/typescript/configuration#using-the-lib-property
-          lib: [
-            "dom",
-            "dom.iterable",
-            "dom.asynciterable",
-            "esnext",
-          ],
-        },
-      })).files["deno:///bundle.js"];
-      bundle = bundlePath || await Deno.makeTempFile({ suffix: ".js" });
-      await Deno.writeTextFile(bundle, js);
-      tsBundles.set(filePath, bundle);
-
-      // Watch for changes in any of the dependencies for the requested file. If
-      // changes occur, re-create the bundle
-      const fp = path.toFileUrl(filePath).href;
-      const g = await graph.createGraph(fp);
-      const depsList: string[] = g.modules
-        .filter(m => m.specifier.startsWith("file://"))
-        .map(m => path.fromFileUrl(m.specifier));
-
-      const respondToUpdates = async () => {
-        try {
-          for await (const _ of Deno.watchFs(depsList)) {
-            break;
-          }
-          console.log(
-            `INFO: ${filePath} - Module updated, rebundling...`,
-          );
-
-          try {
-            const info = await Deno.stat(filePath);
-            if (!info.isFile) {
-              throw new Error("Original path is no longer a file");
-            }
-          } catch (e) {
-            console.log(`INFO: ${filePath} - Failed to stat:`, e);
-            tsBundles.delete(filePath);
-            try {
-              await Deno.remove(bundle);
-            } catch {
-              // No need to do anything
-            }
-            console.log(`INFO: ${filePath} - Bundle evicted`);
-            return;
-          }
-
-          try {
-            await emit(filePath, bundle);
-          } catch (e) {
-            console.log(`INFO: ${filePath} - Failed to bundle:`, e);
-            console.log(`INFO: ${filePath} - Waiting for updates...`);
-            respondToUpdates(); // DON'T await this
-            return;
-          }
-
-          console.log(
-            `INFO: ${filePath} - Rebundled successfully`,
-          );
-          // Don't call respondToUpdates() here
-        } catch (e) {
-          console.error(
-            `ERROR: ${filePath} - File watcher threw an error:`,
-            e
-          );
-        }
-      };
-
-      respondToUpdates(); // DON'T await this
-      return bundle;
-    };
-    
-    return await emit(filePath);
-  };
 }
