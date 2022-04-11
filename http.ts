@@ -8,10 +8,10 @@ import { HttpError, Socket, SocketInit, wrapWebSocket } from "./client.ts";
 import type { Packers } from "./pack.ts";
 import type { Parser, ParserOutput } from "./parser.ts";
 
-// FIXME: Store the contents of all index files (not just rewritten ones) in
-// memory, and add a review anchor about how that might be a memory problem in
-// the future and if it is, look into using an LRU cache for the stored index
-// files
+// FIXME: For now, don't store the contents of rewritten index files. Just
+// rewrite and send back with the etag headers returned by the default file
+// server. This means index files will be a little bit slower than other files,
+// but that's okay; this is what http caching is for
 
 // FIXME: If a requested typescript asset has a javascript file of the same name
 // in the same parent folder, serve that file instead of even attempting to
