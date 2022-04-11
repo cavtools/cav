@@ -27,7 +27,8 @@ export interface BundleScriptOptions {
    */
   watch?: boolean;
   /**
-   * If this is true, errors will not be logged to the console and will instead be ignored silently. Default: `false`
+   * If this is true, errors will not be logged to the console and will instead
+   * be ignored silently. Default: `false`
    */
   silent?: boolean;
 }
@@ -35,19 +36,20 @@ export interface BundleScriptOptions {
 /**
  * Bundles JavaScript and TypeScript files into a single JavaScript file, with
  * the ability to watch for file changes to trigger a re-bundle. The file and
- * all of its dependencies will be bundled into a single output javascript file.
- * Uses the runtime compiler API under the hood. There is no checking of types
- * (they are simply discarded), and the "lib" typescript option while bundling
- * is equivalent to the following deno.json config:
+ * all of its dependencies will be included in the bundle. Bundling uses Deno's
+ * [runtime compiler API](https://deno.land/manual@main/typescript/runtime)
+ * behind-the-scenes. There is no checking of types (they are simply discarded),
+ * and the "lib" typescript option while bundling is equivalent to the following
+ * deno.json config:
  *
  * ```json
  * {
  *   "compilerOptions": {
  *     "lib": [
- *      "dom",
- *      "dom.iterable",
- *      "dom.asynciterable",
- *      "esnext"
+ *       "dom",
+ *       "dom.iterable",
+ *       "dom.asynciterable",
+ *       "esnext"
  *     ]
  *   }
  * }
@@ -59,22 +61,22 @@ export interface BundleScriptOptions {
  * ```ts
  * // Input (this file): <root>/browser/main.ts</root>
  * // Output: <root>/assets/bundle.js
- * import { bundled1 } from "../outside/assets.ts";
+ * import { bundled1 } from "./deps.ts";
  * import { bundled2 } from "https://null1.localhost/remote.ts";
- * const { notBundled1 } = await import("./inside/assets.ts");
+ * const { notBundled1 } = await import("./vendor/some-lib.js");
  * const { notBundled2 } = await import("https://null2.localhost/remote.js");
  * // ... the rest of your browser code ...
  * ```
  *
  * Errors during bundling will be logged to the console unless the `silent`
- * option is true.
- *
- * This function doesn't return a promise, but bundling still happens
- * asynchronously.
+ * option is true. Despite the return value, the bundling procedure is
+ * asynchronous.
  */
 export function bundleScript(opt: BundleScriptOptions): void {
   const cwd = (
-    opt.cwd?.startsWith("file://") ? path.resolve(path.fromFileUrl(opt.cwd), "..")
+    opt.cwd?.startsWith("file://") ? (
+      path.resolve(path.fromFileUrl(opt.cwd), "..")
+    )
     : opt.cwd || "."
   );
   const i = path.resolve(cwd, opt.input);
