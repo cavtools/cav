@@ -319,6 +319,58 @@ interface CustomFetchArg {
  * Constructs a new Client tied to a given base URL. The provided set of packers
  * will be used everywhere that data is packed/unpacked when using this client,
  * including web sockets.
+ *
+ * If the type parameter provided is a Stack or an Rpc, the returned client
+ * function's type will be tailored to match the inputs and outputs expected on
+ * the Stack/Rpc. In the case of Stacks, the returned client function is wrapped
+ * in a Proxy that will translate property accesses into path segments to append
+ * to the internal URL of the request. Once the client function is called (as
+ * opposed to keyed into), the fetch process uses that internal URL. The generic
+ * types are imaginary; they're used only to keep the server setup and the
+ * client-side api accesses in sync with each other. When they get out of sync,
+ * there will be a typescript error in the IDE but the bundling process will
+ * ignore the error.
+ *
+ * For example, all three of the following variables will make a GET request to
+ * the same url with the same parameters.:
+ *
+ * ```ts
+ * // On the server... (server.ts)
+ * import { cav as c, zod as z } from "./deps.ts";
+ *
+ * export type MyRpc = typeof myRpc;
+ *
+ * const myRpc = c.rpc({
+ *   query: z.object({
+ *     hi: z.string(),
+ *   }),
+ *   resolve: x => {
+ *     return `Hello, ${x.query.hi}!`;
+ *   },
+ * });
+ *
+ * export type MyStack = typeof myStack;
+ *
+ * export const myStack = c.stack({
+ *   // There's multiple ways to divide up stack routes. Here's two of those
+ *   // ways:
+ *   path: {
+ *     "to/rpc": myRpc,
+ *   },
+ * });
+ *
+ * // On the client... (browser/app.tsx)
+ * import type { MyStack, MyRpc } from "../server.ts"; // Discarded upon build
+ *
+ * // Each of these equates to the same request. The a/b/c variables below are
+ * // all of type `Promise<string>`, which is automatically determined by the
+ * // passed in type parameter. The final request will be: `GET
+ * // /path/to/rpc?hi=world`. When the promises resolve, the strings will be
+ * // "Hello, world!"
+ * const a = client<MyStack>("/").path.to.rpc({ query: { hi: "world" } });
+ * const b = client<MyStack>("/")["path/to/rpc"]({ query: { hi: "world" } });
+ * const c = client<MyRpc>("/path/to/rpc")({ query: { hi: "world" } });
+ * ```
  */
 export function client<T extends Stack | AnyRpc>(
   base = "",
@@ -408,7 +460,10 @@ export function client<T extends Stack | AnyRpc>(
         }
   
         const append = property.split("/").filter(p => !!p).join("/");
-        return proxy(path.endsWith("/") ? path + append : path + "/" + append);
+        return proxy(
+          path.endsWith("/") ? path + append : path + "/" + append,
+          packers,
+        );
       }
     });
   };
