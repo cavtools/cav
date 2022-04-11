@@ -1,15 +1,19 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-// This module is a self-contained alternative for superjson et. al., with zero
-// dependencies. pack.ts is inspired by superjson and the other libraries that
-// inspired it. (See their "Prior art", the bullets at the end of their readme.)
-// https://github.com/blitz-js/superjson
+// Self-contained module for un/packing arbitrary values for sending over the
+// wire (via HTTP). pack.ts is inspired by superjson and the other libraries
+// that inspired it. (See their "Prior art", the bullets at the end of their
+// readme.) https://github.com/blitz-js/superjson
 
 // Also shout-out to json-dry, they had a really good solution to the circular
 // reference problem. I didn't use or read their code (my answer may be
 // wrong/incomplete), but I did snag the whenDone idea from them.
 // https://github.com/11ways/json-dry
+
+// There may be something fundamentally broken about this module, but if there
+// is, I haven't found it yet. If you find something that seems amiss, please
+// let me know so that I can learn: https://github.com/connorlogin/cav/issues
 
 // TODO: Support for ArrayBuffer/View
 
@@ -47,7 +51,7 @@ export interface Packer<I = unknown, O = unknown> {
  * A Packer's `unpack()` function receives the raw packed JSON value as its
  * first argument and this registration function as the second. Functions
  * registered with WhenDone will be run last-in-first-out (stack order) when the
- * raw JSON has been processed into the final object instances. WhenDone
+ * raw JSON has been processed into the final object instance. WhenDone
  * functions are needed whenever the packed data is more complex than simple
  * JSON values, for example when referential equality needs to be maintained or
  * when the pack function returns anything that needs to be re-packed by some

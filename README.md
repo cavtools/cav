@@ -40,9 +40,9 @@ warning, it's a bit cluttered in some spots. Code quality is on the to-do list,
 but the focus is currently good documentation and good tests. Which, apparently,
 are *super* hard to write if you decided not to write them first. (Who knew?)
 
-Also, on that note, only one of the modules is tested at this point. **DO NOT use this
-in production.** (Unless you're me and the site is [cav.bar](https://cav.bar),
-in which case "rules are made to be broken.")
+Also, on that note, only one of the modules is tested at this point. **DO NOT
+use this in production.** (Unless you're me and the site is
+[cav.bar](https://cav.bar), in which case "rules are made to be broken.")
 
 If you want progress updates, you can follow me on
 [GitHub](https://github.com/connorlogin) or

@@ -8,9 +8,23 @@ import { HttpError, Socket, SocketInit, wrapWebSocket } from "./client.ts";
 import type { Packers } from "./pack.ts";
 import type { Parser, ParserOutput } from "./parser.ts";
 
+// FIXME: Store the contents of all index files (not just rewritten ones) in
+// memory, and add a review anchor about how that might be a memory problem in
+// the future and if it is, look into using an LRU cache for the stored index
+// files
+
+// FIXME: If a requested typescript asset has a javascript file of the same name
+// in the same parent folder, serve that file instead of even attempting to
+// bundle the typescript. If a requested javascript file doesn't exist but
+// there's a typescript file of the same name, try to bundle it. This means you
+// can use either a .js or .ts extension to get the bundle, it doesn't really
+// matter. If both a javascript and typescript file share the same name, the
+// javascript is preferred and the typescript will be inaccessible to clients.
+// To prebundle assets, simply use the deno bundling api to output a javascript
+// asset of the same name. --allow-write and --unstable would not be required if
+// prebundling was done, which would mean deno deploy is back on the table.
+  
 // TODO: Ability to turn bundle watching off  
-// TODO: When permissions like --allow-write and --unstable aren't granted,
-// there should be a graceful fallback?  
 
 /**
  * A special 404 HttpError that should be thrown whenever a handler is refusing
