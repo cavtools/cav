@@ -18,7 +18,7 @@ TODO: Elaborate and provide examples
     you haven't used it yet, go use it! 🦕
 - End-to-end type safety (inspired by [trpc](https://trpc.io))
 - Compatibility with [Zod](https://github.com/colinhacks/zod) data parsers
-- "Any-body" data serialization (like [superjson](https://github.com/blitzjs/superjson) and friends, but with added support for Files and Blobs. See [`pack.ts`](./pack.ts) for more info; look at the `packBody` and `unpackBody` functions.)
+- "Any-body" data serialization (like [superjson](https://github.com/blitz-js/superjson) and friends, but with added support for Files and Blobs. See [`pack.ts`](./pack.ts) for more info; look at the `packBody` and `unpackBody` functions.)
 - Declarative routing ([`stack.ts`](./stack.ts))
 - Declarative endpoint definitions ([`rpc.ts`](./rpc.ts))
 - Unopinionated about project structure
