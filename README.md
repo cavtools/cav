@@ -41,18 +41,6 @@ Cav is inspired by many modern JavaScript/TypeScript patterns, techniques, and m
 - Custom context support
 - ...
 
-## Status
-
-Pre-alpha. Documentation and tests are in the works.
-
-## Dedication
-
-Cav is dedicated to the bar it was named after.
-
----
-
-### Footnotes
-
 [^1]: This is like superjson and similar libraries that let you serialize most
 JavaScript data types into JSON and back again while maintaining references. Cav
 does this and also adds support for Files and Blobs, meaning the client can send
@@ -65,3 +53,11 @@ original object, with the attached files being placed into their original
 locations on the output object. See [`pack.ts`](./pack.ts) for more info; look
 at the `packBody` and `unpackBody` functions to see where Files and Blobs come
 into play.
+
+## Status
+
+Pre-alpha. Documentation and tests are in the works.
+
+## Dedication
+
+Cav is dedicated to the bar it was named after.
