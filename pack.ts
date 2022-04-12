@@ -1,21 +1,12 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-// Self-contained module for un/packing arbitrary values for sending over the
-// wire (via HTTP). pack.ts is inspired by superjson and the other libraries
-// that inspired it. (See their "Prior art", the bullets at the end of their
-// readme.) https://github.com/blitz-js/superjson
+// This API is inspired by https://github.com/blitz-js/superjson and
+// https://github.com/11ways/json-dry and several other serialization libraries
 
-// Also shout-out to json-dry, they had a really good solution to the circular
-// reference problem. I didn't use or read their code (my answer may be
-// wrong/incomplete), but I did snag the whenDone idea from them.
-// https://github.com/11ways/json-dry
-
-// There may be something fundamentally broken about this module, but if there
-// is, I haven't found it yet. If you find something that seems amiss, please
-// let me know so that I can learn: https://github.com/connorlogin/cav/issues
-
+// TODO: Automatically escape strings for XSS, see https://github.com/yahoo/serialize-javascript
 // TODO: Support for ArrayBuffer/View
+// TODO: Support for functions?
 
 /**
  * A group of functions used to recognize, pack, and unpack objects and special
