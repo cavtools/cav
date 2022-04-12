@@ -2,10 +2,9 @@
 
 TODO: This is a placeholder readme until I'm done writing docs
 
-Cav is an experimental TypeScript web framework for [Deno](https://deno.land).
-It approaches web development with a declarative, backend-first mindset. It was
-written with developers and DX top-of-mind. The source can be imported from
-[`https://deno.land/x/cav`](https://deno.land/x/cav).
+Cav is an experimental TypeScript web framework built on
+[Deno](https://deno.land). It provides a declarative and functional approach for
+writing elegant full-stack web applications.
 
 A quick demo of the framework in action can be seen at [cav.bar](https://cav.bar). The demo runs on Deno Deploy. It'll be replaced by the docs website soon.
 
@@ -15,6 +14,12 @@ Cav is inspired by many modern JavaScript/TypeScript patterns, techniques, and m
 - [Express](https://expressjs.com/) / [Koa](https://koajs.com/) / [Oak](https://oakserver.github.io/oak/)
 - [Zod](https://github.com/colinhacks/zod) / [tRPC](https://trpc.io)
 - [superjson](https://github.com/blitz-js/superjson) / [serialize-javascript](https://github.com/yahoo/serialize-javascript)
+
+## Usage
+
+- On the server: [`deno.land/x/cav/mod.ts`](https://deno.land/x/cav/mod.ts)
+- In the browser:
+  [`deno.land/x/cav/browser/mod.ts`](https://deno.land/x/cav/browser/mod.ts)
 
 ## Features 
 
