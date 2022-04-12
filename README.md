@@ -23,8 +23,8 @@ Cav is inspired by many modern JavaScript/TypeScript patterns, techniques, and m
 - Built-in bundling of TypeScript assets
   - Also [thanks to Deno](https://deno.land/manual/typescript/runtime.md)
 - End-to-end type safety (inspired by trpc)
-- Compatibility with [Zod](https://github.com/colinhacks/zod) data parsers
-- "Any-body" data serialization (like [superjson](https://github.com/blitz-js/superjson) and friends, but with added support for Files and Blobs. See [`pack.ts`](./pack.ts) for more info; look at the `packBody` and `unpackBody` functions.)
+- Compatibility with Zod-style data parsers
+- "Any-body" data serialization (like superjson and others, but with added support for Files and Blobs. See [`pack.ts`](./pack.ts) for more info; look at the `packBody` and `unpackBody` functions.)
 - Declarative routing ([`stack.ts`](./stack.ts))
 - Declarative endpoint definitions ([`rpc.ts`](./rpc.ts))
 - Unopinionated about project structure
