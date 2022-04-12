@@ -58,9 +58,7 @@ JavaScript data types into JSON and back again while maintaining references. Cav
 does this and also adds support for Files and Blobs, meaning the client can send
 arbitrary JavaScript objects that contain Files and Blobs anywhere on the
 object, and the sent object will still come out on the other end in the same
-shape, with the same data.  
-  
-This is done by separating the Files and Blobs from the JSON-only data during
+shape, with the same data.<br><br>This is done by separating the Files and Blobs from the JSON-only data during
 serialization and then packing the files and the JSON into a multipart form with
 a unique shape. When the form is received, it'll be deserialized back into the
 original object, with the attached files being placed into their original
