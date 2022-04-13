@@ -1,6 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
+// TODO: Rename HttpError to CavError
 // TODO: The ability to monitor request progress (XMLHttpRequest)
 
 import {
