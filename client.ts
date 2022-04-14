@@ -3,6 +3,7 @@
 
 // TODO: Rename HttpError to CavError
 // TODO: The ability to monitor request progress (XMLHttpRequest)
+// TODO: The ability to specify custom headers
 
 import {
   packBody,

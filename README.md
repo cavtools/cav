@@ -23,45 +23,38 @@ modules. Here's a list of its heroes:
 - In the browser:
   [`deno.land/x/cav/browser.ts`](https://deno.land/x/cav/browser.ts)
 
-## Current Goals
+## Guiding principles
 
 - Declarative and functional (no classes)
-- Composable, take-your-pick API
+- Composable API
+- No third-party dependencies
 - Offer solutions but don't force them
 - Play nice with others
-- Isomorphic fetch-based client function
-- Calling a function on the server looks like calling a function on the client
+- Isomorphic client function
+- Client-side HTTP looks like a regular function call, regardless of body format
 - Server-side HTTP looks like markup, with minimal/no TypeScript required
-- Markup-like data parsing compatible with Zod
-- Use server types client-side for end-to-end type safety
-- Serialize most data types seemlessly
-- Signed cookies for secure sessions
+- Deeply integrated data parsing that's compatible with Zod
+- Server types can be used client-side for end-to-end type safety
+- Serialize most data types seamlessly
+- Cookie signing for secure sessions
 - Real-time capabilities (web sockets)
-
-## Future goals
-
-- SPA-style routing and asset serving
-- SSR
-- Hydration
-- Web component tools
-- Scoped styles
-- ?
+- Unopinionated about project organization (no enforced folder structure)
+- Carefully chosen defaults
 
 ## Features so far
 
 - Zero third-party dependencies
-  - This wouldn't be possible without Deno and its amazing [standard library](https://deno.land/std)
+  - This wouldn't be possible without Deno and its amazing [standard
+    library](https://deno.land/std)
 - Built-in bundling of TypeScript assets
-  - Also [thanks to Deno](https://deno.land/manual/typescript/runtime.md). This feature requires the `--unstable` flag
+  - Also [thanks to Deno](https://deno.land/manual/typescript/runtime.md). This
+    feature requires the `--unstable` flag
 - Compatibility with many frontend libraries (e.g. Preact and React)
 - Compatibility with Zod-style data parsers
 - End-to-end type safety (inspired by trpc)
 - "Any-body" data serialization [^1]
 - Declarative routing ([`stack.ts`](./stack.ts))
 - Declarative endpoint definitions ([`rpc.ts`](./rpc.ts))
-- Unopinionated project structures
-- Opinionated HTTP procedures
-- Carefully chosen defaults
 - Easy-to-use web sockets
 - Zero-config
 - Signed and unsigned cookies
@@ -73,13 +66,7 @@ JavaScript data types into JSON and back again while maintaining references. Cav
 does this and also adds support for Files and Blobs, meaning the client can send
 arbitrary JavaScript objects that contain Files and Blobs anywhere on the
 object, and the sent object will still come out on the other end in the same
-shape, with the same data.<br><br>It works by separating the Files and Blobs
-from the JSON-only data during serialization and then packing the files and the
-JSON into a multipart form with a unique shape. When the form is received, it'll
-be deserialized back into the original object, with the attached files being
-placed into their original locations on the output object. See
-[`pack.ts`](./pack.ts) for more info; look at the `packBody` and `unpackBody`
-functions to see where Files and Blobs come into play.
+shape, with the same data.
 
 ## Status
 
