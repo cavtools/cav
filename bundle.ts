@@ -31,8 +31,8 @@ export interface BundleScriptOptions {
 // TODO: Allow modifying the compilerOptions, bundle type, checkJs, and import
 // maps  
 /**
- * Bundles browser-only JavaScript and TypeScript files into a single bundle,
- * with the ability to watch the module graph for changes to trigger a
+ * Bundles browser-only JavaScript and TypeScript files into a single JavaScript
+ * output, with the ability to watch the module graph for changes to trigger a
  * re-bundle. The input file and all of its dependencies will be included in the
  * bundle. Bundling uses Deno's [runtime compiler
  * API](https://deno.land/manual@main/typescript/runtime) behind-the-scenes,
@@ -41,7 +41,7 @@ export interface BundleScriptOptions {
  * Note that dependencies imported using the async `import()` API will not be
  * bundled, they will need to be available to the script at runtime.
  */
-export function bundleScript(opt: BundleScriptOptions): void {
+export async function bundleScript(opt: BundleScriptOptions): Promise<void> {
   if (!Deno.emit) {
     console.log(
       `INFO: Refusing to bundle ${opt.input} - Deno.emit() is not available. Restart the Deno process with the --unstable flag to enable bundling`,
@@ -91,34 +91,32 @@ export function bundleScript(opt: BundleScriptOptions): void {
     bundleScript(opt);
   };
 
-  (async () => {
-    try {
-      const js = (await Deno.emit(opt.input, {
-        bundle: "module",
-        check: false,
-        // https://deno.land/manual@v1.19.2/typescript/configuration#using-the-lib-property
-        compilerOptions: {
-          lib: [
-            "dom",
-            "dom.iterable",
-            "dom.asynciterable",
-            "esnext",
-          ],
-        },
-      })).files["deno:///bundle.js"];
+  try {
+    const js = (await Deno.emit(opt.input, {
+      bundle: "module",
+      check: false,
+      // https://deno.land/manual@v1.19.2/typescript/configuration#using-the-lib-property
+      compilerOptions: {
+        lib: [
+          "dom",
+          "dom.iterable",
+          "dom.asynciterable",
+          "esnext",
+        ],
+      },
+    })).files["deno:///bundle.js"];
 
-      await Deno.writeTextFile(opt.output, js);
-      console.log(`INFO: ${opt.input} - Bundled`);
-    } catch (e) {
-      if (!opt.watch) {
-        console.error(`ERROR: ${opt.input} - Bundle error:`, e);
-      } else {
-        console.error(`ERROR: ${opt.input} - Bundle error (waiting for updates):`, e);
-      }
+    await Deno.writeTextFile(opt.output, js);
+    console.log(`INFO: ${opt.input} - Bundled`);
+  } catch (e) {
+    if (!opt.watch) {
+      console.error(`ERROR: ${opt.input} - Bundle error:`, e);
+    } else {
+      console.error(`ERROR: ${opt.input} - Bundle error (waiting for updates):`, e);
     }
+  }
 
-    if (opt.watch) {
-      rebundleOnUpdate();
-    }
-  })();
+  if (opt.watch) {
+    rebundleOnUpdate();
+  }
 }

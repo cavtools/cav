@@ -124,14 +124,12 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
   for (const op of sortedPaths) {
     let p = "/" + op.split("/").filter(v => !!v).join("/");
 
-    // When the path ends in a wildcard, that wildcard will be used to determine
-    // the next path on the stack. Without it, the path will need to match
-    // exactly, and the next "path" property for the request inside the nested
-    // handler will be "/"
+    // Sometimes the path might already end in a wildcard. If it does, remove it
+    // before adding the path capture wildcard
     if (p.endsWith("/*")) {
-      p = `${p.slice(0, p.length - 2)}/:${nextPathGroupName}*/*?`;
+      p = p.slice(0, p.length - 2);
     }
-
+    p = `${p}/:${nextPathGroupName}*/*?`;
     patterns.set(new URLPattern(p, "http://_._"), handlers[op]);
   }
 
