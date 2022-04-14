@@ -68,6 +68,15 @@ arbitrary JavaScript objects that contain Files and Blobs anywhere on the
 object, and the sent object will still come out on the other end in the same
 shape, with the same data.
 
+## Future goals
+
+- SPA-style routing and asset serving
+- SSR
+- Hydration
+- Web component tools
+- Scoped styles
+- ?
+
 ## Status
 
 Pre-alpha. Documentation and tests are in the works.
