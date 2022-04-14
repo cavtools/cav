@@ -25,7 +25,7 @@ modules. Here's a list of its heroes:
 
 ## Current Goals
 
-- Functional (no classes) and declarative
+- Declarative and functional (no classes)
 - Composable, take-your-pick API
 - Offer solutions but don't force them
 - Play nice with others
