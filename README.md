@@ -5,7 +5,7 @@ this in production.
 
 Cav is an experimental suite of TypeScript tools for web development with
 [Deno](https://deno.land). It takes a declarative and functional approach to
-writing full-stack websites and applications with the Deno ecosystem.
+writing full-stack applications with the Deno ecosystem.
 
 A quick demo of the Cav in action can be seen at [cav.bar](https://cav.bar). The
 demo runs on Deno Deploy.
