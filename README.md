@@ -4,7 +4,7 @@ TODO: This is a placeholder readme until I'm done writing docs
 
 Cav is an experimental TypeScript web framework built on
 [Deno](https://deno.land). It provides a declarative and functional approach for
-writing elegant full-stack web applications.
+writing full-stack web applications.
 
 A quick demo of the framework in action can be seen at [cav.bar](https://cav.bar). The demo runs on Deno Deploy. It'll be replaced by the docs website soon.
 
@@ -27,7 +27,8 @@ modules. Here's a few of those modules:
 - Zero third-party dependencies
   - This wouldn't be possible without Deno and its excellent [standard library](https://deno.land/std)
 - Built-in bundling of TypeScript assets
-  - Also [thanks to Deno](https://deno.land/manual/typescript/runtime.md)
+  - Also [thanks to Deno](https://deno.land/manual/typescript/runtime.md). Note
+    that this feature requires the `--unstable` flag
 - Compatibility with any frontend framework/module (e.g. Preact and React)
 - Compatibility with Zod-style data parsers
 - End-to-end type safety (inspired by trpc)

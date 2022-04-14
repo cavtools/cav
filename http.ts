@@ -3,12 +3,11 @@
 
 import { base64, http, path, fileServer } from "./deps.ts";
 import { packBody, unpackBody } from "./pack.ts";
-import { HttpError, Socket, SocketInit, wrapWebSocket } from "./client.ts";
-// import { tsBundler } from "./bundle.ts";
+import { HttpError, wrapWebSocket } from "./client.ts";
 
 import type { Packers } from "./pack.ts";
 import type { Parser, ParserOutput } from "./parser.ts";
-// import type { Bundler } from "./bundle.ts";
+import type { Socket, SocketInit } from "./client.ts";
   
 // TODO: Ability to turn bundle watching off  
 
@@ -28,6 +27,7 @@ export const NO_MATCH = new HttpError("404 not found", { status: 404 });
  */
 export interface Res extends ResponseInit {
   headers: Headers;
+  // Note the extends already covers status and statusText
 }
 
 /** A metadata object generated once for every request. */
@@ -579,10 +579,6 @@ export async function serve(handler: http.Handler, opt?: ServeOpt): Promise<void
   return await server({ ...opt, handler }).listenAndServe();
 }
 
-// TODO: Add an "unsafePath" option that supercedes the cwd+dir+path
-// calculation. The unsafePath would be relative to the cwd of the process
-// unless it started with an /, in which case it's relative to root. The "path"
-// option would not be required when "unsafePath" is used
 /** Options controlling how assets are found and served. */
 export interface ServeAssetOptions {
   /**
@@ -592,70 +588,32 @@ export interface ServeAssetOptions {
    * `import.meta.url`. Default: `"."`
    */
   cwd?: string;
-  /** The directory to serve assets from inside the cwd. Default: `"assets"` */
+  /**
+   * The directory to serve assets from inside the cwd. This pattern encourages
+   * keeping public asset files separated from application source code, so that
+   * code isn't served by mistake. To use the cwd alone, specify `"."`. Default:
+   * `"assets"`
+   */
   dir?: string;
   /**
    * Path of the file to serve relative to the dir (which is relative to the
-   * cwd). The full path of the file on disk can be conceptualized as
-   * `denoPath.join(cwd, dir, path)`. This option is required, and should
-   * typically be equal to the "path" property on the ResolverArg of an Rpc's
-   * Resolver function or on the OnErrorArg inside an error handler.
+   * cwd). The full path of the served file on disk is `path.join(cwd, dir,
+   * path)`. This option is required.
    */
   path: string;
-  /**
-   * When a requested path resolves to a directory and one of these files is
-   * found inside that directory, that file will be served instead of a 404
-   * error. Default: `["index.html"]`
-   */
-  // indexes?: string[];
-  /**
-   * When a requested file isn't found, each of these extensions will be
-   * appended to the request path and checked for existence. If the request path
-   * plus one of these extensions is found, that file will be served instead of
-   * a 404 error. Default: `["html"]`
-   */
-  // tryExtensions?: string[];
   /**
    * Path to use when the provided path results in a 404 error. Use this to
    * serve a 404 page. If this isn't specified, 404 errors will bubble. Default:
    * `undefined`
    */
   path404?: string;
-  /**
-   * Once a request's on-disk file path is calculated, the file path will be
-   * passed through each of these provided bundlers. If a bundler returns a new
-   * file path, that path will be served instead and the bundling process is
-   * halted. (Order matters.) Bundlers are responsible for their own caching
-   * techniques. The default behavior enables TypeScript bundling. To turn it
-   * off, specify an empty array or an array without a `tsBundler()` in it.
-   * Default: `[tsBundler()]`
-   */
-  // bundlers?: Bundler[];
 }
-
 
 // When a requested path without a trailing slash resolves to a directory and
 // that directory has an index file in it, relative links in the html need to be
 // rewritten to account for the lack of trailing slash. This regex is used to
 // rewrite them.  
 const htmlRelativeLinks = /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
-
-// FIXME: This is old, delete it when you're sure you don't need it
-// Rewritten index files are cached to disk, and need to be deleted when the
-// server shuts down. (Be careful)
-// const rewrittenIndexes = new Map<string, {
-//   mtime: Date;
-//   servePath: string;
-// }>();
-// self.addEventListener("unload", () => {
-//   for (const [_, v] of rewrittenIndexes.entries()) {
-//     try {
-//       Deno.removeSync(v.servePath);
-//     } catch {
-//       // Skip
-//     }
-//   }
-// });
 
 /**
  * Response factory for serving static assets. Asset resolution uses the
@@ -669,9 +627,7 @@ export async function serveAsset(
   let cwd = opt.cwd || ".";
   const dir = opt.dir || "assets";
   const filePath = opt.path;
-  // const tryExtensions = opt.tryExtensions || ["html"];
   const path404 = opt.path404;
-  // const bundlers = opt.bundlers || [tsBundler()];
 
   // This allows you to, for example, specify import.meta.url as a cwd. If cwd
   // is a file:// url, the last path segment (the basename of the "current"
@@ -698,7 +654,7 @@ export async function serveAsset(
     filePath = path.join(
       cwd,
       dir,
-      path.resolve(path.join("/", filePath)),
+      path.join("/", filePath),
     );
   
     let fileInfo: Deno.FileInfo | null = null;
@@ -739,14 +695,6 @@ export async function serveAsset(
     if (fileInfo === null) {
       throw new HttpError("404 not found", { status: 404 });
     }
-    
-    // Bundling procedure
-    // for (const b of bundlers) {
-    //   const bundle = await b(req, filePath);
-    //   if (bundle) {
-    //     return { servePath: bundle, wasAutoIndexed };
-    //   }
-    // }
 
     // Just serve the file if no bundlers took care of it
     return { servePath: filePath, wasAutoIndexed };
@@ -766,27 +714,6 @@ export async function serveAsset(
       return originalResponse;
     }
 
-    // At this point, the requested path was "auto-indexed", i.e. a directory
-    // was requested and it had an index file in it. I/Cav prefer/s to not have
-    // trailing slashes on any URLs, so we need to accomadate this by rewriting
-    // auto-index files when necessary
-    // const fileInfo = await Deno.stat(servePath);
-    // const cache = rewrittenIndexes.get(servePath);
-    // if (cache && (!fileInfo.mtime || fileInfo.mtime < cache.mtime)) {
-    //   return await fileServer.serveFile(req, cache.servePath);
-    // }
-
-    // If there was a cached version but it's stale, attempt to delete it in a
-    // separate event tick and suppress the error if that fails
-    // if (cache) {
-    //   (async () => {
-    //     try {
-    //       await Deno.remove(cache.servePath);
-    //     } catch {
-    //       // Suppress
-    //     }
-    //   })();
-    // }
 
     if (url.pathname.endsWith("/")) {
       // No need to rebase the relative links if the path ends with a /
@@ -803,6 +730,8 @@ export async function serveAsset(
       const newGroup = group.replace(
         /^(?:src|href)=(?:"|')(\..*)(?:"|')$/g,
         (m: string, g: string) => m.replace(g, (
+          // TODO: This isn't complete. Make a note in the docs about trailing
+          // slashes
           g.startsWith("./") ? `./${basename}/${g.slice(2)}`
           : g.startsWith("../") ? `./${g.slice(3)}`
           : g
@@ -810,15 +739,6 @@ export async function serveAsset(
       );
       return match.replace(group, newGroup);
     });
-
-    // Cache the rewrite before serving the temp file
-    // const tmp = await Deno.makeTempFile({ suffix: ".html" });
-    // await Deno.writeTextFile(tmp, content);
-    // rewrittenIndexes.set(servePath, {
-    //   mtime: fileInfo.mtime || new Date(),
-    //   servePath: tmp,
-    // });
-    // return await fileServer.serveFile(req, tmp);  
     
     // If the original response is a 200, return a new response with the same
     // headers but the rewritten content. If the original response is anything
@@ -837,7 +757,7 @@ export async function serveAsset(
           const servePath = (await process(path404)).servePath;
           return await fileServer.serveFile(req, servePath);
         } catch (e2) {
-          throw new HttpError("Couldn't serve 404 error page", {
+          throw new HttpError("Failed to serve 404 page", {
             status: 500,
             detail: {
               servePath,
