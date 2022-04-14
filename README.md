@@ -1,15 +1,16 @@
 # Cav
 
-TODO: This is a placeholder readme until I'm done writing docs
+NOTE: This is a placeholder readme. Cav is still in its early days.
 
-Cav is an experimental TypeScript web framework built on
-[Deno](https://deno.land). It provides a declarative and functional approach for
-writing full-stack web applications.
+Cav is an experimental suite of TypeScript tools for web development with
+[Deno](https://deno.land). It takes a declarative and functional approach to
+writing full-stack websites and applications with the Deno ecosystem.
 
-A quick demo of the framework in action can be seen at [cav.bar](https://cav.bar). The demo runs on Deno Deploy. It'll be replaced by the docs website soon.
+A quick demo of the Cav in action can be seen at [cav.bar](https://cav.bar). The
+demo runs on Deno Deploy.
 
 Cav is inspired by many modern web development patterns, techniques, and
-modules. Here's a few of those modules:
+modules. Here's a list of its heroes:
 
 - [Next.js](https://nextjs.org/) / [Aleph.js](https://alephjs.org/)
 - [Express](https://expressjs.com/) / [Koa](https://koajs.com/) / [Oak](https://oakserver.github.io/oak/)
@@ -20,16 +21,39 @@ modules. Here's a few of those modules:
 
 - On the server: [`deno.land/x/cav/mod.ts`](https://deno.land/x/cav/mod.ts)
 - In the browser:
-  [`deno.land/x/cav/browser/mod.ts`](https://deno.land/x/cav/browser/mod.ts)
+  [`deno.land/x/cav/browser.ts`](https://deno.land/x/cav/browser.ts)
 
-## Features 
+## Current Goals
+
+- Functional (no classes) and declarative
+- Composable, take-your-pick API
+- Offer solutions but don't force them
+- Play nice with others
+- Isomorphic fetch-based client function
+- Calling a function on the server looks like calling a function on the client
+- Server-side HTTP looks like markup, with minimal/no TypeScript required
+- Markup-like data parsing compatible with Zod
+- Use server types client-side for end-to-end type safety
+- Serialize most data types seemlessly
+- Signed cookies for secure sessions
+- Real-time capabilities (web sockets)
+
+## Future goals
+
+- SPA-style routing and asset serving
+- SSR
+- Hydration
+- Web component tools
+- Scoped styles
+- ?
+
+## Features so far
 
 - Zero third-party dependencies
-  - This wouldn't be possible without Deno and its excellent [standard library](https://deno.land/std)
+  - This wouldn't be possible without Deno and its amazing [standard library](https://deno.land/std)
 - Built-in bundling of TypeScript assets
-  - Also [thanks to Deno](https://deno.land/manual/typescript/runtime.md). Note
-    that this feature requires the `--unstable` flag
-- Compatibility with any frontend framework/module (e.g. Preact and React)
+  - Also [thanks to Deno](https://deno.land/manual/typescript/runtime.md). This feature requires the `--unstable` flag
+- Compatibility with many frontend libraries (e.g. Preact and React)
 - Compatibility with Zod-style data parsers
 - End-to-end type safety (inspired by trpc)
 - "Any-body" data serialization [^1]
