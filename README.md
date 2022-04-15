@@ -3,11 +3,11 @@
 NOTE: This is a placeholder readme. Cav is still in its early days. Don't use
 this in production.
 
-Cav is an experimental suite of TypeScript tools for web development with
-[Deno](https://deno.land). It fosters a declarative and functional approach to
-writing full-stack applications with the Deno ecosystem.
+Cav is an experimental suite of TypeScript web development tools. It fosters a
+declarative and functional approach to writing full-stack applications with the
+[Deno](https://deno.land) ecosystem.
 
-A quick demo of the Cav in action can be seen at [cav.bar](https://cav.bar). The
+A quick demo of Cav in action can be seen at [cav.bar](https://cav.bar). The
 demo runs on Deno Deploy.
 
 Cav is inspired by many modern web development patterns, techniques, and
@@ -67,7 +67,9 @@ JavaScript data types into JSON and back again while maintaining references. Cav
 does this and also adds support for Files and Blobs, meaning the client can send
 arbitrary JavaScript objects that contain Files and Blobs anywhere on the
 object, and the sent object will still come out on the other end in the same
-shape, with the same data.
+shape, with the same data. Further, Cav is generous in what it accepts; the TS
+client is optional, and Cav can also accept data from regular HTML forms with
+the application/x-www-form-urlencoded and multipart/form-data content types.
 
 ## Future goals
 
