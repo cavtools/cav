@@ -338,6 +338,7 @@ export async function bakeCookie(init: { // Using just "cookie" was annoying
 }
 
 // I'm caching keys because I don't know the overhead of crypto.subtle.importKey
+// REVIEW: I don't know if this is the right thing to do security-wise
 const keyCache = new Map<string, CryptoKey>();
 const encoder = new TextEncoder();
 const signingAlg = { name: "HMAC", hash: "SHA-256" } as const;
