@@ -16,10 +16,10 @@ inspired by these innovators in the JavaScript and TypeScript ecosystems:
 
 ## Goals
 
-- Zero third-party dependencies (just Deno)
+- Zero third-party dependencies
 - Declarative and functional, no classes
 - (De)composable API
-- Routing with
+- Routing using
   [URLPatterns](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API)
 - [End-to-end typesafety](https://colinhacks.com/essays/painless-typesafety),
   à la tRPC
