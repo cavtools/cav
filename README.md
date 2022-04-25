@@ -19,7 +19,8 @@ inspired by these innovators in the JavaScript and TypeScript ecosystems:
 - Zero third-party dependencies (just Deno)
 - Declarative and functional, no classes
 - (De)composable API
-- Routing
+- Routing with
+  [URLPatterns](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API)
 - [End-to-end typesafety](https://colinhacks.com/essays/painless-typesafety),
   à la tRPC
 - Maximal TypeScript benefits, minimal TypeScript
