@@ -37,9 +37,6 @@ inspired by these innovators in the JavaScript and TypeScript ecosystems:
 
 - Money
 - Popularity
-- Server-side generation
-- Server-side rendering
-  - SSR is still possible, but it's not something Cav facilitates directly yet
 - ...
 
 ## Usage
@@ -47,3 +44,7 @@ inspired by these innovators in the JavaScript and TypeScript ecosystems:
 - On the server: [`deno.land/x/cav/mod.ts`](https://deno.land/x/cav/mod.ts)
 - In the browser:
   [`deno.land/x/cav/browser.ts`](https://deno.land/x/cav/browser.ts)
+
+## Getting started
+
+*soon*

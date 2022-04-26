@@ -569,8 +569,8 @@ export function server<H extends http.Handler>(
 export type ServeOpt = Omit<ServerInit<http.Handler>, "handler">;
 
 /**
- * Shorthand function for quickly serving a Handler. If no host or port are
- * specified, the default is `localhost:80`. This function is a one-liner:
+ * Shorthand function for quickly serving a Handler. The default bind is
+ * localhost:80. This function is a one-liner:
  *
  * ```ts
  * return await server({ ...opt, handler }).listenAndServe();
