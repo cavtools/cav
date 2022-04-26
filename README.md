@@ -17,6 +17,7 @@ inspired by these innovators in the JavaScript and TypeScript ecosystems:
 ## Goals
 
 - Zero third-party dependencies
+- Convention > configuration
 - Declarative and functional, no classes
 - (De)composable API
 - Routing using
@@ -29,9 +30,6 @@ inspired by these innovators in the JavaScript and TypeScript ecosystems:
 - Signed cookies
 - Web sockets
 - Compatible with [Preact](https://preactjs.com) et. al.
-- Frontend TypeScript bundling
-- Excellent defaults
-- "The code is the config"
 - Unopinionated code organization
 - ...
 
