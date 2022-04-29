@@ -23,8 +23,8 @@ import type {
   ParserFunction,
   ParserInput,
   ParserOutput,
-} from "./parser.ts";
-import type { TypedResponse } from "./http.ts";
+  TypedResponse,
+} from "./http.ts";
 
 /** Initializer arguments for constructing HttpErrors. */
 export interface HttpErrorInit {

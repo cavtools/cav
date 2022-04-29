@@ -1,5 +1,4 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
-// This module is server-only.
 
 /**
  * Symbol used by the client for infering the response type. Use it like this:

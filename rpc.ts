@@ -1,5 +1,4 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
-// This module is server-only.
 
 // TODO: What happens when you try to upgrade for an assets request?
 // TODO: accept multiple strings for the path init option
@@ -26,19 +25,14 @@ import type {
   Cookie,
   ServeAssetOptions,
   Res,
+  Parser,
+  GroupsParser,
+  QueryParser,
+  ParserOutput,
+  ParserObject,
+  ParserFunction,
 } from "./http.ts";
 import type { Serializers } from "./serial.ts";
-import type {
-  Parser,
-  ParserFunction,
-  ParserObject,
-  ParserOutput,
-} from "./parser.ts";
-
-export type GroupsParser = Parser<Record<string, string> | undefined>;
-export type QueryParser = Parser<
-  Record<string, string | string[]> | undefined
->;
 
 /**
  * An http.Handler constructed by an RpcFactory. Rpcs are one of two fundamental

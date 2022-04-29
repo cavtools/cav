@@ -1,5 +1,4 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT license.
-// This module is server-only.
 
 export * as base64 from "https://deno.land/std@0.132.0/encoding/base64.ts";
 export * as http from "https://deno.land/std@0.132.0/http/mod.ts";

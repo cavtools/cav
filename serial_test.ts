@@ -1,3 +1,5 @@
+// Copyright 2022 Connor Logan. All rights reserved. MIT License.
+
 import { assertEquals, assertStrictEquals } from "./deps_test.ts";
 import {
   serialize,
