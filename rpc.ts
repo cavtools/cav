@@ -27,7 +27,7 @@ import type {
   ServeAssetOptions,
   Res,
 } from "./http.ts";
-import type { Packers } from "./pack.ts";
+import type { Serializers } from "./serial.ts";
 import type {
   Parser,
   ParserFunction,
@@ -145,10 +145,10 @@ export interface RpcInit<
    */
   keys?: [string, ...string[]] | null;
   /**
-   * Packers used when packing and unpacking request and response bodies as
-   * well as socket messages. Default: `null`
+   * Serializers used when serializing and deserializing request and response
+   * bodies as well as socket messages. Default: `null`
    */
-  packers?: Packers | null;
+  serializers?: Serializers | null;
   /**
    * If true, this causes requests to be upgraded into web sockets. Requests
    * that don't request an upgrade will be rejected. The resolve function should
@@ -526,7 +526,7 @@ export function rpc<
             }));
           }
         },
-        packers: init.packers,
+        serializers: init.serializers,
       });
       socket = u.socket;
       socketResponse = u.response;
@@ -614,7 +614,7 @@ export function rpc<
       const resp = response(body, {
         ..._init,
         headers: res.headers,
-        packers: init.packers || undefined,
+        serializers: init.serializers || undefined,
       });
       if (req.method === "HEAD") {
         return new Response(null, { headers: resp.headers });
@@ -691,7 +691,7 @@ export function rpc<
       if (!init.upgrade && parsers.message) {
         message = await requestBody(req, {
           maxSize: init.maxBodySize || undefined,
-          packers: init.packers || undefined,
+          serializers: init.serializers || undefined,
         });
 
         try {

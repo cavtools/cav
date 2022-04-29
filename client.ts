@@ -6,15 +6,16 @@
 // TODO: The ability to specify custom headers
 
 import {
-  packBody,
-  packJson,
-  packer,
-  unpackBody,
-  usePackers,
-  unpackJson,
-} from "./pack.ts";
+  serialize,
+  serializeBody,
+  serializer,
+  deserialize,
+  deserializeBody,
+  useSerializers,
+} from "./serial.ts";
 
-import type { Packers } from "./pack.ts";
+// TODO: Remove these type dependencies by putting the imaginary type symbols in their own file and using just those to do type inference instead of relying on stack.ts and rpc.ts
+import type { Serializers } from "./serial.ts";
 import type { AnyRpc, Rpc } from "./rpc.ts";
 import type { Stack } from "./stack.ts";
 import type {
@@ -52,15 +53,15 @@ export class HttpError extends Error {
   }
 }
 
-usePackers({
-  httpError: packer({
+useSerializers({
+  httpError: serializer({
     check: (v) => v instanceof HttpError,
-    pack: (v: HttpError) => ({
+    serialize: (v: HttpError) => ({
       status: v.status,
       message: v.message,
       expose: v.expose,
     }),
-    unpack: (raw, whenDone) => {
+    deserialize: (raw, whenDone) => {
       const u = (raw as { status: number; message: string });
       const err = new HttpError(u.message, { status: u.status });
       whenDone((parsed) => {
@@ -112,7 +113,7 @@ export type SocketListener<
  */
 export interface SocketInit<Message extends Parser | null = null> {
   message?: Message;
-  packers?: Packers | null;
+  serializers?: Serializers | null;
 }
 
 const decoder = new TextDecoder();
@@ -135,7 +136,7 @@ export function wrapWebSocket<
   return {
     raw,
     send: data => {
-      raw.send(packJson(data, init?.packers));
+      raw.send(JSON.stringify(serialize(data, init?.serializers)));
     },
     close: (code, reason) => {
       raw.close(code, reason);
@@ -159,11 +160,11 @@ export function wrapWebSocket<
         }
   
         // deno-lint-ignore no-explicit-any
-        let message: any = unpackJson((
+        let message: any = deserialize(JSON.parse(
           typeof data === "string" ? data
           : ArrayBuffer.isView(data) ? decoder.decode(data)
           : await data.text() // Blob
-        ));
+        ), init?.serializers);
   
         if (init?.message) {
           const parse: ParserFunction = (
@@ -298,10 +299,10 @@ export type EndpointArg<
    */
   message: Upgrade extends true ? never : ParserInput<Message>;
   /**
-   * Additional packers that should be used while serializing data. Default:
+   * Additional serializers that should be used while serializing data. Default:
    * `undefined`
    */
-  packers?: Packers;
+  serializers?: Serializers;
   /**
    * If the Rpc requires upgrading for web sockets, this value should be set to
    * `true`. Default: `undefined`
@@ -313,7 +314,7 @@ interface CustomFetchArg {
   path?: string;
   query?: Record<string, string | string[]>;
   message?: unknown;
-  packers?: Packers;
+  serializers?: Serializers;
   upgrade?: boolean;
 }
 
@@ -375,7 +376,7 @@ interface CustomFetchArg {
  */
 export function client<T extends Stack | AnyRpc>(
   base = "",
-  packers?: Packers,
+  serializers?: Serializers,
 ): Client<T> {
   const customFetch = (path: string, x: CustomFetchArg = {}) => {
     // If there is an explicit origin in the path, it should override the second
@@ -401,14 +402,14 @@ export function client<T extends Stack | AnyRpc>(
       }
   
       const raw = new WebSocket(url.href, "json");
-      return wrapWebSocket(raw, { packers: x.packers });
+      return wrapWebSocket(raw, { serializers: x.serializers });
     }
   
     return (async () => {
       let body: BodyInit | null = null;
       let mime = "";
       if (x.message) {
-        const pb = packBody(x.message, x.packers);
+        const pb = serializeBody(x.message, x.serializers);
         body = pb.body;
         mime = pb.mime;
       }
@@ -422,7 +423,7 @@ export function client<T extends Stack | AnyRpc>(
     
       let resBody: unknown = undefined;
       if (res.body) {
-        resBody = await unpackBody(res, x.packers);
+        resBody = await deserializeBody(res, x.serializers);
       }
     
       if (!res.ok) {
@@ -450,10 +451,10 @@ export function client<T extends Stack | AnyRpc>(
     })();
   };
 
-  const proxy = (path: string, packers?: Packers): unknown => {
+  const proxy = (path: string, serializers?: Serializers): unknown => {
     return new Proxy((x: CustomFetchArg) => customFetch(path, {
       ...x,
-      packers: { ...packers, ...x.packers },
+      serializers: { ...serializers, ...x.serializers },
     }), {
       get(_, property) {
         if (typeof property !== "string") {
@@ -463,13 +464,13 @@ export function client<T extends Stack | AnyRpc>(
         const append = property.split("/").filter(p => !!p).join("/");
         return proxy(
           path.endsWith("/") ? path + append : path + "/" + append,
-          packers,
+          serializers,
         );
       }
     });
   };
 
-  return proxy(base, packers) as Client<T>;
+  return proxy(base, serializers) as Client<T>;
 }
 
 /**

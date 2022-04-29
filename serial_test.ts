@@ -1,5 +1,13 @@
 import { assertEquals, assertStrictEquals } from "./deps_test.ts";
-import { pack, unpack, usePackers, packer, Packers } from "./pack.ts";
+import {
+  serialize,
+  deserialize,
+  useSerializers,
+  serializer,
+} from "./serial.ts";
+import type { Serializers } from "./serial.ts";
+
+// TODO: Tests for serializeBody and deserializeBody
 
 // The following tests are modeled after superjson's tests as of March 28, 2022:
 // https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
@@ -12,10 +20,10 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
       // deno-lint-ignore no-explicit-any
       input: any; output: any; packed: any; unpacked: any;
     }) => void;
-    localPackers?: Packers;
-    globalPackers?: Packers;
+    localSerializers?: Serializers;
+    globalSerializers?: Serializers;
   }> = {
-    "works for objects": {
+    "objects": {
       input: {
         a: { 1: 5, 2: { 3: 'c' } },
         b: null,
@@ -35,7 +43,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         b: null,
       },
     },
-    "works for arrays": {
+    "arrays": {
       input: {
         a: [1, undefined, 2],
       },
@@ -43,7 +51,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         a: [1, { $undefined: null }, 2],
       },
     },
-    "works for Sets": {
+    "Sets": {
       input: {
         a: new Set([1, undefined, 2]),
       },
@@ -51,11 +59,11 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         a: { $set: [1, { $undefined: null }, 2] },
       },
     },
-    "works for top-level Sets": {
+    "top-level Sets": {
       input: new Set([1, undefined, 2]),
       output: { $set: [1, { $undefined: null }, 2] },
     },
-    "works for Maps": {
+    "Maps": {
       input: {
         a: new Map([[1, "a"], [NaN, "b"]]),
         b: new Map([["2", "b"]]),
@@ -86,7 +94,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         assertStrictEquals(x.unpacked.options[0], x.unpacked.selected);
       },
     },
-    "works for paths containing dots": {
+    "paths containing dots": {
       input: {
         "a.1": {
           b: new Set([1, 2]),
@@ -98,7 +106,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         },
       },
     },
-    "works for paths containing backslashes": {
+    "paths containing backslashes": {
       input: () => {
         const set = new Set([1, 2]);
         return {
@@ -116,7 +124,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         assertStrictEquals(x.unpacked["a\\.1"], x.unpacked.ref);
       },
     },
-    "works for dates": {
+    "dates": {
       input: {
         meeting: {
           date: new Date(2022, 2, 28),
@@ -128,7 +136,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         },
       },
     },
-    "works for errors": {
+    "errors": {
       input: {
         e: new Error("epic fail"),
       },
@@ -136,7 +144,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         e: { $error: "epic fail" },
       },
     },
-    "works for regex": {
+    "regex": {
       input: {
         a: /hello/g,
       },
@@ -144,7 +152,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         a: { $regexp: "/hello/g" },
       },
     },
-    "works for Infinity": {
+    "Infinity": {
       input: {
         a: Number.POSITIVE_INFINITY,
       },
@@ -152,7 +160,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         a: { $number: "+infinity" },
       },
     },
-    "works for -Infinity": {
+    "-Infinity": {
       input: {
         a: Number.NEGATIVE_INFINITY,
       },
@@ -160,7 +168,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         a: { $number: "-infinity" },
       },
     },
-    "works for NaN": {
+    "NaN": {
       input: {
         a: NaN,
       },
@@ -168,7 +176,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         a: { $number: "nan" },
       },
     },
-    "works for bigint": {
+    "bigint": {
       input: {
         a: BigInt("4206942069420694206942069"),
       },
@@ -176,7 +184,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         a: { $bigint: "4206942069420694206942069" },
       },
     },
-    "works for unknown": {
+    "unknown": {
       input: () => {
         type WarCriminal = {
           name: string;
@@ -193,7 +201,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         age: "hell is forever",
       },
     },
-    "works for self-referencing objects": {
+    "self-referencing objects": {
       input: () => {
         const a = { role: "parent", children: [] as unknown[] };
         const b = { role: "child", parents: [a] };
@@ -223,7 +231,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         assertStrictEquals(x.unpacked, x.unpacked.children[0].parents[0]);
       },
     },
-    "works for Maps with two keys that serialize to the same string but have a different reference": {
+    "Maps with two keys that serialize to the same string but have a different reference": {
       input: new Map([
         [/a/g, "cav"],
         [/a/g, "bar"],
@@ -235,7 +243,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         ],
       },
     },
-    "works for Maps with a key that's referentially equal to another field": {
+    "Maps with a key that's referentially equal to another field": {
       input: () => {
         const robbyBubble = { id: 5 };
         const highscores = new Map([
@@ -253,7 +261,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         topScorer: { $ref: ".highscores.$map.0.0" },
       },
     },
-    "works for referentially equal maps": {
+    "referentially equal maps": {
       input: () => {
         const map = new Map([[1, 1]]);
         return { a: map, b: map };
@@ -268,7 +276,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         assertStrictEquals(x.unpacked.a, x.unpacked.b);
       },
     },
-    "works for maps with non-uniform keys": {
+    "maps with non-uniform keys": {
       input: {
         map: new Map<string | number, number>([[1, 1], ["1", 1]]),
       },
@@ -276,7 +284,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         map: { $map: [[1, 1], ["1", 1]] },
       },
     },
-    "works for referentially equal values inside a set": {
+    "referentially equal values inside a set": {
       input: () => {
         const user = { id: 2 };
         return {
@@ -295,7 +303,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         assertStrictEquals(x.unpacked.userOfTheMonth, vals[0]);
       },
     },
-    "works for symbols": {
+    "symbols": {
       // I'm testing something different this time. Symbols don't have a lot of
       // use in pack.ts when compared with superjson. I might adopt their symbol
       // registry idea in the future but I don't have a use-case in mind right
@@ -317,7 +325,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         assertStrictEquals(x.unpacked.a, x.unpacked.b);
       },
     },
-    "works for custom transformers": {
+    "custom transformers": {
       input: {
         testLocal: { testLocal: true },
         testGlobal: { testGlobal: true },
@@ -326,22 +334,22 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
         testLocal: { $testLocal: null },
         testGlobal: { $testGlobal: null },
       },
-      localPackers: {
-        testLocal: packer({
+      localSerializers: {
+        testLocal: serializer({
           check: (v: { testLocal?: boolean }) => v.testLocal === true,
-          pack: () => null,
-          unpack: () => ({ testLocal: true }),
+          serialize: () => null,
+          deserialize: () => ({ testLocal: true }),
         }),
       },
-      globalPackers: {
-        testGlobal: packer({
+      globalSerializers: {
+        testGlobal: serializer({
           check: (v: { testGlobal?: boolean }) => v.testGlobal === true,
-          pack: () => null,
-          unpack: () => ({ testGlobal: true }),
+          serialize: () => null,
+          deserialize: () => ({ testGlobal: true }),
         }),
       },
     },
-    // Skipping "works for Decimal.js" (N/A)
+    // Skipping "Decimal.js" (N/A)
     "issue #58": {
       input: () => {
         const cool = Symbol("cool");
@@ -389,7 +397,7 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
     },
     // Skipping "works with custom allowedProps" (N/A)
     // TODO: "works with typed arrays": {
-    "works for undefined, issue #48": {
+    "undefined, issue #48": {
       input: undefined,
       output: { $undefined: null },
     },
@@ -400,17 +408,17 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
     await t.step(k, async (t) => {
       const i = typeof v.input === "function" ? v.input() : v.input;
       
-      if (v.globalPackers) {
-        usePackers(v.globalPackers);
+      if (v.globalSerializers) {
+        useSerializers(v.globalSerializers);
       }
 
       let packed: unknown;
       let unpacked: unknown;
-      await t.step(`pack()`, () => {
-        packed = pack(i, v.localPackers);
+      await t.step(`serialize()`, () => {
+        packed = serialize(i, v.localSerializers);
       });
-      await t.step(`unpack()`, () => {
-        unpacked = unpack(v.output, v.localPackers);
+      await t.step(`deserialize()`, () => {
+        unpacked = deserialize(v.output, v.localSerializers);
       });
 
       if (v.custom) {

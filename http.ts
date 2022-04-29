@@ -2,14 +2,12 @@
 // This module is server-only.
 
 import { base64, http, path, fileServer } from "./deps.ts";
-import { packBody, unpackBody } from "./pack.ts";
+import { serializeBody, deserializeBody } from "./serial.ts";
 import { HttpError, wrapWebSocket } from "./client.ts";
 
-import type { Packers } from "./pack.ts";
+import type { Serializers } from "./serial.ts";
 import type { Parser, ParserOutput } from "./parser.ts";
 import type { Socket, SocketInit } from "./client.ts";
-  
-// TODO: Ability to turn bundle watching off  
 
 /**
  * A special 404 HttpError that should be thrown whenever a handler is refusing
@@ -122,11 +120,11 @@ const methodsWithBodies = new Set([
 
 /**
  * Returns a parsed body from a given request after checking size constraints.
- * Uses unpackBody to unpack the request body.
+ * Uses deserializeBody to deserialize the request body.
  */
 export async function requestBody(req: Request, opt?: {
   maxSize?: number;
-  packers?: Packers;
+  serializers?: Serializers;
 }): Promise<unknown> {
   if (
     !req.body ||
@@ -154,7 +152,7 @@ export async function requestBody(req: Request, opt?: {
   if (maxSize && length > maxSize) {
     throw new HttpError("413 payload too large", { status: 413 });
   }
-  return await unpackBody(req, opt?.packers);
+  return await deserializeBody(req, opt?.serializers);
 }
 
 /**
@@ -405,7 +403,7 @@ export interface TypedResponse<T = unknown> extends Response {
 /** Initializer options for a TypedResponse. Adds packers to ResponseInit. */
 export interface TypedResponseInit extends ResponseInit {
   /** Additional packers to use when packing the response body. */
-  packers?: Packers;
+  serializers?: Serializers;
 }
 
 /**
@@ -432,7 +430,7 @@ export function response<T = unknown>(
     return body;
   }
 
-  const { body: b, mime: m } = packBody(body, init?.packers);
+  const { body: b, mime: m } = serializeBody(body, init?.serializers);
   if (!headers.has("content-type")) {
     headers.append("content-type", m);
   }

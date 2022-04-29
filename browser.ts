@@ -8,4 +8,4 @@
 /// <reference lib="esnext" />
 
 export * from "./client.ts";
-export * from "./pack.ts";
+export * from "./serial.ts";
