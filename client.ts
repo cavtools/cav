@@ -14,17 +14,12 @@ import {
   useSerializers,
 } from "./serial.ts";
 
-// TODO: Remove these type dependencies by putting the imaginary type symbols in their own file and using just those to do type inference instead of relying on stack.ts and rpc.ts
 import type { Serializers } from "./serial.ts";
-import type { AnyRpc, Rpc } from "./rpc.ts";
-import type { Stack } from "./stack.ts";
 import type {
   Parser,
   ParserFunction,
-  ParserInput,
   ParserOutput,
-  TypedResponse,
-} from "./http.ts";
+} from "./parser.ts";
 
 /** Initializer arguments for constructing HttpErrors. */
 export interface HttpErrorInit {
@@ -221,93 +216,96 @@ export function wrapWebSocket<
   };
 }
 
-/**
- * A Proxied function that wraps `fetch()` with a tailored process for making
- * requests to a Cav server. Each property access on the function itself returns
- * a new Client that extends the URL of the original Client. The periods
- * represent path dividers and the accessed properties are path segments, like
- * this: `client("http://localhost/base").nested["pa.th"]()` will result in a
- * request to "http://localhost/base/nested/pa.th".
- *
- * The type parameter is the type of the handler this client points to, which
- * allows the Client typescript to extract information about what data the Cav
- * server expects to receive and respond with. Special treatment is given to
- * Stacks and Rpcs. For now, any other type will result in all argument shapes
- * and response types to be `unknown`.
- */
-export type Client<T = unknown> = (
-  T extends Stack<infer R> ? Client<R>
-  : T extends Rpc<
-    infer R,
-    // deno-lint-ignore no-explicit-any
-    any,
-    // deno-lint-ignore no-explicit-any
-    any,
-    infer Q,
-    infer M,
-    infer U
-  > ? Endpoint<R, Q, M, U>
-  : T extends Record<never, never> ? UnionToIntersection<{
-    [K in keyof T]: ExpandPath<K, Client<T[K]>>
-  }[keyof T]>
-  : unknown
-);
-
-/**
- * Client type representing an Rpc endpoint. Uses the Rpc type definition to
- * determine what the expected arguments and response types are.
- */
-export interface Endpoint<
-  Resp,
-  Query,
-  Message,
-  Upgrade,
-> {
-  (x: EndpointArg<Query, Message, Upgrade>): (
-    Upgrade extends true ? (
-      Resp extends Socket<infer S, infer M> ? Socket<M, S>
-      : never
-    )
-    : Promise<
-      Resp extends TypedResponse<infer T> ? T
-      : Resp extends Response ? unknown
-      : Resp
-    >
-  );
+const _endpointRequest = Symbol("cav-EndpointRequest");
+const _endpointResponse = Symbol("cav-EndpointResponse");
+const _routerRequest = Symbol("cav-RouterRequest");
+export interface EndpointRequest<
+  Query = never,
+  Message = never,
+  Upgrade = never,
+> extends Request {
+  [_endpointRequest]?: { // imaginary
+    query: Query;
+    message: Message;
+    upgrade: Upgrade; 
+  }
+  [_routerRequest]: never;
+}
+export interface EndpointResponse<T = unknown> extends Response {
+  [_endpointResponse]?: T; // imaginary
+}
+export interface RouterRequest<Shape> extends Request {
+  [_endpointRequest]: never;
+  [_routerRequest]?: Shape; // imaginary
 }
 
 /**
- * Uses the RpcInit type imported from the server to determine what shape the
- * arguments should be in when making requests to a given Rpc.
+ * A function that wraps `fetch()` with a tailored process for making requests
+ * to a Cav server. Each property access on the function itself returns a new
+ * Client that extends the URL of the original Client. The periods represent
+ * path dividers and the accessed properties are path segments, like this:
+ * `client("http://localhost/base").nested["pa.th"]()` will result in a request
+ * to "http://localhost/base/nested/pa.th".
+ *
+ * The type parameter is the type of the handler this client points to, which
+ * allows the Client typescript to extract information about what data the Cav
+ * server expects to receive and respond with.
  */
-export type EndpointArg<
-  Query,
-  Message,
-  Upgrade,
+export type Client<T = unknown> = (
+  T extends (
+    req: RouterRequest<infer S>,
+    // deno-lint-ignore no-explicit-any
+    ...a: any[]
+  ) => Response | Promise<Response> ? Client<S>
+  : T extends (
+    req: EndpointRequest<infer Q, infer M, infer U>,
+    // deno-lint-ignore no-explicit-any
+    ...a: any[]
+  ) => EndpointResponse<infer R> | Promise<EndpointResponse<infer R>> ? (
+    x: ClientArg<Q, M, U>,
+  ) => Promise<R extends Socket<infer S, infer M2> ? Socket<M2, S> : R>
+  // deno-lint-ignore no-explicit-any
+  : T extends (req: Request, ...a: any[]) => Response | Promise<Response> ? (
+    (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
+  )
+  : UnionToIntersection<{
+    [K in keyof T]: ExpandPath<K, Client<T[K]>>;
+  }[keyof T]>
+);
+
+/**
+ * Arguments for the client function when its internal path points to an
+ * endpoint.
+ */
+export type ClientArg<
+  Query = never,
+  Message = never,
+  Upgrade = never,
 > = Clean<{
   /**
    * Additional path segments to use when making a request to this endpoint.
-   * Including extra path segments should only be done if the Rpc expects it.
-   * Default: `undefined`
+   * Including extra path segments should only be done if the endpoint expects
+   * it. Default: `undefined`
    */
   path?: string;
-  /** The query string parameters expected by the Rpc. Default: `undefined` */
-  query: ParserInput<Query>;
   /**
-   * If this is not an upgraded request, this is the posted message expected by
+   * The query string parameters expected by the endpoint. Default: `undefined`
+   */
+  query: Query;
+  /**
+   * If this isn't an upgraded endpoint, this is the posted message expected by
    * the Rpc. Default: `undefined`
    */
-  message: Upgrade extends true ? never : ParserInput<Message>;
+  message: true extends Upgrade ? never : Message;
   /**
-   * Additional serializers that should be used while serializing data. Default:
-   * `undefined`
+   * Additional serializers to use while serializing data. Default: `undefined`
    */
   serializers?: Serializers;
   /**
-   * If the Rpc requires upgrading for web sockets, this value should be set to
-   * `true`. Default: `undefined`
+   * If the endpoint requires upgrading for web sockets, this value should be
+   * set to `true`. Default: `undefined`
    */
-  upgrade: Upgrade extends true ? true : never;
+  upgrade: true extends Upgrade ? true : never;
 }>;
 
 interface CustomFetchArg {
@@ -374,14 +372,14 @@ interface CustomFetchArg {
  * const c = client<MyRpc>("/path/to/rpc")({ query: { hi: "world" } });
  * ```
  */
-export function client<T extends Stack | AnyRpc>(
+export function client<T>(
   base = "",
   serializers?: Serializers,
 ): Client<T> {
   const customFetch = (path: string, x: CustomFetchArg = {}) => {
     // If there is an explicit origin in the path, it should override the second
     // argument. i.e. the second argument is just a fallback
-    const url = new URL(path, window.location.origin);
+    const url = new URL(path, self.location?.origin);
     if (x.query) {
       for (const [k, v] of Object.entries(x.query)) {
         if (Array.isArray(v)) {

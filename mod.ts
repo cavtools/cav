@@ -2,6 +2,7 @@
 
 export * from "./client.ts";
 export * from "./http.ts";
-export * from "./serial.ts";
+export * from "./parser.ts";
 export * from "./rpc.ts";
+export * from "./serial.ts";
 export * from "./stack.ts";

@@ -439,7 +439,3 @@ Deno.test("[pack/superjson_20220328]: pack() and unpack()", async (t) => {
     });
   }
 });
-
-// test("[pack/superjson_20220328]: when serializing custom class instances", () => {
-  // TODO
-// });

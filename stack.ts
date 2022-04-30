@@ -7,6 +7,8 @@
 import { http } from "./deps.ts";
 import { requestData, NO_MATCH } from "./http.ts";
 
+import type { StackShape } from "./client.ts";
+
 /**
  * An http.Handler that routes requests to Rpcs or other Handlers. Stacks are
  * one of two fundamental building blocks of Cav server applications, the other
@@ -17,11 +19,11 @@ import { requestData, NO_MATCH } from "./http.ts";
  * inside a matching Rpc (before parsing).
  */
 export interface Stack<
-  R extends StackRoutes = StackRoutes,
+  S extends StackRoutes = StackRoutes,
 > {
-  (req: Request, connInfo: http.ConnInfo): Promise<Response>;
+  (req: Request & StackShape<S>, connInfo: http.ConnInfo): Promise<Response>;
   /** The StackRoutes object used to construct this stack. */
-  readonly routes: R;
+  readonly routes: S;
 }
 
 /** Type alias that matches any Stack. Useful for type constraints. */

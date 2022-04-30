@@ -19,19 +19,30 @@ import {
   serveAsset,
   upgradeWebSocket,
 } from "./http.ts";
-import { HttpError, Socket } from "./client.ts";
+import { HttpError } from "./client.ts";
 
+import type {
+  Socket,
+  ResponseType,
+  QueryType,
+  MessageType,
+  ShouldUpgrade,
+} from "./client.ts";
 import type {
   Cookie,
   ServeAssetOptions,
   Res,
-  Parser,
-  GroupsParser,
-  QueryParser,
+} from "./http.ts";
+import type {
+  AnyParser,
+  // Parser,
+  // GroupsParser,
+  // QueryParser,
   ParserOutput,
+  ParserInput,
   ParserObject,
   ParserFunction,
-} from "./http.ts";
+} from "./parser.ts";
 import type { Serializers } from "./serial.ts";
 
 /**
@@ -46,13 +57,17 @@ import type { Serializers } from "./serial.ts";
  */
 export interface Rpc<
   Resp = unknown,
-  Groups extends GroupsParser | null = null,
+  Groups extends AnyParser | null = null,
   Context extends Ctx<unknown> | null = null,
-  Query extends QueryParser | null = null,
-  Message extends Parser | null = null,
+  Query extends AnyParser | null = null,
+  Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 > {
-  (req: Request, conn: http.ConnInfo): Promise<Response>;
+  (req: Request & (
+    QueryType<ParserInput<Query>> &
+    MessageType<ParserInput<Message>> &
+    ShouldUpgrade<Upgrade>
+  ), conn: http.ConnInfo): Promise<Response & ResponseType<Resp>>;
   /** The RpcInit options used to construct this Rpc. */
   readonly init: RpcInit<Resp, Groups, Context, Query, Message, Upgrade>;
 }
@@ -64,23 +79,20 @@ export interface Rpc<
 export type AnyRpc = Rpc<
   // deno-lint-ignore no-explicit-any
   any,
-  // deno-lint-ignore no-explicit-any
-  Parser<Record<string, string> | undefined, any> | null,
+  AnyParser | null,
   // deno-lint-ignore no-explicit-any
   Ctx<any> | null,
-  // deno-lint-ignore no-explicit-any
-  Parser<Record<string, string | string[]> | undefined, any> | null,
-  // deno-lint-ignore no-explicit-any
-  Parser<any, any> | null
+  AnyParser | null,
+  AnyParser | null
 >;
 
 /** Initializer options when constructing Rpcs. */
 export interface RpcInit<
   Resp = unknown,
-  Groups extends GroupsParser | null = null,
+  Groups extends AnyParser | null = null,
   Context extends Ctx<unknown> | null = null,
-  Query extends QueryParser | null = null,
-  Message extends Parser | null = null,
+  Query extends AnyParser | null = null,
+  Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 >{
   /**
@@ -201,10 +213,10 @@ export interface RpcInit<
  */
 export function rpcInit<
   Resp = unknown,
-  Groups extends GroupsParser | null = null,
+  Groups extends AnyParser | null = null,
   Context extends Ctx<unknown> | null = null,
-  Query extends QueryParser | null = null,
-  Message extends Parser | null = null,
+  Query extends AnyParser | null = null,
+  Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 >(
   init: RpcInit<Resp, Groups, Context, Query, Message, Upgrade>,
@@ -218,14 +230,11 @@ export function rpcInit<
 export type AnyRpcInit = RpcInit<
   // deno-lint-ignore no-explicit-any
   any,
-  // deno-lint-ignore no-explicit-any
-  Parser<Record<string, string> | undefined, any> | null,
+  AnyParser | null,
   // deno-lint-ignore no-explicit-any
   Ctx<any> | null,
-  // deno-lint-ignore no-explicit-any
-  Parser<Record<string, string | string[]> | undefined, any> | null,
-  // deno-lint-ignore no-explicit-any
-  Parser<any, any> | null,
+  AnyParser | null,
+  AnyParser | null,
   boolean | null
 >;
 
@@ -290,10 +299,10 @@ export interface CtxArg {
  */
 export interface Resolve<
   Resp = unknown,
-  Groups extends GroupsParser | null = null,
+  Groups extends AnyParser | null = null,
   Context extends Ctx<unknown> | null = null,
-  Query extends QueryParser | null = null,
-  Message extends Parser | null = null,
+  Query extends AnyParser | null = null,
+  Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 > {
   (x: ResolveArg<
@@ -307,10 +316,10 @@ export interface Resolve<
 
 /** Arguments available to a Resolver function. */
 export interface ResolveArg<
-  Groups extends GroupsParser | null = null,
+  Groups extends AnyParser | null = null,
   Context extends Ctx<unknown> | null = null,
-  Query extends QueryParser | null = null,
-  Message extends Parser | null = null,
+  Query extends AnyParser | null = null,
+  Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 > {
   /** The incoming Request this Rpc is handling. */
@@ -362,7 +371,7 @@ export interface ResolveArg<
    * should be returned by the Rpc's resolve function.
    */
   upgrade: Upgrade extends true ? <Send = unknown>() => Socket<Send, (
-    Message extends Parser ? ParserOutput<Message> : unknown
+    Message extends AnyParser ? ParserOutput<Message> : unknown
   )> : undefined;
 }
 
@@ -410,10 +419,10 @@ export interface ResolveErrorArg extends CtxArg {
  */
 export function rpc<
   Resp = unknown,
-  Groups extends GroupsParser | null = null,
+  Groups extends AnyParser | null = null,
   Context extends Ctx<unknown> | null = null,
-  Query extends QueryParser | null = null,
-  Message extends Parser | null = null,
+  Query extends AnyParser | null = null,
+  Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 >(
   init: RpcInit<

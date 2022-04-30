@@ -2,8 +2,15 @@
 
 NOTE: This is new, don't use it in production.
 
-Cav is a full stack web framework for [Deno](https://deno.land). It's heavily
-inspired by these innovators in the JavaScript and TypeScript ecosystems:
+Cav is a full stack web framework for [Deno](https://deno.land).
+
+## Getting started
+
+*soon*
+
+## Inspiration
+
+Cav is inspired by these innovators in the JavaScript and TypeScript ecosystems:
 
 - [Zod](https://github.com/colinhacks/zod) / [tRPC](https://trpc.io)
 - [Next.js](https://nextjs.org/) / [Aleph.js](https://alephjs.org/)
@@ -14,37 +21,6 @@ inspired by these innovators in the JavaScript and TypeScript ecosystems:
   [superjson](https://github.com/blitz-js/superjson)
 - ...
 
-## Goals
+## Dedication
 
-- Zero third-party dependencies
-- Convention > configuration
-- Declarative and functional, no classes
-- (De)composable API
-- Routing using
-  [URLPatterns](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API)
-- [End-to-end typesafety](https://colinhacks.com/essays/painless-typesafety),
-  à la tRPC
-- Maximal TypeScript benefits, minimal TypeScript
-- Serialize (almost) any JavaScript value
-- [Isomorphic](https://en.wikipedia.org/wiki/Isomorphic_JavaScript) client
-- Signed cookies
-- Web sockets
-- Compatible with [Preact](https://preactjs.com) et. al.
-- Unopinionated code organization
-- ...
-
-## Non-goals
-
-- Money
-- Popularity
-- ...
-
-## Usage
-
-- On the server: [`deno.land/x/cav/mod.ts`](https://deno.land/x/cav/mod.ts)
-- In the browser:
-  [`deno.land/x/cav/browser.ts`](https://deno.land/x/cav/browser.ts)
-
-## Getting started
-
-*soon*
+Cav is dedicated to the bar it was named after.
