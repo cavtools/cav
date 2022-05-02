@@ -71,16 +71,51 @@ useSerializers({
  * Cav's WebSocket wrapper interface.
  */
 export interface Socket<Send = unknown, Message = unknown> {
+  /**
+   * The raw WebSocket instance.
+   */
   raw: WebSocket;
+  /**
+   * Send data to the connected party. The data provided is serialized using the
+   * top-level `serialize()` function.
+   */
   send: (data: Send) => void;
+  /**
+   * Closes the web socket connection. An optional code and reason may be
+   * provided, and will be available to all "close" event listeners.
+   */
   close: (code?: number, reason?: string) => void;
+  /**
+   * Register an event listener for the "open" event, which is fired when the web
+   * socket connection is established. The socket must be opened before any data
+   * can be sent.
+   */
   on(type: "open", cb: SocketListener<"open">): void;
+  /**
+   * Register an event listener for the "close" event, which is fired when the
+   * web socket connection is ended.
+   */
   on(type: "close", cb: SocketListener<"close">): void;
+  /**
+   * Register an event listener for the "message" event, which is fired every
+   * time a message is received from the connected party. The message received
+   * is deserialized and made available on the "message" property assigned to
+   * the event.
+   */
   on(type: "message", cb: SocketListener<"message", Message>): void;
+  /**
+   * Register an event listener for the "error" event, which is fired when the
+   * connection has been closed due to an error.
+   */
   on(type: "error", cb: SocketListener<"error">): void;
+  /**
+   * Unregister an event listener for a particular event type. If no listener is
+   * provided, all listeners for that event type will be unregistered. If the
+   * event type is also omitted, all listeners for the web socket will be
+   * unregistered.
+   */
   off(
     type?: "open" | "close" | "message" | "error",
-    /** If this isn't specified, all registered listeners will be removed. */
     cb?: (ev: Event) => void | Promise<void>,
   ): void;
 }
@@ -91,6 +126,11 @@ export interface Socket<Send = unknown, Message = unknown> {
 // deno-lint-ignore no-explicit-any
 export type AnySocket = Socket<any, any>;
 
+/**
+ * Type for a web socket event listener. The shape of the listener depends on
+ * the event type. For the "message" event, the message type may be provided as
+ * the second type parameter.
+ */
 export type SocketListener<
   Type extends "open" | "close" | "message" | "error",
   Message = unknown,
@@ -107,13 +147,23 @@ export type SocketListener<
  * the `upgradeWebSocket` function.
  */
 export interface SocketInit<Message extends Parser | null = null> {
+  /**
+   * Message parser, for parsing incoming messages. If this is ommitted,
+   * messages won't be parsed and will be typed as "unknown".
+   */
   message?: Message;
+  /**
+   * Additional serializers to use when serializing and deserializing message
+   * data.
+   */
   serializers?: Serializers | null;
 }
 
 const decoder = new TextDecoder();
 
-/** Wraps a regular WebSocket with packing functionality and type support. */
+/**
+ * Wraps a regular WebSocket with serializer functionality and type support.
+ */
 export function wrapWebSocket<
   Send = unknown,
   Message extends Parser | null = null,
@@ -216,27 +266,67 @@ export function wrapWebSocket<
   };
 }
 
+/**
+ * Generic handler type for server-defined Request handlers.
+ */
+export type Handler = (
+  req: Request,
+  // deno-lint-ignore no-explicit-any
+  ...a: any[]
+) => Promise<Response> | Response;
+
 const _endpointRequest = Symbol("cav-EndpointRequest");
 const _endpointResponse = Symbol("cav-EndpointResponse");
 const _routerRequest = Symbol("cav-RouterRequest");
+
+/**
+ * An endpoint handler can use this Request type to ferry type information to
+ * the client from the server about what client arguments are acceptable.
+ */
 export interface EndpointRequest<
-  Query = never,
-  Message = never,
-  Upgrade = never,
+  Query = unknown,
+  Message = unknown,
+  Upgrade = unknown,
 > extends Request {
   [_endpointRequest]?: { // imaginary
     query: Query;
     message: Message;
     upgrade: Upgrade; 
   }
-  [_routerRequest]: never;
+  [_routerRequest]?: never;
 }
+
+/**
+ * Response type used to ferry the type of the deserialized response to the
+ * client from the server. If a server handler doesn't return this type, the
+ * response type of the corresponding client call will be "unknown".
+ */
 export interface EndpointResponse<T = unknown> extends Response {
   [_endpointResponse]?: T; // imaginary
 }
-export interface RouterRequest<Shape> extends Request {
-  [_endpointRequest]: never;
+
+/**
+ * A router handler on the server can use this Request type to ferry type
+ * information about valid routes to the client. The client uses the provided
+ * RouterShape to infer which property accesses are valid.
+ */
+export interface RouterRequest<Shape extends RouterShape = Record<never, never>> extends Request {
+  [_endpointRequest]?: never;
   [_routerRequest]?: Shape; // imaginary
+}
+
+/**
+ * Type constraint for the Shape parameter of a RouterRequest. The shape
+ * describes the client property accesses that would result in a valid endpoint
+ * call.
+ */
+export interface RouterShape {
+  [x: string]: (
+    | Handler
+    | Handler[]
+    | RouterShape
+    | null
+  );
 }
 
 /**
@@ -248,11 +338,14 @@ export interface RouterRequest<Shape> extends Request {
  * to "http://localhost/base/nested/pa.th".
  *
  * The type parameter is the type of the handler this client points to, which
- * allows the Client typescript to extract information about what data the Cav
+ * allows the client TypeScript to extract information about what data the
  * server expects to receive and respond with.
  */
-export type Client<T = unknown> = (
-  T extends (
+export type Client<
+  T extends Handler | Handler[] | RouterShape | null = null,
+> = (
+  T extends Handler[] ? Client<T[number]>
+  : T extends (
     req: RouterRequest<infer S>,
     // deno-lint-ignore no-explicit-any
     ...a: any[]
@@ -268,9 +361,10 @@ export type Client<T = unknown> = (
   : T extends (req: Request, ...a: any[]) => Response | Promise<Response> ? (
     (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
   )
-  : UnionToIntersection<{
+  : T extends RouterShape ? UnionToIntersection<{
     [K in keyof T]: ExpandPath<K, Client<T[K]>>;
   }[keyof T]>
+  : (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
 );
 
 /**
@@ -372,7 +466,7 @@ interface CustomFetchArg {
  * const c = client<MyRpc>("/path/to/rpc")({ query: { hi: "world" } });
  * ```
  */
-export function client<T>(
+export function client<T extends Handler | RouterShape | null = null>(
   base = "",
   serializers?: Serializers,
 ): Client<T> {

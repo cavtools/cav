@@ -52,11 +52,3 @@ export type ParserOutput<T> = (
   : T extends Parser<unknown, infer O> ? O
   : never
 );
-
-/** A Parser for the path groups captured by the stack/rpc. */
-// export type GroupsParser = Parser<Record<string, string> | undefined>;
-
-/** A Parser for the raw query object from the URL string. */
-// export type QueryParser = Parser<
-//   Record<string, string | string[]> | undefined
-// >;

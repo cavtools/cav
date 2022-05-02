@@ -7,50 +7,28 @@
 import { http } from "./deps.ts";
 import { requestData, NO_MATCH } from "./http.ts";
 
-import type { StackShape } from "./client.ts";
+import type { RouterRequest, RouterShape, Handler } from "./client.ts";
 
 /**
- * An http.Handler that routes requests to Rpcs or other Handlers. Stacks are
- * one of two fundamental building blocks of Cav server applications, the other
- * being Rpcs. If a matching handler or Rpc throws the special NO_MATCH error,
- * the stack continues looking for matching handlers to process the request into
- * a response. Stacks can capture path groups while routing the request; the
- * captured groups will become the basis for the ResolverArg's `groups` property
- * inside a matching Rpc (before parsing).
+ * Handler that routes requests to Rpcs (endpoints) or other Stacks (routers).
  */
-export interface Stack<
-  S extends StackRoutes = StackRoutes,
-> {
-  (req: Request & StackShape<S>, connInfo: http.ConnInfo): Promise<Response>;
-  /** The StackRoutes object used to construct this stack. */
+export interface Stack<S extends RouterShape = RouterShape> {
+  (req: RouterRequest<S>, connInfo: http.ConnInfo): Promise<Response>;
+  /**
+   * The routes specified when this Stack was constructed.
+   */
   readonly routes: S;
-}
-
-/** Type alias that matches any Stack. Useful for type constraints. */
-// deno-lint-ignore no-explicit-any
-export type AnyStack = Stack<any>;
-
-/**
- * A routing map used by the constructed Stack to find matching handlers to
- * handle an incoming request.
- */
-export interface StackRoutes {
-  [x: string]: http.Handler | StackRoutes | null;
 }
 
 const nextPathGroupName = "__nextPath";
 
 /**
- * Constructs a StackHandler using the given StackRoutes object. The first
- * matching handler in the provided routes to either return a Response or throw
- * an unknown error halts the matching process. If a handler throws the special
- * NO_MATCH error, the error is suppressed and matching continues. See the
- * documentation for more details about StackRoutes and how routing inside a
- * Stack works.
- *
- * TODO: the referenced documentation lol
+ * Constructs a new Stack handler using the provided routes object. Keys can be
+ * a subset of the URLPattern syntax when group capturing is desired. See the
+ * documentation for more information about how Stack routing works. TODO: the
+ * documentation about how Stack routing works
  */
-export function stack<R extends StackRoutes>(routes: R): Stack<R> {
+export function stack<S extends RouterShape>(routes: S): Stack<S> {
   // Stack routes can only use some of the features of URLPattern. If attempts
   // are made to use features that aren't supported, throw an error
   for (const [k, _] of Object.entries(routes)) {
@@ -74,10 +52,10 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     }
   }
 
-  const handlers: Record<string, http.Handler> = {};
+  const handlers: Record<string, Handler | Handler[]> = {};
   for (const k of Object.keys(routes)) {
     const v = routes[k];
-    if (v && typeof v === "object") {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
       handlers[k] = stack(v);
     } else if (v) {
       handlers[k] = v;
@@ -121,7 +99,7 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     return paths.indexOf(a) - paths.indexOf(b);
   });
 
-  const patterns = new Map<URLPattern, http.Handler>();
+  const patterns = new Map<URLPattern, Handler | Handler[]>();
   for (const op of sortedPaths) {
     let p = "/" + op.split("/").filter(v => !!v).join("/");
 
@@ -134,7 +112,7 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     patterns.set(new URLPattern(p, "http://_._"), handlers[op]);
   }
 
-  const handler = async (
+  const stackHandler = async (
     req: Request,
     conn: http.ConnInfo,
   ): Promise<Response> => {
@@ -162,6 +140,18 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
       Object.assign(data, { path, groups });
 
       try {
+        if (Array.isArray(handler)) {
+          for (const h of handler) {
+            try {
+              return await h(req, conn);
+            } catch (e) {
+              if (e === NO_MATCH) {
+                continue;
+              }
+            }
+          }
+          throw NO_MATCH;
+        }
         return await handler(req, conn);
       } catch (e) {
         // Keep looking for matches if it's the NO_MATCH error. All other errors
@@ -181,5 +171,5 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     throw NO_MATCH;
   };
 
-  return Object.assign(handler, { routes });
+  return Object.assign(stackHandler, { routes });
 }

@@ -2,12 +2,16 @@
 
 // TODO: Make it so that any object shape can be passed in as the query
 
-import { base64, http, path, fileServer } from "./deps.ts";
+import { base64, http } from "./deps.ts";
 import { serializeBody, deserializeBody } from "./serial.ts";
 import { HttpError, wrapWebSocket } from "./client.ts";
 
 import type { Serializers } from "./serial.ts";
-import type { Socket, SocketInit } from "./client.ts";
+import type {
+  Socket,
+  SocketInit,
+  EndpointResponse,
+} from "./client.ts";
 import type { Parser, ParserOutput } from "./parser.ts";
 
 /**
@@ -391,34 +395,28 @@ async function sign(data: string, key: string): Promise<string> {
   );
 }
 
-const _typedResponse = Symbol("_typedResponse");
-
 /**
- * A Response, but with an unused type parameter indicating the type of the
- * response body.
+ * Initializer options for an EndpointResponse.
  */
-export interface TypedResponse<T = unknown> extends Response {
-  [_typedResponse]?: T; // Imaginary
-}
-
-/** Initializer options for a TypedResponse. Adds packers to ResponseInit. */
-export interface TypedResponseInit extends ResponseInit {
-  /** Additional packers to use when packing the response body. */
+export interface EndpointResponseInit extends ResponseInit {
+  /**
+   * Additional packers to use when packing the response body.
+   */
   serializers?: Serializers;
 }
 
 /**
- * Creates a TypedResponse from the provided body, which undergoes packing via
- * packBody. Extra packers can be provided using the "packers" option on the
- * init argument. If a Response is passed in as the body, its body will be used
- * without re-packing; headers and status/text will still be updated to match
- * the provided init.
+ * Creates an EndpointResponse from the provided body, which is serialized using
+ * the top-level serializeBody function. If the provided body is already a
+ * Response object, it will be returned with the headers provided on the init
+ * argument applied (if there are any). Extra serializers can be provided on the
+ * init argument to extend the data types that can be serialized.
  */
 export function response<T = unknown>(
   body: T,
-  init?: TypedResponseInit,
-): TypedResponse<
-  T extends TypedResponse<infer T2> ? T2
+  init?: EndpointResponseInit,
+): EndpointResponse<
+  T extends EndpointResponse<infer T2> ? T2
   : T extends Response ? unknown
   : T
 > {
@@ -440,9 +438,6 @@ export function response<T = unknown>(
     headers,
   });
 }
-
-
-
 
 /**
  * The server-side equivalent of the wrapWebSocket function in the client
@@ -500,9 +495,11 @@ export interface Server<H extends http.Handler> extends http.Server {
  * client.
  */
 export interface ServerInit<
-  H extends http.Handler = http.Handler,
+  H extends http.Handler,
 > extends Omit<http.ServerInit, "onError"> {
-  /** The port to bind to. Default: `80` */
+  /**
+   * The port to bind to. Default: `80`
+   */
   port?: number;
   handler: H;
 }
@@ -567,7 +564,9 @@ export function server<H extends http.Handler>(
   });
 }
 
-/** The ServerInit options available when using the serve() shorthand function. */
+/**
+ * The ServerInit options available when using the serve() shorthand function.
+ */
 export type ServeOpt = Omit<ServerInit<http.Handler>, "handler">;
 
 /**
@@ -578,199 +577,9 @@ export type ServeOpt = Omit<ServerInit<http.Handler>, "handler">;
  * return await server({ ...opt, handler }).listenAndServe();
  * ```
  */
-export async function serve(handler: http.Handler, opt?: ServeOpt): Promise<void> {
+export async function serve(
+  handler: http.Handler,
+  opt?: ServeOpt,
+): Promise<void> {
   return await server({ ...opt, handler }).listenAndServe();
-}
-
-/** Options controlling how assets are found and served. */
-export interface ServeAssetOptions {
-  /**
-   * Sets the current working directory when looking for assets. If a file://
-   * path is provided, the parent folder of the path is used. This is useful if
-   * you want to serve assets relative to the current file using
-   * `import.meta.url`. Default: `"."`
-   */
-  cwd?: string;
-  /**
-   * The directory to serve assets from inside the cwd. This pattern encourages
-   * keeping public asset files separated from application source code, so that
-   * code isn't served by mistake. To use the cwd alone, specify `"."`. Default:
-   * `"assets"`
-   */
-  dir?: string;
-  /**
-   * Path of the file to serve relative to the dir (which is relative to the
-   * cwd). The full path of the served file on disk is `path.join(cwd, dir,
-   * path)`. This option is required.
-   */
-  path: string;
-  /**
-   * Path to use when the provided path results in a 404 error. Use this to
-   * serve a 404 page. If this isn't specified, 404 errors will bubble. Default:
-   * `undefined`
-   */
-  path404?: string;
-}
-
-// When a requested path without a trailing slash resolves to a directory and
-// that directory has an index file in it, relative links in the html need to be
-// rewritten to account for the lack of trailing slash. This regex is used to
-// rewrite them.  
-const htmlRelativeLinks = /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
-
-/**
- * Response factory for serving static assets. Asset resolution uses the
- * provided ServeAssetOptions, the Request is only used for caching headers like
- * ETag etc.
- */
-export async function serveAsset(
-  req: Request,
-  opt: ServeAssetOptions,
-): Promise<Response> {
-  let cwd = opt.cwd || ".";
-  const dir = opt.dir || "assets";
-  const filePath = opt.path;
-  const path404 = opt.path404;
-
-  // This allows you to, for example, specify import.meta.url as a cwd. If cwd
-  // is a file:// url, the last path segment (the basename of the "current"
-  // typescript file) will be excluded
-  if (cwd.startsWith("file://")) {
-    cwd = path.join(path.fromFileUrl(cwd), "..");
-  }
-
-  // If the path was an index.html, redirect to the path without the last path
-  // segment. i.e. /hello/index.html -> /hello
-  const url = new URL(req.url);
-  const base = path.basename(url.pathname);
-  if (base === "index.html") {
-    const url = new URL(req.url);
-    url.pathname = path.join(url.pathname, "../").slice(0, -1);
-    return Response.redirect(url.href, 302);
-  }
-
-  // Wrap the processing procedure because it gets used multiple times when
-  // there's a 404  
-  // REVIEW: This is definitely too complicated. Find a simpler way
-  const process = async (filePath: string) => {
-    // Get the full file path by joining the cwd, dir, and resolved path
-    filePath = path.join(
-      cwd,
-      dir,
-      path.join("/", filePath),
-    );
-  
-    let fileInfo: Deno.FileInfo | null = null;
-    try {
-      fileInfo = await Deno.stat(filePath);
-    } catch {
-      // It didn't exist, try adding an .html
-      try {
-        const p = `${filePath}.html`;
-        const info = await Deno.stat(p);
-        if (info.isFile) {
-          filePath = p;
-          fileInfo = info;
-        }
-      } catch {
-        // continue
-      }
-    }
-
-    let wasAutoIndexed = false;
-    if (fileInfo && fileInfo.isDirectory) {
-      // It was a directory, look for index files. Don't forget to reset
-      // fileInfo to null or you'll miss a bug, see the next block
-      fileInfo = null;
-      try {
-        const p = path.join(filePath, "index.html");
-        const info = await Deno.stat(p);
-        if (info.isFile) {
-          filePath = p;
-          fileInfo = info;
-          wasAutoIndexed = true;
-        }
-      } catch {
-        // continue
-      }
-    }
-
-    if (fileInfo === null) {
-      throw new HttpError("404 not found", { status: 404 });
-    }
-
-    // Just serve the file if no bundlers took care of it
-    return { servePath: filePath, wasAutoIndexed };
-  };
-
-  // Serve the asset. If the asset wasn't found and an error page was specified,
-  // serve that instead. If that also wasn't found, throw a 500 error with
-  // details
-  let servePath = "";
-  try {
-    const p = await process(filePath);
-    servePath = p.servePath;
-    const originalResponse = await fileServer.serveFile(req, servePath);
-
-    // If this isn't an auto-index file, no need to go further
-    if (!p.wasAutoIndexed) {
-      return originalResponse;
-    }
-
-
-    if (url.pathname.endsWith("/")) {
-      // No need to rebase the relative links if the path ends with a /
-      return originalResponse;
-    }
-
-    // Otherwise, because the trailing slash isn't there, you need to rebase
-    // the href and src links in the returned index html
-    const basename = path.basename(url.pathname);
-
-    // Rewrite the content
-    let content = await Deno.readTextFile(servePath);
-    content = content.replaceAll(htmlRelativeLinks, (match, group) => {
-      const newGroup = group.replace(
-        /^(?:src|href)=(?:"|')(\..*)(?:"|')$/g,
-        (m: string, g: string) => m.replace(g, (
-          // TODO: This isn't complete. Make a note in the docs about trailing
-          // slashes
-          g.startsWith("./") ? `./${basename}/${g.slice(2)}`
-          : g.startsWith("../") ? `./${g.slice(3)}`
-          : g
-        )),
-      );
-      return match.replace(group, newGroup);
-    });
-    
-    // If the original response is a 200, return a new response with the same
-    // headers but the rewritten content. If the original response is anything
-    // else, return it. Make sure you delete the content-length header on the
-    // originalResponse.headers before using them for the new response, so that
-    // the content-length can be recalculated
-    if (originalResponse.status !== 200) {
-      return originalResponse;
-    }
-    originalResponse.headers.delete("content-length");
-    return new Response(content, { headers: originalResponse.headers });
-  } catch (e1) {
-    if (e1.message === "404 not found") {
-      if (path404) {
-        try {
-          const servePath = (await process(path404)).servePath;
-          return await fileServer.serveFile(req, servePath);
-        } catch (e2) {
-          throw new HttpError("Failed to serve 404 page", {
-            status: 500,
-            detail: {
-              servePath,
-              error: e2,
-            },
-          });
-        }
-      }
-      throw NO_MATCH;
-    }
-    throw e1;
-  }
 }

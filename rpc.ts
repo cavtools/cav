@@ -1,10 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-// TODO: What happens when you try to upgrade for an assets request?
-// TODO: accept multiple strings for the path init option
-// TODO: spa() utiltity function that lets you specify multiple paths
+// TODO: What happens when you try to upgrade for an assets request?  
+// TODO: accept multiple strings for the path init option  
 // TODO: files and blobs that flush to disk when a certain memory threshold is
-// reached. Using them works the same as regular files and blobs  
+// reached. Using them works the same as regular files and blobs. They get
+// deleted at the end of the request  
 // TODO: Incorporate the standard library's multipart reader    
 // TODO: CORS  
 // TODO: RpcLimits  
@@ -16,34 +16,29 @@ import {
   requestBody,
   response,
   bakeCookie,
-  serveAsset,
   upgradeWebSocket,
 } from "./http.ts";
 import { HttpError } from "./client.ts";
+import { serveAsset } from "./assets.ts";
 
 import type {
   Socket,
-  ResponseType,
-  QueryType,
-  MessageType,
-  ShouldUpgrade,
+  EndpointRequest,
+  EndpointResponse,
 } from "./client.ts";
 import type {
   Cookie,
-  ServeAssetOptions,
   Res,
 } from "./http.ts";
 import type {
   AnyParser,
-  // Parser,
-  // GroupsParser,
-  // QueryParser,
   ParserOutput,
   ParserInput,
   ParserObject,
   ParserFunction,
 } from "./parser.ts";
 import type { Serializers } from "./serial.ts";
+import type { ServeAssetOptions } from "./assets.ts";
 
 /**
  * An http.Handler constructed by an RpcFactory. Rpcs are one of two fundamental
@@ -63,11 +58,10 @@ export interface Rpc<
   Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 > {
-  (req: Request & (
-    QueryType<ParserInput<Query>> &
-    MessageType<ParserInput<Message>> &
-    ShouldUpgrade<Upgrade>
-  ), conn: http.ConnInfo): Promise<Response & ResponseType<Resp>>;
+  (
+    req: EndpointRequest<ParserInput<Query>, ParserInput<Message>, Upgrade>,
+    conn: http.ConnInfo,
+  ): Promise<EndpointResponse<Resp>>;
   /** The RpcInit options used to construct this Rpc. */
   readonly init: RpcInit<Resp, Groups, Context, Query, Message, Upgrade>;
 }
@@ -76,17 +70,19 @@ export interface Rpc<
  * Alias for an Rpc with any resolver or init types. Useful for type
  * constraints.
  */
-export type AnyRpc = Rpc<
-  // deno-lint-ignore no-explicit-any
-  any,
-  AnyParser | null,
-  // deno-lint-ignore no-explicit-any
-  Ctx<any> | null,
-  AnyParser | null,
-  AnyParser | null
->;
+// export type AnyRpc = Rpc<
+//   // deno-lint-ignore no-explicit-any
+//   any,
+//   AnyParser | null,
+//   // deno-lint-ignore no-explicit-any
+//   Ctx<any> | null,
+//   AnyParser | null,
+//   AnyParser | null
+// >;
 
-/** Initializer options when constructing Rpcs. */
+/**
+ * Initializer options when constructing Rpcs.
+ */
 export interface RpcInit<
   Resp = unknown,
   Groups extends AnyParser | null = null,
@@ -576,30 +572,6 @@ export function rpc<
         u.pathname = u.pathname.slice(0, u.pathname.length - 1);
         return Response.redirect(u.href, 302);
       }
-
-      // REVIEW: See the other REVIEW up top regarding trailingSlash
-      // switch (init.trailingSlash) {
-      // case "require":
-      //   if (!url.pathname.endsWith("/")) {
-      //     throw NO_MATCH;
-      //   }
-      //   break;
-      // case "allow":
-      //   break;
-      // case "reject":
-      //   if (url.pathname.endsWith("/")) {
-      //     throw NO_MATCH;
-      //   }
-      //   break;d
-      // case "redirect":
-      // default:
-      //   if (url.pathname.endsWith("/")) {
-      //     const u = new URL(url.href);
-      //     u.pathname = u.pathname.slice(0, u.pathname.length - 1);
-      //     return Response.redirect(u.href, 302);
-      //   }
-      //   break;
-      // }
     }
 
     const cookie = await bakeCookie({

@@ -2,15 +2,23 @@
 
 NOTE: This is new, don't use it in production.
 
-Cav is a full stack web framework for [Deno](https://deno.land).
+Cav is an experimental, backend-first full stack web framework for
+[Deno](https://deno.land). Main features:
 
-## Getting started
+- [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
+- Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
+- Serialize (nearly) any JavaScript type, including Files and Blobs
+- Declarative router and endpoint definitions
+- Functional (no classes)
+- Isomorphic client API
+- Zero config
+- Zero third-party dependencies
 
-*soon*
+## Docs
 
-## Inspiration
+...
 
-Cav is inspired by these innovators in the JavaScript and TypeScript ecosystems:
+## Inspirations
 
 - [Zod](https://github.com/colinhacks/zod) / [tRPC](https://trpc.io)
 - [Next.js](https://nextjs.org/) / [Aleph.js](https://alephjs.org/)
@@ -19,7 +27,6 @@ Cav is inspired by these innovators in the JavaScript and TypeScript ecosystems:
 - [json-dry](https://github.com/11ways/json-dry) /
   [devalue](https://github.com/Rich-Harris/devalue) /
   [superjson](https://github.com/blitz-js/superjson)
-- ...
 
 ## Dedication
 

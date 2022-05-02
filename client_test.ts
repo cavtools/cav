@@ -13,12 +13,12 @@ Deno.test("regular client fetch", async t => {
   // Setup
   const oldFetch = self.fetch; // Put it back when you're done
   const lastFetch = {
-    url: "" as string | Request | URL,
+    url: "",
     init: undefined as RequestInit | undefined,
   };
   let returnResponse = new Response();
-  self.fetch = (input, init) => {
-    lastFetch.url = input;
+  self.fetch = (url, init) => {
+    lastFetch.url = input as string;
     lastFetch.init = init;
     return new Promise(resolve => resolve(returnResponse));
   };
