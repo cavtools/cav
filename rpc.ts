@@ -753,11 +753,11 @@ export function rpc<
   return Object.assign(handler, { init });
 }
 
-// TODO: Add ctx and keys
+// TODO: Add RpcInit options
 /** Initializer options for the assets() utility function. */
 export type AssetsInit = Omit<ServeAssetOptions, "path">;
 
-// TODO: Add ctx and keys
+// TODO: Add RpcInit options
 /**
  * Utility for creating an Rpc handler specifically for serving static assets.
  * The resolver's path argument is used as the asset path.
@@ -765,8 +765,6 @@ export type AssetsInit = Omit<ServeAssetOptions, "path">;
 export function assets(init?: AssetsInit) {
   return rpc({
     path: "*",
-    // REVIEW: See the other REVIEW up top regarding trailingSlash
-    // trailingSlash: "allow",
     resolve: x => x.asset({
       ...init,
       path: x.path,

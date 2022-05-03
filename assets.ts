@@ -156,7 +156,7 @@ const watchingAssets = new Set<string>();
  *   to the typescript files or one of their local dependencies
  *
  * When the watch option is true, any errors encountered during bundling will be
- * logged and suppressed and the function will return immediately
+ * logged and suppressed.
  */
 export async function prepareAssets(dir: string, opt: {
   watch: boolean;
@@ -243,7 +243,6 @@ export async function prepareAssets(dir: string, opt: {
       return;
     }
 
-    console.log("watching", input);
     watching.add(input);
 
     let inputGraph: graph.ModuleGraph;
@@ -285,7 +284,6 @@ export async function prepareAssets(dir: string, opt: {
   // Wrap this in an IIFE to prevent it from blocking
   (async () => {
     for await (const event of Deno.watchFs(dir)) {
-      console.log(event);
       if (event.kind === "create" || event.kind === "modify") {
         for (const p of event.paths) {
           if (p.endsWith(".ts") || p.endsWith(".tsx")) {
