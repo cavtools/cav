@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { path, fileServer, graph } from "./deps.ts";
-import { HttpError } from "./client.ts";
+import { HttpError } from "./serial.ts";
 import { NO_MATCH } from "./http.ts";
 
 /** Options controlling how assets are found and served. */
@@ -246,11 +246,12 @@ export async function prepareAssets(dir: string, opt: {
     input = path.resolve(input);
     if (watching.has(input)) {
       return;
-    } else if (!await isFile(input)) {
+    }
+    
+    if (!await isFile(input)) {
       watching.delete(input);
       return;
     }
-
     watching.add(input);
 
     let inputGraph: graph.ModuleGraph;

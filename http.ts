@@ -3,8 +3,8 @@
 // TODO: Make it so that any object shape can be passed in as the query
 
 import { base64, http } from "./deps.ts";
-import { serializeBody, deserializeBody } from "./serial.ts";
-import { HttpError, wrapWebSocket } from "./client.ts";
+import { HttpError, serializeBody, deserializeBody } from "./serial.ts";
+import { wrapWebSocket } from "./client.ts";
 
 import type { Serializers } from "./serial.ts";
 import type {

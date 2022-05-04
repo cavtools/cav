@@ -18,7 +18,7 @@ import {
   bakeCookie,
   upgradeWebSocket,
 } from "./http.ts";
-import { HttpError } from "./client.ts";
+import { HttpError } from "./serial.ts";
 import { serveAsset } from "./assets.ts";
 
 import type {

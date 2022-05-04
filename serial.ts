@@ -8,6 +8,36 @@
 // TODO: Support for functions?
 
 /**
+ * Initializer arguments for constructing HttpErrors, which can expose arbitrary
+ * data and status codes during de/serialization.
+ */
+ export interface HttpErrorInit {
+  /** An HTTP status code describing what kind of error this is. */
+  status?: number;
+  /** Optional data exposed to the client when this error is serialized. */
+  expose?: unknown;
+  /** Other details about the error. Omitted during serialization. */
+  detail?: Record<string, unknown>;
+}
+
+/** An error class for describing exceptions during HTTP processing. */
+export class HttpError extends Error {
+  /** An HTTP status code describing what kind of error this is. */
+  status: number;
+  /** Optional data exposed to the client when this error is serialized. */
+  expose?: unknown;
+  /** Other details about the error. Omitted during serialization. */
+  detail: Record<string, unknown>;
+
+  constructor(message: string, init?: HttpErrorInit) {
+    super(message);
+    this.status = init?.status || 500;
+    this.expose = init?.expose;
+    this.detail = init?.detail || {};
+  }
+}
+
+/**
  * A group of functions used to recognize (check), serialize, and deserialize
  * objects and special values that are not strings, basic numbers, booleans, or
  * nulls into objects that are JSON compatible.
@@ -76,146 +106,140 @@ export type AnySerializer = Serializer<any, any>;
  */
 export type Serializers = Record<string, AnySerializer | null>;
 
-const usedSerializers: Map<string, AnySerializer> = new Map(Object.entries({
-  error: serializer({
-    check: (v) => v instanceof Error,
-    serialize: (v: Error) => v.message,
-    deserialize: (raw) => new Error(raw as string),
-  }),
-  date: serializer({
-    check: (v) => v instanceof Date,
-    serialize: (v: Date) => v.toJSON(),
-    deserialize: (raw) => new Date(raw as string),
-  }),
-  undefined: serializer({
-    check: (v) => typeof v === "undefined",
-    serialize: () => null,
-    deserialize: () => undefined,
-  }),
-  symbol: serializer({
-    check: (v) => typeof v === "symbol",
-    serialize: (v: symbol) => v.description,
-    deserialize: (raw) => Symbol(raw as string),
-  }),
-  map: serializer({
-    check: (v) => v instanceof Map,
-    serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
-    deserialize: (_, whenDone) => {
-      const map = new Map();
-      whenDone(entries => {
-        entries.forEach(v => map.set(v[0], v[1]));
-      });
-      return map;
-    },
-  }),
-  set: serializer({
-    check: (val) => val instanceof Set,
-    serialize: (v: Set<unknown>) => Array.from(v.values()),
-    deserialize: (_, whenDone) => {
-      const set = new Set();
-      whenDone(values => {
-        values.forEach(v => set.add(v));
-      });
-      return set;
-    },
-  }),
-  bigint: serializer({
-    check: (v) => typeof v === "bigint",
-    serialize: (v: bigint) => v.toString(),
-    deserialize: (raw) => BigInt(raw as string),
-  }),
-  regexp: serializer({
-    check: (v) => v instanceof RegExp,
-    serialize: (v: RegExp) => v.toString(),
-    deserialize: (raw) => {
-      const r = (raw as string).slice(1).split("/");
-      return new RegExp(r[0], r[1]);
-    },
-  }),
-  number: serializer({
-    check: (v) => typeof v === "number" && (
-      isNaN(v) ||
-      v === Number.POSITIVE_INFINITY ||
-      v === Number.NEGATIVE_INFINITY ||
-      Object.is(v, -0)
-    ),
-    serialize: (v: number) => (
-      isNaN(v) ? "nan"
-      : v === Number.POSITIVE_INFINITY ? "+infinity"
-      : v === Number.NEGATIVE_INFINITY ? "-infinity"
-      : Object.is(v, -0) ? "-0"
-      : 0 // Should never happen
-    ),
-    deserialize: (raw: string) => (
-      raw === "nan" ? NaN
-      : raw === "+infinity" ? Number.POSITIVE_INFINITY
-      : raw === "-infinity" ? Number.NEGATIVE_INFINITY
-      : raw === "-zero" ? -0
-      : 0
-    ),
-  }),
-  conflict: serializer({
-    check: (v) => {
-      if (!isPojo(v)) {
-        return false;
-      }
-      const keys = Object.keys(v);
-      return keys.length === 1 && keys[0].startsWith("$");
-    },
-    serialize: Object.entries,
-    deserialize: (_, whenDone) => {
-      const result: Record<string, unknown> = {};
-      whenDone(entry => {
-        result[entry[0][0]] = entry[0][1];
-      });
-      return result;
-    },
-  }),
-}));
-
-/**
- * Registers the Serializers to be used as defaults in addition to the library
- * defaults for the top-level serial functions. Falsy properties are skipped. If
- * any serializer keys conflict with the serializers that are already in use, an
- * error is thrown. Returns the input `serializers` argument.
- */
-export function useSerializers<S extends Serializers>(serializers: S): S {
-  for (const [name, serializer] of Object.entries(serializers)) {
-    if (!serializer) {
-      continue;
-    }
-
-    if (name === "ref" || usedSerializers.has(name)) {
-      throw new Error(
-        `Conflict: Serializer name "${name}" is already used`,
-      );
-    }
-    usedSerializers.set(name, serializer);
-  }
-  return serializers;
-}
-
 function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
+  const defaults = new Map<string, AnySerializer>(Object.entries({
+    httpError: serializer({
+      check: (v) => v instanceof HttpError,
+      serialize: (v: HttpError) => ({
+        status: v.status,
+        message: v.message,
+        expose: v.expose,
+      }),
+      deserialize: (raw, whenDone) => {
+        const u = (raw as { status: number; message: string });
+        const err = new HttpError(u.message, { status: u.status });
+        whenDone((parsed) => {
+          err.expose = parsed.expose;
+        });
+        return err;
+      },
+    }),
+    error: serializer({
+      check: (v) => v instanceof Error,
+      serialize: (v: Error) => v.message,
+      deserialize: (raw) => new Error(raw as string),
+    }),
+    date: serializer({
+      check: (v) => v instanceof Date,
+      serialize: (v: Date) => v.toJSON(),
+      deserialize: (raw) => new Date(raw as string),
+    }),
+    undefined: serializer({
+      check: (v) => typeof v === "undefined",
+      serialize: () => null,
+      deserialize: () => undefined,
+    }),
+    symbol: serializer({
+      check: (v) => typeof v === "symbol",
+      serialize: (v: symbol) => v.description,
+      deserialize: (raw) => Symbol(raw as string),
+    }),
+    map: serializer({
+      check: (v) => v instanceof Map,
+      serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
+      deserialize: (_, whenDone) => {
+        const map = new Map();
+        whenDone(entries => {
+          entries.forEach(v => map.set(v[0], v[1]));
+        });
+        return map;
+      },
+    }),
+    set: serializer({
+      check: (val) => val instanceof Set,
+      serialize: (v: Set<unknown>) => Array.from(v.values()),
+      deserialize: (_, whenDone) => {
+        const set = new Set();
+        whenDone(values => {
+          values.forEach(v => set.add(v));
+        });
+        return set;
+      },
+    }),
+    bigint: serializer({
+      check: (v) => typeof v === "bigint",
+      serialize: (v: bigint) => v.toString(),
+      deserialize: (raw) => BigInt(raw as string),
+    }),
+    regexp: serializer({
+      check: (v) => v instanceof RegExp,
+      serialize: (v: RegExp) => v.toString(),
+      deserialize: (raw) => {
+        const r = (raw as string).slice(1).split("/");
+        return new RegExp(r[0], r[1]);
+      },
+    }),
+    number: serializer({
+      check: (v) => typeof v === "number" && (
+        isNaN(v) ||
+        v === Number.POSITIVE_INFINITY ||
+        v === Number.NEGATIVE_INFINITY ||
+        Object.is(v, -0)
+      ),
+      serialize: (v: number) => (
+        isNaN(v) ? "nan"
+        : v === Number.POSITIVE_INFINITY ? "+infinity"
+        : v === Number.NEGATIVE_INFINITY ? "-infinity"
+        : Object.is(v, -0) ? "-0"
+        : 0 // Should never happen
+      ),
+      deserialize: (raw: string) => (
+        raw === "nan" ? NaN
+        : raw === "+infinity" ? Number.POSITIVE_INFINITY
+        : raw === "-infinity" ? Number.NEGATIVE_INFINITY
+        : raw === "-zero" ? -0
+        : 0
+      ),
+    }),
+    conflict: serializer({
+      check: (v) => {
+        if (!isPojo(v)) {
+          return false;
+        }
+        const keys = Object.keys(v);
+        return keys.length === 1 && keys[0].startsWith("$");
+      },
+      serialize: Object.entries,
+      deserialize: (_, whenDone) => {
+        const result: Record<string, unknown> = {};
+        whenDone(entry => {
+          result[entry[0][0]] = entry[0][1];
+        });
+        return result;
+      },
+    }),
+  }));
+
   if (!serializers) {
-    return usedSerializers;
+    return defaults;
   }
 
-  const smap = new Map();
+  const smap = new Map<string, AnySerializer>();
   for (const [k, v] of Object.entries(serializers)) {
     if (v === null) {
       continue;
     }
-    if (k === "ref" || usedSerializers.has(k)) {
+    if (k === "ref" || defaults.has(k)) {
       throw new Error(
-        `Conflict: Serializer name "${k}" is already used`,
+        `Conflict: The serializer key "${k}" is reserved`,
       );
     }
     smap.set(k, v);
   }
   if (!smap.size) {
-    return usedSerializers;
+    return defaults;
   }
-  for (const [k, v] of usedSerializers.entries()) {
+  for (const [k, v] of defaults.entries()) {
     smap.set(k, v);
   }
   return smap;
@@ -223,11 +247,10 @@ function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
 
 /**
  * Serializes a value recursively until it's JSON-compatible. Serializers can be
- * plugged in to extend the accepted types beyond what Cav supports by default
- * as well as the serializers registered with `useSerializers()`. Referential
- * equality will be preserved whenever the same object or symbol value is
- * encountered more than once. If a value isn't recognized by any of the used
- * serializers or the default serializers, an error is thrown.
+ * plugged in to extend the accepted types beyond what Cav supports by default.
+ * Referential equality will be preserved whenever the same object or symbol
+ * value is encountered more than once. If a value isn't recognized by any of
+ * the provided serializers or the default serializers, an error is thrown.
  */
 export function serialize(
   value: unknown,

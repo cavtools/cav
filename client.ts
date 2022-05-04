@@ -6,12 +6,11 @@
 // TODO: The ability to specify custom headers
 
 import {
+  HttpError,
   serialize,
   serializeBody,
-  serializer,
   deserialize,
   deserializeBody,
-  useSerializers,
 } from "./serial.ts";
 
 import type { Serializers } from "./serial.ts";
@@ -20,52 +19,6 @@ import type {
   ParserFunction,
   ParserOutput,
 } from "./parser.ts";
-
-/** Initializer arguments for constructing HttpErrors. */
-export interface HttpErrorInit {
-  /** An HTTP status code describing what kind of error this is. */
-  status?: number;
-  /** Optional data exposed to the client when this error is serialized. */
-  expose?: unknown;
-  /** Other details about the error. Omitted during serialization. */
-  detail?: Record<string, unknown>;
-}
-
-/** An error class for describing exceptions during HTTP processing. */
-export class HttpError extends Error {
-  /** An HTTP status code describing what kind of error this is. */
-  status: number;
-  /** Optional data exposed to the client when this error is serialized. */
-  expose?: unknown;
-  /** Other details about the error. Omitted during serialization. */
-  detail: Record<string, unknown>;
-
-  constructor(message: string, init?: HttpErrorInit) {
-    super(message);
-    this.status = init?.status || 500;
-    this.expose = init?.expose;
-    this.detail = init?.detail || {};
-  }
-}
-
-useSerializers({
-  httpError: serializer({
-    check: (v) => v instanceof HttpError,
-    serialize: (v: HttpError) => ({
-      status: v.status,
-      message: v.message,
-      expose: v.expose,
-    }),
-    deserialize: (raw, whenDone) => {
-      const u = (raw as { status: number; message: string });
-      const err = new HttpError(u.message, { status: u.status });
-      whenDone((parsed) => {
-        err.expose = parsed.expose;
-      });
-      return err;
-    },
-  }),
-});
 
 /**
  * Cav's WebSocket wrapper interface.
@@ -159,8 +112,6 @@ export interface SocketInit<Message extends Parser | null = null> {
   serializers?: Serializers | null;
 }
 
-const decoder = new TextDecoder();
-
 /**
  * Wraps a regular WebSocket with serializer functionality and type support.
  */
@@ -187,6 +138,8 @@ export function wrapWebSocket<
       raw.close(code, reason);
     },
     on: (type, cb) => {
+      const decoder = new TextDecoder();
+
       // Only message gets a special process
       if (type !== "message") {
         listeners[type].add(cb as (ev: Event) => unknown);
@@ -275,10 +228,6 @@ export type Handler = (
   ...a: any[]
 ) => Promise<Response> | Response;
 
-const _endpointRequest = Symbol("cav-EndpointRequest");
-const _endpointResponse = Symbol("cav-EndpointResponse");
-const _routerRequest = Symbol("cav-RouterRequest");
-
 /**
  * An endpoint handler can use this Request type to ferry type information to
  * the client from the server about what client arguments are acceptable.
@@ -288,12 +237,14 @@ export interface EndpointRequest<
   Message = unknown,
   Upgrade = unknown,
 > extends Request {
-  [_endpointRequest]?: { // imaginary
-    query: Query;
-    message: Message;
-    upgrade: Upgrade; 
+  __cav?: { // imaginary
+    endpointRequest: {
+      query: Query;
+      message: Message;
+      upgrade: Upgrade; 
+    }
+    routerRequest?: never;
   }
-  [_routerRequest]?: never;
 }
 
 /**
@@ -302,7 +253,9 @@ export interface EndpointRequest<
  * response type of the corresponding client call will be "unknown".
  */
 export interface EndpointResponse<T = unknown> extends Response {
-  [_endpointResponse]?: T; // imaginary
+  __cav?: { // imaginary
+    endpointResponse: T;
+  };
 }
 
 /**
@@ -310,9 +263,13 @@ export interface EndpointResponse<T = unknown> extends Response {
  * information about valid routes to the client. The client uses the provided
  * RouterShape to infer which property accesses are valid.
  */
-export interface RouterRequest<Shape extends RouterShape = Record<never, never>> extends Request {
-  [_endpointRequest]?: never;
-  [_routerRequest]?: Shape; // imaginary
+export interface RouterRequest<
+  Shape extends RouterShape = Record<never, never>,
+> extends Request {
+  __cav?: { // imaginary
+    endpointRequest?: never;
+    routerRequest: Shape;
+  };
 }
 
 /**
