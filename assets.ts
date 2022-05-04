@@ -222,7 +222,7 @@ export async function prepareAssets(dir: string, opt: {
       if (!opt.watch) {
         throw e;
       }
-      console.error("Bundle error:", e);
+      console.error("Failed to bundle", m, "-", e);
     }
   }
 
@@ -244,7 +244,9 @@ export async function prepareAssets(dir: string, opt: {
   const watching = new Set<string>();
   const watch = async (input: string) => {
     input = path.resolve(input);
-    if (watching.has(input) || !await isFile(input)) {
+    if (watching.has(input)) {
+      return;
+    } else if (!await isFile(input)) {
       watching.delete(input);
       return;
     }
@@ -257,7 +259,7 @@ export async function prepareAssets(dir: string, opt: {
         path.toFileUrl(input).href
       );
     } catch (e) {
-      console.error("Failed to graph", input, " -", e);
+      console.error("Failed to graph", input, "-", e);
       watching.delete(input);
       return;
     }
@@ -277,7 +279,7 @@ export async function prepareAssets(dir: string, opt: {
     try {
       await bundle(input);
     } catch (e) {
-      console.error("Failed to bundle -", input, "-", e);
+      console.error("Failed to bundle", input, "-", e);
     }
     watching.delete(input);
     watch(input);
