@@ -48,11 +48,16 @@ export async function serveAsset(
     cwd = path.join(path.fromFileUrl(cwd), "..");
   }
 
+  const assets = path.join(cwd, dir);
   if (
+    // @ts-ignore: Bypass error when --unstable isn't specified
     typeof Deno.emit !== "undefined" &&
-    typeof Deno.writeTextFile !== "undefined"
+    (await Deno.permissions.query({
+      name: "write",
+      path: assets,
+    })).state === "granted"
   ) {
-    await prepareAssets(path.join(cwd, dir), { watch: true });
+    await prepareAssets(assets, { watch: true });
   }
 
   const process = async (filePath: string) => {
@@ -192,6 +197,7 @@ export async function prepareAssets(dir: string, opt: {
       : input + ".bundle.js"
     );
 
+    // @ts-ignore: Bypass error when --unstable isn't specified
     const js = (await Deno.emit(input, {
       bundle: "module",
       check: false,
