@@ -233,9 +233,9 @@ export type Handler = (
  * the client from the server about what client arguments are acceptable.
  */
 export interface EndpointRequest<
-  Query = unknown,
-  Message = unknown,
-  Upgrade = unknown,
+  Query = never,
+  Message = never,
+  Upgrade = never,
 > extends Request {
   __cav?: { // imaginary
     endpointRequest: {

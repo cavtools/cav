@@ -31,6 +31,14 @@ export interface ServeAssetOptions {
 // rewrite them.  
 const htmlRelativeLinks = /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
 
+function parseCwd(cwd: string): string {
+  // REVIEW: What about /https?:/// ?
+  if (cwd.startsWith("file://")) {
+    return path.join(path.fromFileUrl(cwd), "..");
+  }
+  return cwd;
+}
+
 /**
  * Response factory for serving static assets. Asset resolution uses the
  * provided ServeAssetOptions, the Request is only used for caching headers like
@@ -40,25 +48,15 @@ export async function serveAsset(
   req: Request,
   opt: ServeAssetOptions,
 ): Promise<Response> {
-  let cwd = opt.cwd || ".";
+  const cwd = parseCwd(opt.cwd || ".");
   const dir = opt.dir || "assets";
   const filePath = opt.path;
 
-  if (cwd.startsWith("file://")) {
-    cwd = path.join(path.fromFileUrl(cwd), "..");
-  }
-
-  const assets = path.join(cwd, dir);
-  if (
-    // @ts-ignore: Bypass error when --unstable isn't specified
-    typeof Deno.emit !== "undefined" &&
-    (await Deno.permissions.query({
-      name: "write",
-      path: assets,
-    })).state === "granted"
-  ) {
-    await prepareAssets(assets, { watch: true });
-  }
+  prepareAssets({
+    cwd,
+    dir,
+    watch: true,
+  });
 
   const process = async (filePath: string) => {
     filePath = path.join(
@@ -158,19 +156,67 @@ const watchingAssets = new Set<string>();
  * - Bundles every .ts and .tsx file in the folder (recursive) into an adjacent
  *   .bundle.js file
  * - Optionally uses a filesystem watcher to rebundle whenever a change is made
- *   to the typescript files or one of their local dependencies
+ *   to the typescript files or one of their local dependencies. (The default is
+ *   to set watching to true)
  *
- * When the watch option is true, any errors encountered during bundling will be
- * logged and suppressed.
+ * When the watch option is `true`, any errors encountered during bundling will
+ * be logged and suppressed, and the `prepareAssets()` call will start a
+ * separate file system watching event loop that re-triggers asset preparation
+ * whenever a file changes inside the assets directory. It will return
+ * immediately after the initial prep.
+ *
+ * If the --unstable or --allow-write permissions are not available, this
+ * function silently does nothing. i.e. In production, you can safely omit those
+ * flags and this function will not throw errors if they are missing. This is
+ * the intended use case, as this function acts as a kind of on-the-fly
+ * code-configured bundler, merging the build step into the development process
+ * so that no separate (and complex) build procedure is needed.
  */
-export async function prepareAssets(dir: string, opt: {
-  watch: boolean;
+export async function prepareAssets(opt: {
+  /**
+   * Sets the current working directory when looking for assets. If a file://
+   * path is provided, the parent folder of the path is used. This is useful if
+   * you want to serve assets relative to the current file using
+   * `import.meta.url`. Default: `"."`
+   */
+  cwd?: string;
+  /**
+   * The directory to serve assets from inside the cwd. This pattern encourages
+   * keeping public asset files separated from application source code, so that
+   * code isn't served by mistake. Default: `"assets"`
+   */
+  dir?: string;
+  /**
+   * By default, any errors encountered during bundling will bubble up, and the
+   * preparation procedure will only happen one time. If this option is `true`,
+   * errors will be logged and then suppressed, and a file system watcher will
+   * be set up to re-prepare the assets directory any time its contents are
+   * modified. The `prepareAssets()` function will return immediately after the
+   * initial loop, and the watcher will continue running in a disjoint event
+   * loop.
+   */
+  watch?: boolean;
 }) {
-  if (opt.watch && watchingAssets.has(dir)) {
+  const cwd = parseCwd(opt.cwd || ".");
+  const dir = opt.dir || "assets";
+  const assets = path.join(cwd, dir);
+
+  if (opt.watch && watchingAssets.has(assets)) {
     return;
   }
 
-  const check = await Deno.stat(dir);
+  if (
+    // @ts-ignore: Bypass error when --unstable isn't specified
+    typeof Deno.emit === "undefined" ||
+    (await Deno.permissions.query({
+      name: "write",
+      path: assets,
+    })).state !== "granted"
+  ) {
+    return;
+  }
+
+  const check = await Deno.stat(assets);
   if (!check.isDirectory) {
     throw new Error("path given was not a directory");
   }
@@ -180,7 +226,7 @@ export async function prepareAssets(dir: string, opt: {
     for await (const entry of Deno.readDir(dir)) {
       if (
         entry.isFile &&
-        (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx"))
+        (entry.name.endsWith("_bundle.ts") || entry.name.endsWith("_bundle.tsx"))
       ) {
         modules.push(path.join(dir, entry.name));
       } else if (entry.isDirectory) {
@@ -191,11 +237,7 @@ export async function prepareAssets(dir: string, opt: {
   await findModules(dir);
 
   const bundle = async (input: string) => {
-    const output = (
-      input.endsWith(".ts") ? input.slice(0, -3) + ".bundle.js"
-      : input.endsWith(".tsx") ? input.slice(0, -4) + ".bundle.js"
-      : input + ".bundle.js"
-    );
+    const output = input + ".js";
 
     // @ts-ignore: Bypass error when --unstable isn't specified
     const js = (await Deno.emit(input, {
@@ -213,24 +255,6 @@ export async function prepareAssets(dir: string, opt: {
 
     await Deno.writeTextFile(output, js);
   };
-
-  // Initial bundling happens right away
-  for (const m of modules) {
-    try {
-      await bundle(m);
-    } catch (e) {
-      if (!opt.watch) {
-        throw e;
-      }
-      console.error("Failed to bundle", m, "-", e);
-    }
-  }
-
-  // Everything else only applies when watching
-  if (!opt.watch) {
-    return;
-  }
-  watchingAssets.add(dir);
 
   const isFile = async (path: string) => {
     try {
@@ -268,6 +292,13 @@ export async function prepareAssets(dir: string, opt: {
     const deps = inputGraph.modules
       .filter(m => m.specifier.startsWith("file://"))
       .map(m => path.fromFileUrl(m.specifier));
+    
+    try {
+      await bundle(input);
+    } catch (e) {
+      console.error("Failed to bundle", input, "-", e);
+    }
+
     for await (const _ of Deno.watchFs(deps)) {
       break;
     }
@@ -277,25 +308,32 @@ export async function prepareAssets(dir: string, opt: {
       return;
     }
 
-    try {
-      await bundle(input);
-    } catch (e) {
-      console.error("Failed to bundle", input, "-", e);
-    }
     watching.delete(input);
-    watch(input);
+    watch(input); // Don't await
   };
 
-  for (const m of modules) {
-    watch(m); // Don't await
+  if (opt.watch) {
+    watchingAssets.add(dir);
   }
 
-  // Wrap this in an IIFE to prevent it from blocking
+  for (const m of modules) {
+    if (!opt.watch) {
+      await bundle(m);
+    } else {
+      watch(m);
+    }
+  }
+
+  if (!opt.watch) {
+    return;
+  }
+
+  // The disjoint fsevent loop. Wrap this in an IIFE to prevent it from blocking
   (async () => {
     for await (const event of Deno.watchFs(dir)) {
       if (event.kind === "create" || event.kind === "modify") {
         for (const p of event.paths) {
-          if (p.endsWith(".ts") || p.endsWith(".tsx")) {
+          if (p.endsWith("_bundle.ts") || p.endsWith("_bundle.tsx")) {
             watch(p); // Don't await
           }
         }

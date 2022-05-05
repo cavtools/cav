@@ -18,7 +18,7 @@ Deno.test("regular client fetch", async t => {
   };
   let returnResponse = new Response();
   self.fetch = (url, init) => {
-    lastFetch.url = input as string;
+    lastFetch.url = url as string;
     lastFetch.init = init;
     return new Promise(resolve => resolve(returnResponse));
   };

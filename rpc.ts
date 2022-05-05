@@ -19,7 +19,7 @@ import {
   upgradeWebSocket,
 } from "./http.ts";
 import { HttpError } from "./serial.ts";
-import { serveAsset } from "./assets.ts";
+import { serveAsset, prepareAssets } from "./assets.ts";
 
 import type {
   Socket,
@@ -763,6 +763,13 @@ export type AssetsInit = Omit<ServeAssetOptions, "path">;
  * The resolver's path argument is used as the asset path.
  */
 export function assets(init?: AssetsInit) {
+  // Note that this is a no-op in production
+  prepareAssets({
+    cwd: init?.cwd,
+    dir: init?.dir,
+    watch: true,
+  });
+
   return rpc({
     path: "*",
     resolve: x => x.asset({

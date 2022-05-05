@@ -1,6 +1,8 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-// TODO: Make it so that any object shape can be passed in as the query
+// TODO: Make it so that any object shape can be passed in as the query  
+// TODO: A serveFile() function that is like serveAsset() but doesn't abide by
+// the assets directory's quirks, it's just a regular static file serving function
 
 import { base64, http } from "./deps.ts";
 import { HttpError, serializeBody, deserializeBody } from "./serial.ts";
@@ -86,6 +88,8 @@ export function requestData(request: Request): RequestData | Response {
     return req[_requestData];
   }
 
+  // REVIEW: Still not sure if this is where the redirect for trailing slashes
+  // should happen, or if it should even happen at all
   const url = new URL(req.url);
   const path = `/${url.pathname.split("/").filter(p => !!p).join("/")}`;
   if (path !== url.pathname) {
