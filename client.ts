@@ -1,7 +1,6 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-// TODO: Rename HttpError to CavError
 // TODO: The ability to monitor request progress (XMLHttpRequest)
 // TODO: The ability to specify custom headers
 
@@ -301,12 +300,15 @@ export interface RouterShape {
 export type Client<
   T extends Handler | Handler[] | RouterShape | null = null,
 > = (
+  // Handler[]
   T extends Handler[] ? Client<T[number]>
+  // Stack
   : T extends (
     req: RouterRequest<infer S>,
     // deno-lint-ignore no-explicit-any
     ...a: any[]
   ) => Response | Promise<Response> ? Client<S>
+  // Rpc
   : T extends (
     req: EndpointRequest<infer Q, infer M, infer U>,
     // deno-lint-ignore no-explicit-any
@@ -314,14 +316,19 @@ export type Client<
   ) => EndpointResponse<infer R> | Promise<EndpointResponse<infer R>> ? (
     x: ClientArg<Q, M, U>,
   ) => Promise<R extends Socket<infer S, infer M2> ? Socket<M2, S> : R>
-  // deno-lint-ignore no-explicit-any
-  : T extends (req: Request, ...a: any[]) => Response | Promise<Response> ? (
-    (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
-  )
+  // Handler
+  /// deno-lint-ignore no-explicit-any
+  // : T extends (req: Request, ...a: any[]) => Response | Promise<Response> ? (
+  //   (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
+  // )
+  // When a router's type is specified, the router's shape is passed into the
+  // client and gets handled here
   : T extends RouterShape ? UnionToIntersection<{
     [K in keyof T]: ExpandPath<K, Client<T[K]>>;
   }[keyof T]>
-  : (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
+  // Any other type results in an unknown response
+  // deno-lint-ignore no-explicit-any
+  : (x: ClientArg<any, any, any>) => Promise<unknown>
 );
 
 /**

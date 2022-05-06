@@ -433,6 +433,10 @@ export function response<T = unknown>(
     return body;
   }
 
+  if (typeof body === "undefined") {
+    return new Response(null, { status: 204, ...init, headers });
+  }
+
   const { body: b, mime: m } = serializeBody(body, init?.serializers);
   if (!headers.has("content-type")) {
     headers.append("content-type", m);

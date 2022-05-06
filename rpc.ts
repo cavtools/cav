@@ -51,31 +51,36 @@ import type { ServeAssetOptions } from "./assets.ts";
  * top-level Server, which will log them and respond with a 500 Response.
  */
 export interface Rpc<
-  Resp = unknown,
-  Groups extends AnyParser | null = null,
-  Context extends Ctx<unknown> | null = null,
-  Query extends AnyParser | null = null,
-  Message extends AnyParser | null = null,
-  Upgrade extends boolean | null = null,
+  I extends AnyRpcInit = Record<never, never>,
+  // Resp = unknown,
+  // Groups extends AnyParser | null = null,
+  // Context extends AnyCtx | null = null,
+  // Query extends AnyParser | null = null,
+  // Message extends AnyParser | null = null,
+  // Upgrade extends boolean | null = null,
 > {
   (
-    req: EndpointRequest<ParserInput<Query>, ParserInput<Message>, Upgrade>,
+    req: EndpointRequest<ParserInput<I['query']>, ParserInput<I['message']>, I['upgrade'] extends true ? true : never>,
     conn: http.ConnInfo,
-  ): Promise<EndpointResponse<Resp>>;
+  ): Promise<EndpointResponse<
+    // deno-lint-ignore no-explicit-any
+    I['resolve'] extends (...a: any[]) => Promise<infer R> | infer R ? R
+    : unknown
+  >>;
   /** The RpcInit options used to construct this Rpc. */
-  readonly init: RpcInit<Resp, Groups, Context, Query, Message, Upgrade>;
+  // readonly init: RpcInit<Resp, Groups, Context, Query, Message, Upgrade>;
+  readonly init: I;
 }
 
 /**
  * Alias for an Rpc with any resolver or init types. Useful for type
  * constraints.
  */
-// export type AnyRpc = Rpc<
+export type AnyRpc = Rpc<AnyRpcInit>;
 //   // deno-lint-ignore no-explicit-any
 //   any,
 //   AnyParser | null,
-//   // deno-lint-ignore no-explicit-any
-//   Ctx<any> | null,
+//   AnyCtx | null,
 //   AnyParser | null,
 //   AnyParser | null
 // >;
@@ -86,7 +91,7 @@ export interface Rpc<
 export interface RpcInit<
   Resp = unknown,
   Groups extends AnyParser | null = null,
-  Context extends Ctx<unknown> | null = null,
+  Context extends AnyCtx | null = null,
   Query extends AnyParser | null = null,
   Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
@@ -117,23 +122,6 @@ export interface RpcInit<
    * ResolverArg whenever an error is thrown. Default: `null`
    */
   groups?: Groups;
-  /**
-   * Controls what to do when a matching path does or does not have a trailing
-   * slash at the end of it. "require" will cause paths to not match if there's
-   * no trailing slash. "allow" will allow but not require trailing slashes
-   * (note that this may have negative SEO implications if multiple paths lead
-   * to the same page being served). "reject" will cause paths with a trailing
-   * slash to not match. "redirect" will cause otherwise matching requests with
-   * a trailing slash to be redirected to the same path without the trailing
-   * slash. This setting is ignored if the requested path is the root path "/".
-   * Default: `"redirect"`
-   */
-  // REVIEW: I decided to remove the ability to change this behavior. I like the
-  // consistency and aesthetic of "no trailing slashes", and there's code in
-  // http.ts to account for re-based index files. There may be edge cases and it
-  // might still be true that banning trailing slashes is a mistake, so I'm just
-  // commenting the code out for now instead of removing it.  
-  // trailingSlash?: TrailingSlashOpt | null;
   /**
    * This limits the maximum size of the Request body. Note that, currently, the
    * entire Request body is loaded into memory during request processing.
@@ -183,16 +171,17 @@ export interface RpcInit<
   message?: Message;
   /**
    * This function is called to resolve the parsed request into a response to
-   * pack and send back to the client.
+   * pack and send back to the client. If nothing is provided, the response will
+   * be a 204 no content.
    */
-  resolve: Resolve<
+  resolve?: Resolve<
     Resp,
     Groups,
     Context,
     Query,
     Message,
     Upgrade
-  >;
+  > | null;
   /**
    * When an error is thrown during processing, this function is meant to handle
    * the error. The return value will be packed into a Response to send back to
@@ -205,18 +194,19 @@ export interface RpcInit<
 /**
  * Constructs a new RpcInit. This simply returns the first argument, it's only
  * provided for typing purposes so that you don't need to manually specify the
- * type parameters.
+ * types when extracting out an spreadable RpcInit object.
  */
 export function rpcInit<
-  Resp = unknown,
-  Groups extends AnyParser | null = null,
-  Context extends Ctx<unknown> | null = null,
-  Query extends AnyParser | null = null,
-  Message extends AnyParser | null = null,
-  Upgrade extends boolean | null = null,
+  Resp,
+  Groups extends AnyParser | null,
+  Context extends AnyCtx | null,
+  Query extends AnyParser | null,
+  Message extends AnyParser | null,
+  Upgrade extends boolean | null,
+  I,
 >(
-  init: RpcInit<Resp, Groups, Context, Query, Message, Upgrade>,
-): RpcInit<Resp, Groups, Context, Query, Message, Upgrade> {
+  init: I & RpcInit<Resp, Groups, Context, Query, Message, Upgrade>,
+): I {
   return init;
 }
 
@@ -227,17 +217,11 @@ export type AnyRpcInit = RpcInit<
   // deno-lint-ignore no-explicit-any
   any,
   AnyParser | null,
-  // deno-lint-ignore no-explicit-any
-  Ctx<any> | null,
+  AnyCtx | null,
   AnyParser | null,
   AnyParser | null,
   boolean | null
 >;
-
-/**
- * Controls whether an Rpc redirects, allows, requires, or rejects paths with trailing slashes.
- */
-// export type TrailingSlashOpt = "redirect" | "allow" | "require" | "reject";
 
 /**
  * In Cav, there is no middleware. To fill the gap, Rpcs can leverage Ctx
@@ -249,6 +233,12 @@ export type AnyRpcInit = RpcInit<
 export interface Ctx<Val = unknown> {
   (x: CtxArg): Promise<Val> | Val;
 }
+
+/**
+ * Matches any valid context function. Useful for type constraints.
+ */
+// deno-lint-ignore no-explicit-any
+export type AnyCtx = Ctx<any>;
 
 /** Arguments available to the Ctx function of an Rpc. */
 export interface CtxArg {
@@ -294,12 +284,12 @@ export interface CtxArg {
  * top-level response() function, i.e. it undergoes packing via packBody().
  */
 export interface Resolve<
-  Resp = unknown,
-  Groups extends AnyParser | null = null,
-  Context extends Ctx<unknown> | null = null,
-  Query extends AnyParser | null = null,
-  Message extends AnyParser | null = null,
-  Upgrade extends boolean | null = null,
+  Resp,
+  Groups extends AnyParser | null,
+  Context extends AnyCtx | null,
+  Query extends AnyParser | null,
+  Message extends AnyParser | null,
+  Upgrade extends boolean | null,
 > {
   (x: ResolveArg<
     Groups,
@@ -312,11 +302,11 @@ export interface Resolve<
 
 /** Arguments available to a Resolver function. */
 export interface ResolveArg<
-  Groups extends AnyParser | null = null,
-  Context extends Ctx<unknown> | null = null,
-  Query extends AnyParser | null = null,
-  Message extends AnyParser | null = null,
-  Upgrade extends boolean | null = null,
+  Groups extends AnyParser | null,
+  Context extends AnyCtx | null,
+  Query extends AnyParser | null,
+  Message extends AnyParser | null,
+  Upgrade extends boolean | null,
 > {
   /** The incoming Request this Rpc is handling. */
   req: Request;
@@ -414,14 +404,15 @@ export interface ResolveErrorArg extends CtxArg {
  * Creates an endpoint handler for resolving Requests into Responses.
  */
 export function rpc<
-  Resp = unknown,
+  I,
+  Resp = undefined,
   Groups extends AnyParser | null = null,
-  Context extends Ctx<unknown> | null = null,
+  Context extends AnyCtx | null = null,
   Query extends AnyParser | null = null,
   Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 >(
-  init: RpcInit<
+  init: I & RpcInit<
     Resp,
     Groups,
     Context,
@@ -429,7 +420,8 @@ export function rpc<
     Message,
     Upgrade
   >,
-): Rpc<Resp, Groups, Context, Query, Message, Upgrade> {
+// ): Rpc<Resp, Groups, Context, Query, Message, Upgrade> {
+): Rpc<I> {
   const useFullPath = init.path && init.path.startsWith("^");
   const pathPattern = new URLPattern(
     init.path && useFullPath ? init.path.slice(1) : init.path || "/",
