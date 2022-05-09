@@ -105,7 +105,13 @@ requests, and will always reply with "Hello, world!" as a plaintext response.
 When it receives any other kind of request, it will throw an appropriate
 HttpError.
 
-TODO: Left off here
+TODO: Brief introduction to the `rpc()` function and link to the `rpc.md` doc for more information
+
+TODO: Several complex examples of RPCs labeled and collapsed with
+details/summary blocks
+
+TODO: Brief introduction to the `serve()` and `server()` functions and link to
+the `http.md` doc for more information
 
 ## Routing
 
