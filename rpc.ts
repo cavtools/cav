@@ -45,10 +45,10 @@ import type { ServeAssetOptions } from "./assets.ts";
  * building blocks of Cav server applications, the other being Stacks. Rpcs are
  * responsible for handling a request, and Stacks are responsible for routing a
  * request to the appropriate Rpc. Once a Request reaches an Rpc and the Rpc's
- * path matches the request, the Rpc is expected to handle all errors and return
- * a Response. If the path doesn't match the Rpc's path, the special NO_MATCH
- * error will be thrown. Uncaught errors bubble up to and are handled by the
- * top-level Server, which will log them and respond with a 500 Response.
+ * `path` matches the request, the Rpc is expected to handle all errors and
+ * return a Response. If the path doesn't match the Rpc's path, the special
+ * NO_MATCH error will be thrown. Uncaught errors are handled by the top-level
+ * Server, which will log them and send a 500 Response.
  */
 export interface Rpc<
   I extends AnyRpcInit = Record<never, never>,

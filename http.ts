@@ -2,7 +2,8 @@
 
 // TODO: Make it so that any object shape can be passed in as the query  
 // TODO: A serveFile() function that is like serveAsset() but doesn't abide by
-// the assets directory's quirks, it's just a regular static file serving function
+// the assets directory's quirks, it's just a regular static file serving
+// function. i.e. no "dir" option, just cwd and path
 
 import { base64, http } from "./deps.ts";
 import { HttpError, serializeBody, deserializeBody } from "./serial.ts";
@@ -35,7 +36,9 @@ export interface Res extends ResponseInit {
   // Note the extends already covers status and statusText
 }
 
-/** A metadata object generated once for every request. */
+/**
+ * A metadata object generated once for every request.
+ */
 export interface RequestData {
   /**
    * A ResponseInit applied to the Rpc response after resolving and packing the
@@ -44,7 +47,9 @@ export interface RequestData {
    * be ignored but the headers will still be applied.
    */
   res: Res;
-  /** WHATWG URL object generated from the request.url. */
+  /**
+   * new URL(req.url)
+   */
   url: URL;
   /**
    * The request path. This is intended to be modified by a Stack. When the
@@ -167,15 +172,18 @@ export async function requestBody(req: Request, opt?: {
 /**
  * Cav's cookie interface. This interface provides synchronous access to cookie
  * values. The actual signing of signed cookies needs to be asynchronous,
- * however. In order to compensate for this, once you are done accessing and
- * modifying the cookie, you need to call the async "flush()" in order to sync
- * cookie updates to the response headers that were provided when the cookie was
- * initialized.
+ * however. Once you are done accessing and modifying the cookie, you need to
+ * call the async "flush()" to sync cookie updates to the response headers that
+ * were provided when the cookie was initialized.
  */
 export interface Cookie {
-  /** The original cookie keys and values, before modifications were made. */
+  /**
+   * The original cookie keys and values, before modifications were made.
+   */
   readonly original: { readonly [x: string]: string };
-  /** Gets an optionally signed cookie value by its key name. */
+  /**
+   * Gets an optionally signed cookie value by its key name.
+   */
   get(name: string, opt?: { signed?: boolean }): string | undefined;
   /**
    * Sets a cookie value using the Deno std http module's cookie options. To
@@ -190,28 +198,42 @@ export interface Cookie {
    * object but the set-cookie header will still be sent on the response.
    */
   delete(name: string, opt?: CookieDeleteOptions): void;
-  /** Returns the signed cookie entries as an array. */
+  /**
+   * Returns the signed cookie entries as an array.
+   */
   signed(): [string, string][];
-  /** Returns the unsigned cookie entries as an array. */
+  /**
+   * Returns the unsigned cookie entries as an array.
+   */
   unsigned(): [string, string][];
   /**
-   * Asynchronously flushes cookie updates to the response headers that were
-   * baked into the cookie.
+   * Flushes cookie updates to the response headers that were baked into the
+   * cookie.
    */
   flush(): Promise<void>;
 }
 
-/** Extends the Deno default cookie set options to include the "signed" flag. */
+/**
+ * Extends the Deno default cookie set options to include the "signed" flag.
+ */
 export interface CookieSetOptions extends Omit<http.Cookie, "name" | "value"> {
-  /** Whether or not this cookie should be signed. Default: false */
+  /**
+   * Whether or not this cookie should be signed. Default: false
+   */
   signed?: boolean;
 }
 
-/** Limits what paths/domains a cookie should be deleted for. */
+/**
+ * Limits what paths/domains a cookie should be deleted for.
+ */
 export interface CookieDeleteOptions {
-  /** Limits the deleted cookie to the given path. */
+  /**
+   * Limits the deleted cookie to the given path.
+   */
   path?: string;
-  /** Limits the deleted cookie to the given domain. */
+  /**
+   * Limits the deleted cookie to the given domain.
+   */
   domain?: string;
 }
 

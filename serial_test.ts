@@ -4,7 +4,6 @@ import { assertEquals, assertStrictEquals } from "./deps_test.ts";
 import {
   serialize,
   deserialize,
-  useSerializers,
   serializer,
 } from "./serial.ts";
 import type { Serializers } from "./serial.ts";
@@ -23,7 +22,6 @@ Deno.test("[superjson_20220328]: serialize() and deserialize()", async (t) => {
       input: any; output: any; packed: any; unpacked: any;
     }) => void;
     localSerializers?: Serializers;
-    globalSerializers?: Serializers;
   }> = {
     "objects": {
       input: {
@@ -330,24 +328,15 @@ Deno.test("[superjson_20220328]: serialize() and deserialize()", async (t) => {
     "custom transformers": {
       input: {
         testLocal: { testLocal: true },
-        testGlobal: { testGlobal: true },
       },
       output: {
         testLocal: { $testLocal: null },
-        testGlobal: { $testGlobal: null },
       },
       localSerializers: {
         testLocal: serializer({
           check: (v: { testLocal?: boolean }) => v.testLocal === true,
           serialize: () => null,
           deserialize: () => ({ testLocal: true }),
-        }),
-      },
-      globalSerializers: {
-        testGlobal: serializer({
-          check: (v: { testGlobal?: boolean }) => v.testGlobal === true,
-          serialize: () => null,
-          deserialize: () => ({ testGlobal: true }),
         }),
       },
     },
@@ -409,10 +398,6 @@ Deno.test("[superjson_20220328]: serialize() and deserialize()", async (t) => {
   for (const [k, v] of Object.entries(data)) {
     await t.step(k, async (t) => {
       const i = typeof v.input === "function" ? v.input() : v.input;
-      
-      if (v.globalSerializers) {
-        useSerializers(v.globalSerializers);
-      }
 
       let packed: unknown;
       let unpacked: unknown;

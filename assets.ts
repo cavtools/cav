@@ -43,6 +43,14 @@ function parseCwd(cwd: string): string {
  * Response factory for serving static assets. Asset resolution uses the
  * provided ServeAssetOptions, the Request is only used for caching headers like
  * ETag etc.
+ *
+ * TypeScript (ts & tsx) assets will not be served. They will be treated as if
+ * they don't exist.
+ *
+ * If the --unstable and --allow-write permissions are granted, the asset
+ * preparation procedure will be started for the given assets directory, if it
+ * hasn't already been started by a previous request. See the `prepareAssets()`
+ * function for more information.
  */
 export async function serveAsset(
   req: Request,
@@ -148,13 +156,15 @@ export async function serveAsset(
   }
 }
 
+// @ts-ignore: Bypass error when --unstable isn't specified
+const canEmit = typeof Deno.emit === "undefined";
 const watchingAssets = new Set<string>();
 
 /**
  * Asset preparation procedure that does the following:
  *
- * - Bundles every .ts and .tsx file in the folder (recursive) into an adjacent
- *   .bundle.js file
+ * - Bundles every *_bundle.ts and *_bundle.tsx file in the folder (recursive)
+ *   into an adjacent _bundle.ts(x).js file
  * - Optionally uses a filesystem watcher to rebundle whenever a change is made
  *   to the typescript files or one of their local dependencies. (The default is
  *   to set watching to true)
@@ -201,24 +211,23 @@ export async function prepareAssets(opt: {
   const dir = opt.dir || "assets";
   const assets = path.join(cwd, dir);
 
-  if (opt.watch && watchingAssets.has(assets)) {
+  if (
+    !canEmit ||
+    (opt.watch && watchingAssets.has(assets))
+  ) {
     return;
   }
 
-  if (
-    // @ts-ignore: Bypass error when --unstable isn't specified
-    typeof Deno.emit === "undefined" ||
-    (await Deno.permissions.query({
-      name: "write",
-      path: assets,
-    })).state !== "granted"
-  ) {
+  if ((await Deno.permissions.query({
+    name: "write",
+    path: assets,
+  })).state !== "granted") {
     return;
   }
 
   const check = await Deno.stat(assets);
   if (!check.isDirectory) {
-    throw new Error("path given was not a directory");
+    throw new Error(`path given is not a directory: ${assets}`);
   }
 
   const modules: string[] = [];
