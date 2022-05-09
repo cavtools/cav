@@ -227,6 +227,9 @@ export type Handler = (
   ...a: any[]
 ) => Promise<Response> | Response;
 
+// TODO: Add an Endpoint interface
+// TODO: Add a Router interface
+
 /**
  * An endpoint handler can use this Request type to ferry type information to
  * the client from the server about what client arguments are acceptable.
