@@ -5,15 +5,15 @@ import {
   serialize,
   deserialize,
   serializer,
-} from "../../serial.ts";
-import type { Serializers } from "../../serial.ts";
+} from "../serial.ts";
+import type { Serializers } from "../serial.ts";
 
 // TODO: Tests for serializeBody and deserializeBody
 
 // The following tests are modeled after superjson's tests as of March 28, 2022:
 // https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
 
-Deno.test("[superjson_20220328]: serialize() and deserialize()", async (t) => {
+Deno.test("serialize() and deserialize()", async (t) => {
   const data: Record<string, {
     input: unknown;
     output: unknown;

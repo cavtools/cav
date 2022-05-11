@@ -1,12 +1,12 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { assertEquals } from "./deps_test.ts";
-import { client } from "../../client.ts";
+import { client } from "../client.ts";
 import type {
   EndpointRequest,
   EndpointResponse,
   RouterRequest,
-} from "../../client.ts";
+} from "../client.ts";
 
 Deno.test("regular client fetch", async t => {
   // Setup

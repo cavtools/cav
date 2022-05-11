@@ -7,7 +7,10 @@ import {
   ParserInput,
   ParserObject,
   ParserOutput,
-} from "../../parser.ts";
+} from "../parser.ts";
+
+// There's nothing real to test here, so I'm just doing some typescript tests
+// that won't compile if the Parser types aren't behaving correctly
 
 // Parsers can be regular input => output functions
 ((x: unknown) => x) as Parser;
@@ -18,8 +21,8 @@ import {
 ({ parse: (x: unknown) => x }) as ParserObject;
 
 // Non-parsers don't match
-true as ({ notParse: (_: string) => string }) extends Parser ? string : boolean;
-true as ((_: never) => boolean) extends Parser ? string : boolean;
+true as ({ notParse: (_: string) => string }) extends Parser ? null : boolean;
+true as ((_: never) => boolean) extends Parser ? null : boolean;
 
 // The input/output types of the Parser match the arg/return types of the fn
 ({ parse: (_: boolean) => 1234 }) as Parser<boolean, number>;
@@ -34,3 +37,7 @@ true as ((_: never) => boolean) extends Parser ? string : boolean;
 ({ output: null }) as ParserOutput<Parser<null, { output: null }>>;
 
 // The AnyParser type matches any Parser, but not a non-Parser
+({}) as Parser<true, false> as AnyParser;
+({}) as Parser<{ hello: "world" }, Map<null, Date>> as AnyParser;
+true as boolean extends AnyParser ? null : boolean;
+true as Record<never, never> extends AnyParser ? null : boolean;

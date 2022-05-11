@@ -71,7 +71,7 @@ export interface Serializer<I = unknown, O = unknown> {
 /**
  * A Serializer's `deserialize()` function receives the raw serialized JSON
  * value as its first argument and this registration function as the second.
- * Functions registered with WhenDone will be run last-in-first-out (stack
+ * Functions registered with whenDone will be run last-in-first-out (stack
  * order) when the raw JSON has been processed into the final object instance.
  * WhenDone functions are needed whenever the serialized data is more complex
  * than simple JSON values, for example when referential equality needs to be
@@ -79,6 +79,9 @@ export interface Serializer<I = unknown, O = unknown> {
  * re-serialized by some other serializer. Referenced objects may not be fully
  * initialized when the registered function is called, but its instance will be
  * instantiated so that references can be fixed.
+ *
+ * Credit goes to [json-dry](https://github.com/11ways/json-dry) for the
+ * whenDone concept.
  */
 export type WhenDone<O> = (fn: (serialized: O) => void) => void;
 

@@ -3,7 +3,7 @@
 NOTE: This is new, don't use it in production.
 
 Cav is an experimental full stack web framework for [Deno](https://deno.land).
-Some notable features:
+Here's notable features:
 
 - [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
 - Compatible with [Zod](https://github.com/colinhacks/zod) parsers
