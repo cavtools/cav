@@ -11,13 +11,13 @@ Some notable features:
 - Serializes (nearly) any JavaScript type
 - Functional and declarative syntax
 - Isomorphic TypeScript client +
-- Handles regular HTTP forms (no JS required)
+- Handles regular HTTP forms (no client JS required)
 - Web socket support
 - "Zero config"
 - Zero third-party dependencies
 - No enforced project structure
-- Works great with [Preact](https://preactjs.com)
-- Works great with vanilla HTML/CSS/JS
+- Works with [Preact](https://preactjs.com)
+- Works with vanilla HTML/CSS/JS
 - [Deno Deploy](https://deno.com) without a build step
 
 ## Inspirations
@@ -56,7 +56,8 @@ When the root path is requested ("GET /"), the text "Hello, world!" will be
 returned with a "text/plain" content-type. Any other request method will result
 in a 405 error, and any other request path will result in a 404 error.
 
-Assuming this app is in `./main.ts`, the server can be started with the following:
+Assuming the above code is in `./main.ts`, the server can be started with the
+following:
 
 ```
 > deno run --allow-net main.ts
@@ -73,9 +74,9 @@ Let's break down the example from the previous section block-by-block:
 import { rpc, serve } from "https://deno.land/x/cav/mod.ts";
 ```
 
-This block imports two frequently used functions from the most recent Cav
-release: `rpc()` for creating HTTP endpoints, and `serve()` for binding created
-HTTP handlers to the host and starting the server event loop.
+This block imports two functions from the most recent Cav release: `rpc()`, for
+creating HTTP endpoints; and `serve()`, for binding HTTP handlers (such as RPC
+endpoints) to the host and starting the server event loop.
 
 In production, you'll usually want to pin your dependencies to a specific version, like this:
 

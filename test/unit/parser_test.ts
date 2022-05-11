@@ -7,7 +7,7 @@ import {
   ParserInput,
   ParserObject,
   ParserOutput,
-} from "../parser.ts";
+} from "../../parser.ts";
 
 // Parsers can be regular input => output functions
 ((x: unknown) => x) as Parser;

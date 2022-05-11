@@ -1,5 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
+// TODO: html, css, js template tag utilities
+
 // TODO: What happens when you try to upgrade for an assets request?  
 // TODO: accept multiple strings for the path init option  
 // TODO: files and blobs that flush to disk when a certain memory threshold is

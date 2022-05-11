@@ -5,8 +5,8 @@ import {
   serialize,
   deserialize,
   serializer,
-} from "../serial.ts";
-import type { Serializers } from "../serial.ts";
+} from "../../serial.ts";
+import type { Serializers } from "../../serial.ts";
 
 // TODO: Tests for serializeBody and deserializeBody
 
