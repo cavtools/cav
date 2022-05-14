@@ -45,6 +45,13 @@ export interface RequestContext {
    * when an Rpc has a "query" parser.
    */
   query: Record<string, string | string[]>;
+  /**
+   * If this property isn't null, it's a redirect Response that should be
+   * returned as soon as possible. It means the client requested a non-canonical
+   * path that either ends in a trailing slash or contains empty path segments.
+   * Cav requires redirects all non-canonical paths to their canonical version.
+   */
+  redirect: Response | null;
 }
 
 // The RequestContext is tied to the lifetime of the Request by storing a
@@ -58,7 +65,7 @@ const _requestContext = Symbol("cav_requestContext");
  * other time the request passes through this function, the same object
  * generated on the first call is returned without further modification.
  */
-export function requestContext(request: Request): RequestContext | Response {
+export function requestContext(request: Request): RequestContext {
   const req = request as Request & Record<typeof _requestContext, RequestContext>;
   if (req[_requestContext]) {
     return req[_requestContext];
@@ -66,10 +73,10 @@ export function requestContext(request: Request): RequestContext | Response {
 
   const url = new URL(req.url);
   const path = `/${url.pathname.split("/").filter(p => !!p).join("/")}`;
-  if (path !== url.pathname) {
-    url.pathname = path;
-    return Response.redirect(url.href, 302);
-  }
+  const redirect = (
+    path !== url.pathname ? Response.redirect(url.href, 302)
+    : null
+  );
 
   const query: Record<string, string | string[]> = {};
   url.searchParams.forEach((v, k) => {
@@ -84,6 +91,7 @@ export function requestContext(request: Request): RequestContext | Response {
   });
 
   const ctx: RequestContext = {
+    redirect,
     res: { headers: new Headers() },
     url,
     path,
@@ -390,13 +398,9 @@ async function sign(data: string, key: string): Promise<string> {
   );
 }
 
-/**
- * Initializer options for an EndpointResponse.
- */
+/** Initializer options for the endpointResponse() function. */
 export interface EndpointResponseInit extends ResponseInit {
-  /**
-   * Additional packers to use when packing the response body.
-   */
+  /** Additional packers to use when packing the response body. */
   serializers?: Serializers;
 }
 
@@ -408,7 +412,7 @@ export interface EndpointResponseInit extends ResponseInit {
  * ignored. Extra serializers can be used to extend the data types that can be
  * serialized.
  */
-export function response<T = unknown>(
+export function endpointResponse<T = unknown>(
   body: T,
   init?: EndpointResponseInit,
 ): EndpointResponse<
@@ -427,6 +431,14 @@ export function response<T = unknown>(
 
   if (typeof body === "undefined") {
     return new Response(null, { status: 204, ...init, headers });
+  }
+
+  if (body instanceof HttpError && !body.expose) {
+    headers.append("content-type", "text/plain");
+    return new Response(body.message, {
+      status: body.status,
+      headers,
+    });
   }
 
   const { body: b, mime: m } = serializeBody(body, init?.serializers);

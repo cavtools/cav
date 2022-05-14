@@ -1,17 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import {
-  rpc,
-  assets,
-  redirect,
-  rpcInit,
-} from "../rpc.ts";
-import { assertEquals, assertRejects } from "./deps_test.ts";
-import { HttpError } from "../serial.ts";
-import { NO_MATCH } from "../http.ts";
+import { rpc } from "../rpc.ts";
+import { assertEquals } from "./deps_test.ts";
 
-// These values don't matter
-const connInfo = {
+// These values don't matter, it just needs to match http.ConnInfo
+const conn = {
   localAddr: {
     transport: "tcp" as const,
     hostname: "localhost",
@@ -30,36 +23,24 @@ Deno.test({
     const testRpc = rpc({});
 
     await t.step("Returns 204 with GET /", async () => {
-      const res = await testRpc(new Request(
-        "http://localhost/",
-      ), connInfo);
-
+      const res = await testRpc(new Request("http://localhost/"), conn);
       assertEquals(res.status, 204);
       assertEquals(res.body, null);
     });
     
-    // TODO: Maybe it shouldn't throw? Maybe it should just return a 404
-    // response, and only the final 404 response in a stack is actually returned
-    await t.step("Throws NO_MATCH when request path isn't /", async () => {
-      await assertRejects(async () => {
-        await testRpc(new Request("http://localhost/hello"), connInfo);
-      }, (err: Error) => assertEquals(err, NO_MATCH));
+    await t.step("Returns 404 when request path isn't /", async () => {
+      const res = await testRpc(new Request("http://localhost/404"), conn);
+      assertEquals(res.status, 404);
+      assertEquals(await res.text(), "404 not found");
     });
 
-    await t.step("Returns a serialized 405 HttpError with POST", async () => {
-      const res =  await testRpc(
+    await t.step("Returns 405 when request method is POST", async () => {
+      const res = await testRpc(
         new Request("http://localhost/", { method: "POST", body: "test" }),
-        connInfo,
+        conn,
       );
-      
       assertEquals(res.status, 405);
-      assertEquals(await res.json(), { // TODO: This should just be text
-        $httpError: {
-          status: 405,
-          message: "405 method not allowed",
-          expose: { "$undefined": null }, // TODO: This is lame
-        },
-      });
+      assertEquals(await res.text(), "405 method not allowed");
     });
   },
 });

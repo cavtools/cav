@@ -2,7 +2,6 @@
 
 import { path, fileServer, graph } from "./deps.ts";
 import { HttpError } from "./serial.ts";
-import { NO_MATCH } from "./http.ts";
 
 /** Options controlling how assets are found and served. */
 export interface ServeAssetOptions {
@@ -150,7 +149,7 @@ export async function serveAsset(
     return new Response(content, { headers: originalResponse.headers });
   } catch (e1) {
     if (e1.message === "404 not found") {
-      throw NO_MATCH;
+      throw new HttpError("404 not found", { status: 404 });
     }
     throw e1;
   }

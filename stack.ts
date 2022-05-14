@@ -5,7 +5,7 @@
 // unknown type on the client when they use it instead)  
 
 import { http } from "./deps.ts";
-import { requestData, NO_MATCH } from "./http.ts";
+import { requestContext } from "./http.ts";
 
 import type { RouterRequest, RouterShape, Handler } from "./client.ts";
 
@@ -112,54 +112,56 @@ export function stack<S extends RouterShape>(routes: S): Stack<S> {
     patterns.set(new URLPattern(p, "http://_._"), handlers[op]);
   }
 
-  const stackHandler = async (
+  const handler = async (
     req: Request,
     conn: http.ConnInfo,
   ): Promise<Response> => {
-    const data = requestData(req);
-    if (data instanceof Response) { // Handle malformed path redirect
-      return data;
+    // Check for redirect
+    const reqCtx = requestContext(req);
+    if (reqCtx.redirect) {
+      return reqCtx.redirect;
     }
 
+    // When nothing matches, the last seen plaintext 404 error is returned,
+    // defaulting to this one
+    let last404 = new Response("404 not found", { status: 404 });
+
     for (const [pattern, handler] of patterns.entries()) {
-      const match = pattern.exec(data.path, "http://_._");
+      const match = pattern.exec(reqCtx.path, "http://_._");
       if (!match) {
         continue;
       }
 
-      const groups = { ...data.groups, ...match.pathname.groups };
+      const groups = { ...reqCtx.groups, ...match.pathname.groups };
       const path = `/${groups[nextPathGroupName] || ""}`;
       delete groups[nextPathGroupName];
 
-      const oPath = data.path;
-      const oGroups = data.groups;
+      const oPath = reqCtx.path;
+      const oGroups = reqCtx.groups;
 
-      // The data object is only created once for every request, therefore
+      // The context object is only created once for every request, so
       // modifications to the data object will be preserved across handling
       // contexts
-      Object.assign(data, { path, groups });
+      Object.assign(reqCtx, { path, groups });
 
       try {
         if (Array.isArray(handler)) {
           for (const h of handler) {
-            try {
-              return await h(req, conn);
-            } catch (e) {
-              if (e === NO_MATCH) {
-                continue;
-              }
+            const response = await h(req, conn);
+            if (didMatch(response)) {
+              return response;
+            } else {
+              last404 = response;
             }
           }
-          throw NO_MATCH;
+        } else {
+          const response = await handler(req, conn);
+          if (didMatch(response)) {
+            return response;
+          } else {
+            last404 = response;
+          }
         }
-        return await handler(req, conn);
-      } catch (e) {
-        // Keep looking for matches if it's the NO_MATCH error. All other errors
-        // bubble
-        if (e === NO_MATCH) {
-          continue;
-        }
-        throw e;
       } finally {
         // Before moving on, put the path and groups back to their original
         // state
@@ -167,9 +169,24 @@ export function stack<S extends RouterShape>(routes: S): Stack<S> {
       }
     }
 
-    // When nothing matches, throw NO_MATCH
-    throw NO_MATCH;
+    // When nothing matches, return the last 404
+    return last404;
   };
 
-  return Object.assign(stackHandler, { routes });
+  return Object.assign(handler, { routes });
+}
+
+/**
+ * Checks if a Response should be considered a "no match" response, indicating
+ * to the stack if it should continue looking for matches or not. Currently, a
+ * "no match" response is a 404 Reponse with a plaintext body.
+ */
+function didMatch(response: Response): boolean {
+  if (response.status === 404) {
+    const mime = response.headers.get("content-type");
+    if (mime === "text/plain") {
+      return false;
+    }
+  }
+  return true;
 }
