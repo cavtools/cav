@@ -8,7 +8,7 @@ import type {
   RouterRequest,
 } from "../client.ts";
 
-Deno.test("regular client fetch", async t => {
+Deno.test("client fetch", async t => {
   // Setup
   const oldFetch = self.fetch; // Put it back when you're done
   const lastFetch = {

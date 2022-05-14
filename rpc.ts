@@ -42,12 +42,17 @@ import type { ServeAssetOptions } from "./assets.ts";
  */
 export interface Rpc<I extends AnyRpcInit = Record<never, never>> {
   (
-    req: EndpointRequest<ParserInput<I['query']>, ParserInput<I['message']>, I['upgrade'] extends true ? true : never>,
+    req: EndpointRequest<
+      ParserInput<I["query"]>,
+      ParserInput<I["message"]>,
+      I["upgrade"] extends true ? true : never
+    >,
     conn: http.ConnInfo,
   ): Promise<EndpointResponse<
     // deno-lint-ignore no-explicit-any
-    I['resolve'] extends (...a: any[]) => Promise<infer R> | infer R ? R
-    : unknown
+    I["resolve"] extends (...a: any[]) => Promise<infer R> | infer R ? R
+    : "resolve" extends keyof I ? never
+    : undefined
   >>;
   /** The RpcInit options used to construct this Rpc. */
   readonly init: I;
