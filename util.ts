@@ -4,7 +4,7 @@ import { rpc } from "./rpc.ts";
 import { prepareAssets } from "./assets.ts";
 import type { ServeAssetOptions } from "./assets.ts";
 
-// TODO: Add RpcInit options
+// TODO: Add RpcInit options 
 /** Initializer options for the assets() utility function. */
 export type AssetsInit = Omit<ServeAssetOptions, "path">;
 
