@@ -1,14 +1,8 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-// TODO: Make it so that any object shape can be passed in as the query  
-// TODO: A serveFile() function that is like serveAsset() but doesn't abide by
-// the assets directory's quirks, it's just a regular static file serving
-// function. i.e. no "dir" option, just cwd and path
-
 import { base64, http } from "./deps.ts";
 import { HttpError, serializeBody, deserializeBody } from "./serial.ts";
 import { wrapWebSocket } from "./client.ts";
-
 import type { Serializers } from "./serial.ts";
 import type {
   Socket,
@@ -18,54 +12,32 @@ import type {
 import type { Parser, ParserOutput } from "./parser.ts";
 
 /**
- * A special 404 HttpError that should be thrown whenever a handler is refusing
- * to respond to a request due to the path not matching constraints. This is
- * thrown by Rpcs when path matching fails. If a Stack catches this error, it
- * will continue looking for matching routes.
+ * A metadata cache object generated once for every Request handled with a Cav
+ * handler (Stacks and Rpcs).
  */
-export const NO_MATCH = new HttpError("404 not found", { status: 404 });
-
-/**
- * A ResponseInit applied to the Rpc response after resolving and packing the
- * value to send to the client. The Headers object is always available. If the
- * resolved value is a Response object already, the status and statusText will
- * be ignored but the headers will still be applied.
- */
-export interface Res extends ResponseInit {
-  headers: Headers;
-  // Note the extends already covers status and statusText
-}
-
-/**
- * A metadata object generated once for every request.
- */
-export interface RequestData {
+export interface RequestContext {
   /**
    * A ResponseInit applied to the Rpc response after resolving and packing the
-   * value to send to the client. The Headers object is always available. If the
-   * resolved value is a Response object already, the status and statusText will
-   * be ignored but the headers will still be applied.
+   * value to send to the client. The Headers object is always available.
    */
-  res: Res;
+  res: ResponseInit & { headers: Headers; };
   /**
    * new URL(req.url)
    */
   url: URL;
   /**
-   * The request path. This is intended to be modified by a Stack. When the
-   * RequestData is initially generated, this is equal to the url.pathname. As
-   * the request gets processed, the Stack matches this path against registered
-   * routes. When a route matches and has a forwarded-wildcard (ends in "/*"),
-   * this path will be the value of that wildcard inside the next handler
-   * (either an Rpc or Stack). When a route matches and doesn't have that
-   * wildcard, the Stack will modify this path to be "/" inside the next
-   * handler.
+   * The request path. This is intended to be modified by a Stack during request
+   * routing. When the RequestContext is initially generated, this is set to the
+   * url.pathname. As the request gets processed, the Stack matches this path
+   * against registered routes. When a route matches, this path will be set to
+   * the unmatched portion of the requested path before calling the matching
+   * route handler.
    */
   path: string;
   /**
    * As Stacks process a request, they can capture path groups. The path groups
-   * are stored in this object. Old groups will be overwritten by groups
-   * captured further down the handler tree.
+   * are stored in this object. During name conflicts, old groups will be
+   * overwritten by groups captured further down the handler tree.
    */
   groups: Record<string, string>;
   /**
@@ -75,26 +47,23 @@ export interface RequestData {
   query: Record<string, string | string[]>;
 }
 
-const _requestData = Symbol("_requestData");
+// The RequestContext is tied to the lifetime of the Request by storing a
+// reference to the context on the Request itself using this symbol
+const _requestContext = Symbol("cav_requestContext");
 
 /**
- * Generates or returns a previously generated RequestData for a given request.
- * If this is the first time requestData is being called for the given request,
- * the RequestData object is generated and returned. Every other time the
- * request passes through this function, the same object generated on the first
- * call is returned without further modification.
- *
- * If the request should be redirected before being processed, a Response will
- * be returned instead.
+ * Generates or returns a previously generated RequestContext for a given
+ * request. If this is the first time requestContext is being called for the
+ * given request, the RequestContext object is generated and returned. Every
+ * other time the request passes through this function, the same object
+ * generated on the first call is returned without further modification.
  */
-export function requestData(request: Request): RequestData | Response {
-  const req = request as Request & Record<typeof _requestData, RequestData>;
-  if (req[_requestData]) {
-    return req[_requestData];
+export function requestContext(request: Request): RequestContext | Response {
+  const req = request as Request & Record<typeof _requestContext, RequestContext>;
+  if (req[_requestContext]) {
+    return req[_requestContext];
   }
 
-  // REVIEW: Still not sure if this is where the redirect for trailing slashes
-  // should happen, or if it should even happen at all
   const url = new URL(req.url);
   const path = `/${url.pathname.split("/").filter(p => !!p).join("/")}`;
   if (path !== url.pathname) {
@@ -114,15 +83,15 @@ export function requestData(request: Request): RequestData | Response {
     }
   });
 
-  const data: RequestData = {
+  const ctx: RequestContext = {
     res: { headers: new Headers() },
     url,
     path,
     groups: {},
     query,
   };
-  Object.assign(req, { [_requestData]: data });
-  return data;
+  Object.assign(req, { [_requestContext]: ctx });
+  return ctx;
 }
 
 const methodsWithBodies = new Set([
@@ -155,10 +124,10 @@ export async function requestBody(req: Request, opt?: {
 
   // TODO: With HTTP/2, it's possible to have a streamed body that has no
   // content-length. Cav doesn't use streamed bodies on the client side, but
-  // they should still be supported. Enforcing the maxBodySize in that case
-  // would require buffering and reading the body manually, I think? And
-  // throwing an error when the max size has been met? Seems like a pain but not
-  // sure what else to do
+  // they should still be supported on the server side. Enforcing the
+  // maxBodySize in that case would require buffering and reading the body
+  // manually, I think? And throwing an error when the max size has been met?
+  // Seems like a pain but not sure what else to do
   const length = parseInt(req.headers.get("content-length") || "", 10);
   if (isNaN(length)) {
     throw new HttpError("411 length required", { status: 411 });
@@ -434,9 +403,10 @@ export interface EndpointResponseInit extends ResponseInit {
 /**
  * Creates an EndpointResponse from the provided body, which is serialized using
  * the top-level serializeBody function. If the provided body is already a
- * Response object, it will be returned with the headers provided on the init
- * argument applied (if there are any). Extra serializers can be provided on the
- * init argument to extend the data types that can be serialized.
+ * Response object, it will be returned with the init headers applied (if there
+ * are any). In that case, the status and statusText init options will be
+ * ignored. Extra serializers can be used to extend the data types that can be
+ * serialized.
  */
 export function response<T = unknown>(
   body: T,
@@ -471,8 +441,8 @@ export function response<T = unknown>(
 
 /**
  * The server-side equivalent of the wrapWebSocket function in the client
- * module. Returns a Response which should be returned by the handler for the
- * socket upgrade to complete successfully.
+ * module. Returns the Socket instance and a Response which should be returned
+ * by the handler for the socket upgrade to complete successfully.
  */
 export function upgradeWebSocket<
   Send = unknown,
@@ -505,111 +475,37 @@ export function upgradeWebSocket<
   }
 }
 
-const _server = Symbol("_server");
+/**
+ * Options for running an http server. This is a re-export of the ServerInit
+ * type from https://deno.land/std/http/server.ts.
+ */
+export type ServerInit = http.ServerInit;
 
 /**
- * The standard http.Server type, but with a type parameter indicating the type
- * of the handler that was passed in. The handler will usually be a Stack but
- * could be any other type of Handler.
+ * An http server. This is a re-export of the Server type from
+ * https://deno.land/std/http/server.ts.
  */
-export interface Server<H extends http.Handler> extends http.Server {
-  [_server]?: H; // Imaginary
+export type Server = http.Server;
+
+/**
+ * Constructs a new server instance. This is a simple function wrapper around
+ * the Server constructor from https://deno.land/std/http/server.ts.
+ */
+export function server(init: ServerInit): Server {
+  return new http.Server(init);
 }
 
 /**
- * The standard http.ServerInit type with a type parameter indicating the type
- * of the handler this server is serving. Additionally, the "onError" property
- * has been omitted; errors in Cav should be handled at the Rpc level, as close
- * as possible to where the error occurred. When an error bubbles up to the
- * Server level, it will be logged and a 500 Response will be sent to the
- * client.
+ * Options for serving an http handler. This is a re-export of the ServeInit
+ * type from https://deno.land/std/server.ts.
  */
-export interface ServerInit<
-  H extends http.Handler,
-> extends Omit<http.ServerInit, "onError"> {
-  /**
-   * The port to bind to. Default: `80`
-   */
-  port?: number;
-  handler: H;
-}
+export type ServeInit = http.ServeInit;
 
 /**
- * Creates a Server using the provided ServerInit. Note that there is no
- * "onError" init option; errors that bubble up to the Server level are logged
- * and a 500 Response is sent back to the client. You should handle errors as
- * close as possible to where the error occurred, for example using the Rpc
- * "onError" init option.
+ * Serves HTTP requests with the given handler. (Stacks and Rpcs are handlers.)
+ * You can specify an object with a port and hostname option, which is the
+ * address to listen on. The default is port 8000 on hostname "0.0.0.0". This is
+ * a re-export of the serve() function from
+ * https://deno.land/std/http/server.ts.
  */
-export function server<H extends http.Handler>(
-  init: ServerInit<H>,
-): Server<H> {
-  return new http.Server({
-    ...init,
-    handler: async (req, conn) => {
-      const data = requestData(req);
-      if (data instanceof Response) { // Handle malformed path redirect
-        return data;
-      }
-      
-      let err: unknown = null;
-      try {
-        return await init.handler(req, conn);
-      } catch (e) {
-        err = e;
-      }
-
-      // Only three kinds of error should bubble up to this point legitimately:
-      // the NO_MATCH error, a 500+ HttpError, or an error of some other class.
-      // If it's a NO_MATCH, manually serialize it. If it's any other kind of
-      // error, continue to bugtracing below.
-      if (err === NO_MATCH) {
-        const e = err as HttpError;
-        const headers = data.res.headers;
-        headers.append("content-length", e.message.length.toString());
-        headers.append("content-type", "text/plain");
-        return new Response(req.method === "HEAD" ? null : e.message, {
-          status: e.status, // 404
-          headers: data.res.headers,
-        });
-      }
-
-      // Add a bugtrace code, log the error stack, and send a 500 with the
-      // code appended
-      const bugtrace = crypto.randomUUID().slice(0, 8);
-      console.error(
-        `Error [${bugtrace}]: Uncaught exception during "${req.method} ${req.url}" -`,
-        err, // REVIEW
-      );
-      const body = `500 internal server error [${bugtrace}]`;
-      data.res.headers.append("content-length", body.length.toString());
-      return new Response(req.method === "HEAD" ? null : body, {
-        status: (
-          err instanceof HttpError && err.status >= 500 ? err.status
-          : 500
-        ),
-        headers: data.res.headers,
-      });
-    },
-  });
-}
-
-/**
- * The ServerInit options available when using the serve() shorthand function.
- */
-export type ServeOpt = Omit<ServerInit<http.Handler>, "handler">;
-
-/**
- * Shorthand function for quickly serving a Handler. The default bind is
- * localhost:80. This function is a one-liner:
- *
- * ```ts
- * return await server({ ...opt, handler }).listenAndServe();
- * ```
- */
-export async function serve(
-  handler: http.Handler,
-  opt?: ServeOpt,
-): Promise<void> {
-  return await server({ ...opt, handler }).listenAndServe();
-}
+export const serve = http.serve;

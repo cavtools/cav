@@ -39,8 +39,7 @@ Deno.test({
     });
     
     // TODO: Maybe it shouldn't throw? Maybe it should just return a 404
-    // response with a special symbol property "noMatch" present. In the stack,
-    // if it has that symbol, keep looking for matches
+    // response, and only the final 404 response in a stack is actually returned
     await t.step("Throws NO_MATCH when request path isn't /", async () => {
       await assertRejects(async () => {
         await testRpc(new Request("http://localhost/hello"), connInfo);

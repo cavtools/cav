@@ -13,30 +13,25 @@
 
 import { http, path as stdPath } from "./deps.ts";
 import {
-  NO_MATCH,
-  requestData,
+  requestContext,
   requestBody,
   response,
   bakeCookie,
   upgradeWebSocket,
 } from "./http.ts";
 import { HttpError } from "./serial.ts";
-import { serveAsset, prepareAssets } from "./assets.ts";
+import { serveAsset } from "./assets.ts";
 
 import type {
   Socket,
   EndpointRequest,
   EndpointResponse,
 } from "./client.ts";
-import type {
-  Cookie,
-  Res,
-} from "./http.ts";
+import type { Cookie } from "./http.ts";
 import type {
   AnyParser,
   ParserOutput,
   ParserInput,
-  ParserObject,
   ParserFunction,
 } from "./parser.ts";
 import type { Serializers } from "./serial.ts";
@@ -52,15 +47,7 @@ import type { ServeAssetOptions } from "./assets.ts";
  * NO_MATCH error will be thrown. Uncaught errors are handled by the top-level
  * Server, which will log them and send a 500 Response.
  */
-export interface Rpc<
-  I extends AnyRpcInit = Record<never, never>,
-  // Resp = unknown,
-  // Groups extends AnyParser | null = null,
-  // Context extends AnyCtx | null = null,
-  // Query extends AnyParser | null = null,
-  // Message extends AnyParser | null = null,
-  // Upgrade extends boolean | null = null,
-> {
+export interface Rpc<I extends AnyRpcInit = Record<never, never>> {
   (
     req: EndpointRequest<ParserInput<I['query']>, ParserInput<I['message']>, I['upgrade'] extends true ? true : never>,
     conn: http.ConnInfo,
@@ -70,7 +57,6 @@ export interface Rpc<
     : unknown
   >>;
   /** The RpcInit options used to construct this Rpc. */
-  // readonly init: RpcInit<Resp, Groups, Context, Query, Message, Upgrade>;
   readonly init: I;
 }
 
@@ -79,13 +65,6 @@ export interface Rpc<
  * constraints.
  */
 export type AnyRpc = Rpc<AnyRpcInit>;
-//   // deno-lint-ignore no-explicit-any
-//   any,
-//   AnyParser | null,
-//   AnyCtx | null,
-//   AnyParser | null,
-//   AnyParser | null
-// >;
 
 /**
  * Initializer options when constructing Rpcs.
@@ -99,18 +78,16 @@ export interface RpcInit<
   Upgrade extends boolean | null = null,
 >{
   /**
-   * If the routed path of the request doesn't match this URLPattern string, the
-   * NO_MATCH error will be thrown and the stack will continue searching for
-   * matching routes. If this string starts with "^", the full Request path is
-   * used instead of the routed path. (The routed path is determined by the
-   * containing stack, the full path comes from `req.url.pathname`.) The default
-   * behavior expects that the containing stack(s) consumed the entire path,
-   * thus leaving the Rpc path as "/". The full URLPattern syntax is supported,
-   * and any captured path groups will be merged with the path groups captured
-   * by the containing stack(s) before undergoing groups parsing. (See the docs
-   * for the "groups" property.) The path that matched this string is available
-   * on the ResolveArg, CtxArg, and ResolveErrorArg as the "path" property.
-   * Default: `"/"`
+   * If the routed path of the request doesn't match this URLPattern string, a
+   * 404 Response will be returned before resolution starts. If this string
+   * starts with "^", the full Request path is used instead of the Stack routed
+   * path. The fallback behavior expects that the containing Stack(s) consumed
+   * the entire path, equivalent to specifying `path: "/"`. The full URLPattern
+   * syntax is supported, and any captured path groups will be merged with the
+   * path groups captured by the containing stack(s) before undergoing groups
+   * parsing. (See the docs for the "groups" property.) The path that matched
+   * this string is available on the ResolveArg, CtxArg, and ResolveErrorArg as
+   * the "path" property. Default: `"/"`
    */
   path?: string | null;
   /**
@@ -427,66 +404,27 @@ export function rpc<
   const useFullPath = init.path && init.path.startsWith("^");
   const pathPattern = new URLPattern(
     init.path && useFullPath ? init.path.slice(1) : init.path || "/",
-    "http://_._", // Doesn't matter, but stay consistent
+    "http://_._", // Doesn't matter
   );
-
-  const parsers: Record<
-    "groups" | "query" | "message",
-    // deno-lint-ignore no-explicit-any
-    ParserFunction<any, any> | null
-  > = {
-    groups: (
-      typeof init.groups === "function" ? init.groups
-      : init.groups ? (v: unknown) => (init.groups as ParserObject).parse(v)
-      : null
-    ),
-    query: (
-      typeof init.query === "function" ? init.query
-      : init.query ? (v: unknown) => (init.query as ParserObject).parse(v)
-      : null
-    ),
-    message: (
-      typeof init.message === "function" ? init.message
-      : init.message ?
-        (v: unknown) => (init.message as ParserObject).parse(v)
-      : null
-    ),
-  };
-
-  // Calculate the allowed methods based on the schema behavior
-  const methods = new Set<string>(["OPTIONS"]);
-  if (init.upgrade) {
-    methods.add("GET");
-    methods.add("HEAD");
-  } else {
-    (async function () {
-      const postAllowed = !!parsers.message;
-      let postRequired = false;
-      if (parsers.message) {
-        try {
-          await parsers.message(undefined);
-        } catch {
-          postRequired = true;
-        }
-      }
-      if (postAllowed) {
-        methods.add("POST");
-      }
-      if (!postRequired) {
-        methods.add("GET");
-        methods.add("HEAD");
-      }
-    })();
-  }
+  
+  const checkMethod = methodChecker({
+    message: init.message,
+    upgrade: init.upgrade,
+  });
+  const checkPath = pathChecker({
+    path: init.path,
+  });
 
   const handler = async (req: Request, conn: http.ConnInfo) => {
-    const data = requestData(req);
-    if (data instanceof Response) { // Handle malformed path redirect
-      return data;
+    const reqData = requestData(req);
+    if (reqData instanceof Response) {
+      // When a path ends in a '/', requestData returns a redirect Response to
+      // the same path without the '/'
+      return reqData;
     }
     
-    const { res, url, path: _path } = data;
-    const path = useFullPath ? url.pathname : _path;
+    const { res, url } = reqData;
+    const path = useFullPath ? url.pathname : reqData.path;
 
     const asset = async (opt: ServeAssetOptions) => {
       return await serveAsset(req, opt);
@@ -700,6 +638,7 @@ export function rpc<
       }
 
       await cookie.flush();
+      // FIXME: The whenDones need to happen before this function is called
       return _response(init.upgrade ? socketResponse : r);
     } catch (e) {
       let e2: unknown = e;
@@ -712,6 +651,7 @@ export function rpc<
             error: e,
           });
           await cookie.flush();
+          // FIXME: The whenDones need to happen before this function is called
           return _response(r);
         } catch (e3) {
           e2 = e3;
@@ -734,6 +674,7 @@ export function rpc<
       }
 
       // If it's an HttpError, send it back as a response
+      // FIXME: The whenDones need to happen before this function is called
       return _response(e2, { status: e2.status });
     } finally {
       let fn = whenDones.pop();
@@ -747,46 +688,82 @@ export function rpc<
   return Object.assign(handler, { init });
 }
 
-// TODO: Add RpcInit options
-/** Initializer options for the assets() utility function. */
-export type AssetsInit = Omit<ServeAssetOptions, "path">;
-
-// TODO: Add RpcInit options
 /**
- * Utility for creating an Rpc handler specifically for serving static assets.
- * The resolver's path argument is used as the asset path.
+ * (INTERNAL) Given an Rpc's "message" and "upgrade" options, this returns a function that
+ * checks whether a Request's method is allowed or not. When a request's method
+ * isn't in the calculated set of allowed methods, a 405 HttpError will be
+ * thrown.
+ *
+ * OPTIONS is always an allowed method. If the "upgrade" option is `true` or if
+ * the message parser is `null` or `undefined`, GET and HEAD will be allowed. If
+ * the message parser successfully parses `undefined`, GET, HEAD, and POST will
+ * be allowed. If the message parser throws an error while parsing `undefined`,
+ * only POST will be allowed.
  */
-export function assets(init?: AssetsInit) {
-  // Note that this is a no-op in production
-  prepareAssets({
-    cwd: init?.cwd,
-    dir: init?.dir,
-    watch: true,
-  });
+export function methodChecker(opt: {
+  message?: ParserFunction | null;
+  upgrade?: boolean | null;
+}): (req: Request) => Promise<void> {
+  let methods: Set<string> | null = null;
 
-  return rpc({
-    path: "*",
-    resolve: x => x.asset({
-      ...init,
-      path: x.path,
-    }),
-  });
+  return async (req) => {
+    if (!methods) {
+      methods = new Set(["OPTIONS"]);
+
+      if (opt.upgrade) {
+        methods.add("GET");
+        methods.add("HEAD");
+      } else {
+        let postRequired = false;
+        if (opt.message) {
+          try {
+            await opt.message(undefined);
+          } catch {
+            postRequired = true;
+          }
+        }
+    
+        if (postRequired) {
+          methods.add("POST");
+        } else {
+          methods.add("GET");
+          methods.add("HEAD");
+          if (opt.message) {
+            methods.add("POST");
+          }
+        }
+      }
+    }
+
+    if (!methods.has(req.method)) {
+      throw new HttpError("404 not found", { status: 404 });
+    }
+  };
 }
 
 /**
- * Utility for creating an Rpc handler that always redirects. If an
- * origin isn't provided in the redirect url, the origin of the request will be
- * used. Paths can also be relative; if the path starts with a ".", the path
- * will be joined with the pathname of the request using the std path.join()
- * function. If the status isn't provided, 302 is used. Note that paths with
- * trailing slashes will be redirected first to the path without the trailing
- * slash before being redirect to the specified destination. (2 hops)
+ * Returns a function that checks whether or not a Request matches with the Rpc
+ * using its "path" pattern option. If the path pattern starts with '^', the
+ * full path on the Request will be used. Otherwise, the "routed" path will be
+ * used, which won't be the same as the full path if this Rpc is nested inside a
+ * Stack. If no "path" option is specified, "/" is the default which means the
+ * containing Stack(s) should have routed (i.e. consumed) the entire request
+ * path before reaching the called Rpc.
+ *
+ * When path matching fails, this will throw a 404 HttpError. If it succeeds,
+ * this will return the matched path as well as any path groups captured during
+ * matching merged with any request groups already captured by any containing
+ * Stack(s).
  */
-export function redirect(to: string, status?: number) {
-  return rpc({
-    path: "*",
-    resolve: x => {
-      return x.redirect(to, status || 302);
-    },
-  });
+function pathMatcher(opt: { path?: string | null }): (req: Request) => {
+  path: string;
+  groups: Record<string, string>;
+} {
+  const data = requestData(req);
+
+  const useFullPath = opt.path && opt.path.startsWith("^");
+  const pattern = new URLPattern((
+    useFullPath ? opt.path!.slice(1)
+    : opt.path || "/"
+  ))
 }

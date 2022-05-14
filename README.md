@@ -1,23 +1,20 @@
 # Cav
 
+WARNING: This is currently broken, I'm in the middle of a refactor. Tagged
+versions at https://deno.land/x/cav still work but are full of bugs.
+
 NOTE: This is new, don't use it in production.
 
 Cav is an experimental full stack web framework for [Deno](https://deno.land).
 Here's notable features:
 
-- [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
-- Compatible with [Zod](https://github.com/colinhacks/zod) parsers
-- Serves static files
-- Serializes (nearly) any JavaScript type
-- Functional and declarative syntax
-- Isomorphic TypeScript client +
-- Handles regular HTTP forms (no client JS required)
+- Compatible with [Zod](https://github.com/colinhacks/zod) parsers, enabling
+  [end-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
+- Serves static assets and serializes (nearly) any JavaScript type to JSON
 - Web socket support
-- "Zero config"
-- Zero third-party dependencies
-- No enforced project structure
-- Works with [Preact](https://preactjs.com)
-- Works with vanilla HTML/CSS/JS
+- Zero config (i.e. good defaults), and zero third-party dependencies
+- Dev-time bundling for frontend TypeScript assets
+- Compatible with frontend frameworks like [Preact](https://preactjs.com)
 - [Deno Deploy](https://deno.com) without a build step
 
 ## Inspirations
