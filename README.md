@@ -8,11 +8,14 @@ Here's some notable features:
 
 - Compatible with [Zod](https://github.com/colinhacks/zod) parsers, enabling
   [end-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
-- Serves static assets and serializes (nearly) any JavaScript type to JSON
+- Routers and endpoints that are functional, declarative, and modular
+- Signed cookies, static assets, custom context, multipart form processing
+- Built-in de/serialization of nearly any JavaScript value
 - Web socket support
-- Zero config (i.e. good defaults), and zero third-party dependencies
 - Dev-time bundling for frontend TypeScript assets
 - Compatible with frontend frameworks like [Preact](https://preactjs.com)
+- Zero config (good defaults)
+- Zero third-party dependencies
 - [Deno Deploy](https://deno.com) without a build step
 
 ## Inspirations
@@ -31,7 +34,7 @@ Here's some notable features:
 
 ## Introduction
 
-Cav requires [Deno](https://deno.land) v1.21.2 or higher. If you're new to Deno,
+Cav requires [Deno](https://deno.land) v1.21.3 or higher. If you're new to Deno,
 read [the manual](https://deno.land/manual/introduction) to get up to speed.
 
 A simple "hello world" app in Cav looks like this:

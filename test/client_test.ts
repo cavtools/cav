@@ -10,7 +10,7 @@ import type {
 
 Deno.test("client fetch", async t => {
   // Setup
-  const oldFetch = self.fetch; // Put it back when you're done
+  const oldFetch = self.fetch; // Put it back when you're done?
   const lastFetch = {
     url: "",
     init: undefined as RequestInit | undefined,

@@ -3,15 +3,23 @@
 
 // This module is heavily inspired by https://github.com/blitz-js/superjson
 
-// TODO: Automatically escape strings for XSS, see https://github.com/yahoo/serialize-javascript
-// TODO: Support for ArrayBuffer/View
+// TODO: Having $undefined be an object (which isn't falsy) is awkward. I see
+// why superjson did it the way they did it...  
+// TODO: Automatically escape strings for XSS, see
+// https://github.com/yahoo/serialize-javascript ?  
+// TODO: Support for ArrayBuffer/View  
 // TODO: Support for functions?
+
+// HttpError is defined here so that serial.ts can be self-contained, and
+// because the default serializers need to be able to handle an error class with
+// some exposed data by default. Also, the error class needs to be available on
+// the client, therefore it can't go in http.ts which is server-only
 
 /**
  * Initializer arguments for constructing HttpErrors, which can expose arbitrary
  * data and status codes during de/serialization.
  */
- export interface HttpErrorInit {
+export interface HttpErrorInit {
   /** An HTTP status code describing what kind of error this is. */
   status?: number;
   /** Optional data exposed to the client when this error is serialized. */
@@ -25,14 +33,14 @@ export class HttpError extends Error {
   /** An HTTP status code describing what kind of error this is. */
   status: number;
   /** Optional data exposed to the client when this error is serialized. */
-  expose?: unknown;
+  expose: unknown;
   /** Other details about the error. Omitted during serialization. */
   detail: Record<string, unknown>;
 
   constructor(message: string, init?: HttpErrorInit) {
     super(message);
     this.status = init?.status || 500;
-    this.expose = init?.expose;
+    this.expose = init?.expose || null;
     this.detail = init?.detail || {};
   }
 }
@@ -83,7 +91,7 @@ export interface Serializer<I = unknown, O = unknown> {
  * Credit goes to [json-dry](https://github.com/11ways/json-dry) for the
  * whenDone concept.
  */
-export type WhenDone<O> = (fn: (serialized: O) => void) => void;
+export type WhenDone<O> = (fn: (ready: O) => void) => void;
 
 /**
  * Constructs a Serializer. This simply returns the first argument, it's only
@@ -109,120 +117,117 @@ export type AnySerializer = Serializer<any, any>;
  */
 export type Serializers = Record<string, AnySerializer | null>;
 
-function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
-  const defaults = new Map<string, AnySerializer>(Object.entries({
-    httpError: serializer({
-      check: (v) => v instanceof HttpError,
-      serialize: (v: HttpError) => ({
-        status: v.status,
-        message: v.message,
-        expose: v.expose,
-      }),
-      deserialize: (raw, whenDone) => {
-        const u = (raw as { status: number; message: string });
-        const err = new HttpError(u.message, { status: u.status });
-        whenDone((parsed) => {
-          err.expose = parsed.expose;
-        });
-        return err;
-      },
+const defaults = new Map<string, AnySerializer>(Object.entries({
+  httpError: serializer({
+    check: (v) => v instanceof HttpError,
+    serialize: (v: HttpError) => ({
+      status: v.status,
+      message: v.message,
+      expose: v.expose || null,
     }),
-    error: serializer({
-      check: (v) => v instanceof Error,
-      serialize: (v: Error) => v.message,
-      deserialize: (raw) => new Error(raw as string),
-    }),
-    date: serializer({
-      check: (v) => v instanceof Date,
-      serialize: (v: Date) => v.toJSON(),
-      deserialize: (raw) => new Date(raw as string),
-    }),
-    undefined: serializer({
-      check: (v) => typeof v === "undefined",
-      serialize: () => null,
-      deserialize: () => undefined,
-    }),
-    symbol: serializer({
-      check: (v) => typeof v === "symbol",
-      serialize: (v: symbol) => v.description,
-      deserialize: (raw) => Symbol(raw as string),
-    }),
-    map: serializer({
-      check: (v) => v instanceof Map,
-      serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
-      deserialize: (_, whenDone) => {
-        const map = new Map();
-        whenDone(entries => {
-          entries.forEach(v => map.set(v[0], v[1]));
-        });
-        return map;
-      },
-    }),
-    set: serializer({
-      check: (val) => val instanceof Set,
-      serialize: (v: Set<unknown>) => Array.from(v.values()),
-      deserialize: (_, whenDone) => {
-        const set = new Set();
-        whenDone(values => {
-          values.forEach(v => set.add(v));
-        });
-        return set;
-      },
-    }),
-    bigint: serializer({
-      check: (v) => typeof v === "bigint",
-      serialize: (v: bigint) => v.toString(),
-      deserialize: (raw) => BigInt(raw as string),
-    }),
-    regexp: serializer({
-      check: (v) => v instanceof RegExp,
-      serialize: (v: RegExp) => v.toString(),
-      deserialize: (raw) => {
-        const r = (raw as string).slice(1).split("/");
-        return new RegExp(r[0], r[1]);
-      },
-    }),
-    number: serializer({
-      check: (v) => typeof v === "number" && (
-        isNaN(v) ||
-        v === Number.POSITIVE_INFINITY ||
-        v === Number.NEGATIVE_INFINITY ||
-        Object.is(v, -0)
-      ),
-      serialize: (v: number) => (
-        isNaN(v) ? "nan"
-        : v === Number.POSITIVE_INFINITY ? "+infinity"
-        : v === Number.NEGATIVE_INFINITY ? "-infinity"
-        : Object.is(v, -0) ? "-0"
-        : 0 // Should never happen
-      ),
-      deserialize: (raw: string) => (
-        raw === "nan" ? NaN
-        : raw === "+infinity" ? Number.POSITIVE_INFINITY
-        : raw === "-infinity" ? Number.NEGATIVE_INFINITY
-        : raw === "-zero" ? -0
-        : 0
-      ),
-    }),
-    conflict: serializer({
-      check: (v) => {
-        if (!isPojo(v)) {
-          return false;
-        }
-        const keys = Object.keys(v);
-        return keys.length === 1 && keys[0].startsWith("$");
-      },
-      serialize: Object.entries,
-      deserialize: (_, whenDone) => {
-        const result: Record<string, unknown> = {};
-        whenDone(entry => {
-          result[entry[0][0]] = entry[0][1];
-        });
-        return result;
-      },
-    }),
-  }));
+    deserialize: (raw: { status: number, message: string }, whenDone) => {
+      const err = new HttpError(raw.message, { status: raw.status });
+      whenDone(ready => {
+        err.expose = ready.expose;
+      });
+      return err;
+    },
+  }),
+  error: serializer({
+    check: (v) => v instanceof Error,
+    serialize: (v: Error) => v.message,
+    deserialize: (raw) => new Error(raw as string),
+  }),
+  date: serializer({
+    check: (v) => v instanceof Date,
+    serialize: (v: Date) => v.toJSON(),
+    deserialize: (raw) => new Date(raw as string),
+  }),
+  undefined: serializer({
+    check: (v) => typeof v === "undefined",
+    serialize: () => null,
+    deserialize: () => undefined,
+  }),
+  symbol: serializer({
+    check: (v) => typeof v === "symbol",
+    serialize: (v: symbol) => v.description,
+    deserialize: (raw) => Symbol(raw as string),
+  }),
+  map: serializer({
+    check: (v) => v instanceof Map,
+    serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
+    deserialize: (_, whenDone) => {
+      const map = new Map();
+      whenDone(entries => {
+        entries.forEach(v => map.set(v[0], v[1]));
+      });
+      return map;
+    },
+  }),
+  set: serializer({
+    check: (val) => val instanceof Set,
+    serialize: (v: Set<unknown>) => Array.from(v.values()),
+    deserialize: (_, whenDone) => {
+      const set = new Set();
+      whenDone(values => {
+        values.forEach(v => set.add(v));
+      });
+      return set;
+    },
+  }),
+  bigint: serializer({
+    check: (v) => typeof v === "bigint",
+    serialize: (v: bigint) => v.toString(),
+    deserialize: (raw) => BigInt(raw as string),
+  }),
+  regexp: serializer({
+    check: (v) => v instanceof RegExp,
+    serialize: (v: RegExp) => v.toString(),
+    deserialize: (raw) => {
+      const r = (raw as string).slice(1).split("/");
+      return new RegExp(r[0], r[1]);
+    },
+  }),
+  number: serializer({
+    check: (v) => typeof v === "number" && (
+      isNaN(v) ||
+      v === Number.POSITIVE_INFINITY ||
+      v === Number.NEGATIVE_INFINITY ||
+      Object.is(v, -0)
+    ),
+    serialize: (v: number) => (
+      Object.is(v, -0) ? "-zero"
+      : v === Number.POSITIVE_INFINITY ? "+infinity"
+      : v === Number.NEGATIVE_INFINITY ? "-infinity"
+      : "nan"
+    ),
+    deserialize: (raw: string) => (
+      raw === "-zero" ? -0
+      : raw === "+infinity" ? Number.POSITIVE_INFINITY
+      : raw === "-infinity" ? Number.NEGATIVE_INFINITY
+      : NaN
+    ),
+  }),
+  conflict: serializer({
+    check: (v) => {
+      if (!isPojo(v)) {
+        return false;
+      }
+      const keys = Object.keys(v);
+      return keys.length === 1 && keys[0].startsWith("$");
+    },
+    serialize: (v: Record<string, string>) => Object.entries(v)[0],
+    deserialize: (_, whenDone) => {
+      const result: Record<string, unknown> = {};
+      whenDone(entry => {
+        result[entry[0]] = entry[1];
+      });
+      return result;
+    },
+  }),
+}));
 
+function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
   if (!serializers) {
     return defaults;
   }
@@ -259,7 +264,7 @@ export function serialize(
   value: unknown,
   serializers?: Serializers | null,
 ): unknown {
-  const smap = serializerMap(serializers || {});
+  const smap = serializerMap(serializers || undefined);
   const paths = new Map<unknown, string[]>();
 
   const pathString = (p: string[]) => (
@@ -336,7 +341,7 @@ export function deserialize<T = unknown>(
   value: unknown,
   serializers?: Serializers | null,
 ): T {
-  const smap = serializerMap(serializers || {});
+  const smap = serializerMap(serializers || undefined);
   const objects = new Map<string, unknown>();
   const whenDones: (() => void)[] = [];
 
@@ -415,16 +420,17 @@ export function deserialize<T = unknown>(
 }
 
 /**
- * Serializes a value into a type that is compatible with a Response BodyInit,
- * making it easy to serialize values for sending to an external host/client via
- * HTTP. If a provided value is already compatible with BodyInit, it will be
- * returned with an appropriate mime type, skipping the serialization process.
- * During serialization, this function extends the default supported types to
- * include Blobs and Files. If a Blob is encountered during serialization, the
- * resulting body will be a multipart FormData that encodes the shape of the
- * input as well as the blobs that were encountered. Otherwise, a regular JSON
- * string will be returned. Blobs and Files can be placed anywhere on the input
- * value, even if they are nested. 
+ * Serializes a value into a type that's compatible with a BodyInit for a new
+ * Response or a fetch() call, making it easy to serialize values for sending to
+ * an external host/client via HTTP. If a provided value is already compatible
+ * with BodyInit, it will be returned with an appropriate mime type, skipping
+ * the serialization process. During serialization, this function extends the
+ * serializable types to include Blobs and Files. If a Blob is encountered
+ * during serialization, the resulting body will be a multipart FormData that
+ * encodes the shape of the input as well as the blobs that were encountered.
+ * Otherwise, a regular JSON string will be returned. Blobs and Files can be
+ * placed anywhere on the input value, even if they are nested, inside a Map or
+ * Set, etc. 
  */
 export function serializeBody(value: unknown, serializers?: Serializers): {
   body: BodyInit;

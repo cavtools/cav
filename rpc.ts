@@ -19,8 +19,8 @@ import {
   bakeCookie,
   upgradeWebSocket,
 } from "./http.ts";
-import { HttpError } from "./serial.ts";
 import { serveAsset } from "./assets.ts";
+import { HttpError } from "./serial.ts";
 import type {
   Socket,
   EndpointRequest,
@@ -436,7 +436,7 @@ export function rpc<
           query: reqCtx.query,
           groups: unparsedGroups,
           cleanup: (task: () => Promise<void> | void) => {
-            return cleanupTasks.push(task)
+            cleanupTasks.push(task);
           },
         });
       }
@@ -468,7 +468,9 @@ export function rpc<
           !init.upgrade ? undefined
           : () => {
             if (socket) {
-              throw new Error("upgrade() should only be called once per request");
+              throw new Error(
+                "upgrade() should only be called once per request",
+              );
             }
 
             const u = upgradeSocket!(req);
@@ -489,7 +491,9 @@ export function rpc<
       // restriction is to make the constructed Socket type available to the
       // client() function)
       if (init.upgrade && (!socket || output !== socket)) {
-        throw new Error("Upgraded Rpcs must resolve to the Socket returned by the upgrade() utility");
+        throw new Error(
+          "Upgraded Rpcs must resolve to the Socket returned by the upgrade() utility",
+        );
       } else if (init.upgrade) {
         output = socketResponse;
       }
@@ -522,7 +526,9 @@ export function rpc<
       } else if (!errorHandled) {
         const bugtrace = crypto.randomUUID().slice(0, 8);
         console.error(`ERROR: Uncaught exception [${bugtrace}] -`, err);
-        output = new HttpError(`500 internal server error [${bugtrace}]`, { status: 500 });
+        output = new HttpError(`500 internal server error [${bugtrace}]`, {
+          status: 500,
+        });
       }
     }
 

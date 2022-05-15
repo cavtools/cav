@@ -404,6 +404,7 @@ export interface EndpointResponseInit extends ResponseInit {
   serializers?: Serializers;
 }
 
+// TODO: This might be better if it was in serial.ts instead
 /**
  * Creates an EndpointResponse from the provided body, which is serialized using
  * the top-level serializeBody function. If the provided body is already a

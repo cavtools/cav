@@ -1,28 +1,142 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { assertEquals, assertStrictEquals } from "./deps_test.ts";
 import {
+  assert,
+  assertEquals,
+  assertStrictEquals,
+  assertThrows,
+} from "./deps_test.ts";
+import {
+  HttpError,
   serialize,
   deserialize,
   serializer,
 } from "../serial.ts";
-import type { Serializers } from "../serial.ts";
+import type { Serializers, Serializer } from "../serial.ts";
 
-// TODO: Tests for serializeBody and deserializeBody
+Deno.test("de/serialize(): bad inputs", async t => {
+  await t.step("serialize(): no matching serializer", () => {
+    assertThrows(() => {
+      serialize(new (class { constructor(){} }));
+    });
+  });
 
-// The following tests are modeled after superjson's tests as of March 28, 2022:
-// https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
+  await t.step("deserialize(): prototype poisoning", () => {
+    assertThrows(() => {
+      deserialize({ __proto__: { hi: "hello" } });
+    });
+  });
 
-Deno.test("serialize() and deserialize()", async (t) => {
+  await t.step("deserialize(): bad reference", () => {
+    assertThrows(() => {
+      deserialize({ $ref: ".hello" });
+    });
+  });
+
+  await t.step("deserialize(): No matching serializer", () => {
+    assertThrows(() => {
+      deserialize({ $huh: "what?" });
+    });
+  });
+});
+
+Deno.test("de/serialize() reserved serializer names", async t => {
+  const reserved = [
+    "httpError", "error", "date",
+    "undefined", "symbol", "map",
+    "set", "bigint", "regexp",
+    "number", "conflict", "ref", // Note that ref isn't a serializer
+  ];
+
+  for (const name of reserved) {
+    await t.step(name, () => {
+      assertThrows(() => {
+        serialize(null, { [name]: {} as Serializer });
+      });
+      assertThrows(() => {
+        deserialize(null, { [name]: {} as Serializer });
+      });
+    });
+  }
+});
+
+// Many of the following tests are modeled after superjson's tests as of March
+// 28, 2022: https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
+
+Deno.test("de/serialize(): basic IO", async t => {
   const data: Record<string, {
     input: unknown;
     output: unknown;
     custom?: (x: {
       // deno-lint-ignore no-explicit-any
-      input: any; output: any; packed: any; unpacked: any;
+      input: any; output: any; serialized: any; deserialized: any;
     }) => void;
-    localSerializers?: Serializers;
+    serializers?: Serializers | null;
   }> = {
+    "class with toJSON method": {
+      input: {
+        a: new (class {
+          constructor(){}
+          toJSON(key: string) {
+            return { key };
+          }
+        }),
+      },
+      output: {
+        a: { key: "a" },
+      },
+      custom: x => {
+        assertEquals(x.serialized, x.output);
+        assertEquals(x.deserialized, x.output);
+      },
+    },
+    "conflict": {
+      input: {
+        $conflict: "hello",
+      },
+      output: {
+        $conflict: ["$conflict", "hello"],
+      },
+    },
+    "HttpError": {
+      input: {
+        a: new HttpError("400 bad request", {
+          status: 400,
+          detail: { hello: "world" },
+          expose: { goodbye: "world" },
+        }),
+        b: new HttpError("500 internal server error"),
+      },
+      output: {
+        a: {
+          $httpError: {
+            status: 400,
+            message: "400 bad request",
+            expose: { goodbye: "world" },
+          },
+        },
+        b: {
+          $httpError: {
+            status: 500,
+            message: "500 internal server error",
+            expose: null,
+          },
+        },
+      },
+      custom: x => {
+        assertEquals(x.serialized, x.output);
+        assert(x.deserialized.a instanceof HttpError);
+        assert(x.deserialized.b instanceof HttpError);
+        assertEquals(
+          { ...x.deserialized.a, stack: null },
+          { ...x.input.a, stack: null, detail: {} },
+        );
+        assertEquals(
+          { ...x.deserialized.b, stack: null },
+          { ...x.input.b, stack: null, detail: {} },
+        );
+      },
+    },
     "objects": {
       input: {
         a: { 1: 5, 2: { 3: 'c' } },
@@ -31,6 +145,11 @@ Deno.test("serialize() and deserialize()", async (t) => {
       output: {
         a: { 1: 5, 2: { 3: 'c' } },
         b: null,
+      },
+      // This block is for covering the case where one of the serializers is
+      // null, i.e. ignored / turned off
+      serializers: {
+        null: null,
       },
     },
     "special case: objects with array-like keys": {
@@ -42,6 +161,8 @@ Deno.test("serialize() and deserialize()", async (t) => {
         a: { 0: 3, 1: 5, 2: { 3: "c" } },
         b: null,
       },
+      // This line is for covering the case where the serializers obj is null
+      serializers: null,
     },
     "arrays": {
       input: {
@@ -89,9 +210,9 @@ Deno.test("serialize() and deserialize()", async (t) => {
         selected: { $ref: ".options.0" },
       },
       custom: (x) => {
-        assertEquals(x.packed, x.output);
-        assertEquals(x.unpacked, x.input);
-        assertStrictEquals(x.unpacked.options[0], x.unpacked.selected);
+        assertEquals(x.serialized, x.output);
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.options[0], x.deserialized.selected);
       },
     },
     "paths containing dots": {
@@ -119,9 +240,9 @@ Deno.test("serialize() and deserialize()", async (t) => {
         ref: { $ref: ".a\\\\.1" },
       },
       custom: (x) => {
-        assertEquals(x.packed, x.output);
-        assertEquals(x.unpacked, x.input);
-        assertStrictEquals(x.unpacked["a\\.1"], x.unpacked.ref);
+        assertEquals(x.serialized, x.output);
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized["a\\.1"], x.deserialized.ref);
       },
     },
     "dates": {
@@ -166,6 +287,14 @@ Deno.test("serialize() and deserialize()", async (t) => {
       },
       output: {
         a: { $number: "-infinity" },
+      },
+    },
+    "-zero": {
+      input: {
+        a: -0,
+      },
+      output: {
+        a: { $number: "-zero" },
       },
     },
     "NaN": {
@@ -216,11 +345,11 @@ Deno.test("serialize() and deserialize()", async (t) => {
         }],
       },
       custom: (x) => {
-        assertEquals(x.packed, x.output);
+        assertEquals(x.serialized, x.output);
         assertEquals({
-          role: x.unpacked.role,
+          role: x.deserialized.role,
           children: [{
-            role: x.unpacked.children[0].role,
+            role: x.deserialized.children[0].role,
           }],
         }, {
           role: "parent",
@@ -228,7 +357,7 @@ Deno.test("serialize() and deserialize()", async (t) => {
             role: "child",
           }],
         });
-        assertStrictEquals(x.unpacked, x.unpacked.children[0].parents[0]);
+        assertStrictEquals(x.deserialized, x.deserialized.children[0].parents[0]);
       },
     },
     "Maps with two keys that serialize to the same string but have a different reference": {
@@ -271,9 +400,9 @@ Deno.test("serialize() and deserialize()", async (t) => {
         b: { $ref: ".a" },
       },
       custom: (x) => {
-        assertEquals(x.packed, x.output);
-        assertEquals(x.unpacked, x.input);
-        assertStrictEquals(x.unpacked.a, x.unpacked.b);
+        assertEquals(x.serialized, x.output);
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
       },
     },
     "maps with non-uniform keys": {
@@ -297,10 +426,10 @@ Deno.test("serialize() and deserialize()", async (t) => {
         userOfTheMonth: { $ref: ".users.$set.0" },
       },
       custom: (x) => {
-        assertEquals(x.packed, x.output);
-        assertEquals(x.unpacked, x.input);
-        const vals = Array.from(x.unpacked.users);
-        assertStrictEquals(x.unpacked.userOfTheMonth, vals[0]);
+        assertEquals(x.serialized, x.output);
+        assertEquals(x.deserialized, x.input);
+        const vals = Array.from(x.deserialized.users);
+        assertStrictEquals(x.deserialized.userOfTheMonth, vals[0]);
       },
     },
     "symbols": {
@@ -318,11 +447,11 @@ Deno.test("serialize() and deserialize()", async (t) => {
         b: { $ref: ".a" },
       },
       custom: (x) => {
-        assertEquals(x.packed, x.output);
-        assertEquals(Object.keys(x.unpacked), ["a", "b"]);
-        assertEquals(typeof x.unpacked.a, "symbol");
-        assertEquals(x.unpacked.a.description, "description");
-        assertStrictEquals(x.unpacked.a, x.unpacked.b);
+        assertEquals(x.serialized, x.output);
+        assertEquals(Object.keys(x.deserialized), ["a", "b"]);
+        assertEquals(typeof x.deserialized.a, "symbol");
+        assertEquals(x.deserialized.a.description, "description");
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
       },
     },
     "custom transformers": {
@@ -332,7 +461,7 @@ Deno.test("serialize() and deserialize()", async (t) => {
       output: {
         testLocal: { $testLocal: null },
       },
-      localSerializers: {
+      serializers: {
         testLocal: serializer({
           check: (v: { testLocal?: boolean }) => v.testLocal === true,
           serialize: () => null,
@@ -367,11 +496,11 @@ Deno.test("serialize() and deserialize()", async (t) => {
         }],
       },
       custom: (x) => {
-        assertEquals(x.packed, x.output);
-        assertEquals(Object.keys(x.unpacked), ["q"]);
-        assertEquals(x.unpacked.q.length, 2);
-        assertEquals(x.unpacked.q[0], 9);
-        assertEquals(Object.keys(x.unpacked.q[1]), [
+        assertEquals(x.serialized, x.output);
+        assertEquals(Object.keys(x.deserialized), ["q"]);
+        assertEquals(x.deserialized.q.length, 2);
+        assertEquals(x.deserialized.q[0], 9);
+        assertEquals(Object.keys(x.deserialized.q[1]), [
           "henlo",
           "yee",
           "yee2",
@@ -380,7 +509,7 @@ Deno.test("serialize() and deserialize()", async (t) => {
         ])
 
         const io = x.input.q[1];
-        const uo = x.unpacked.q[1];
+        const uo = x.deserialized.q[1];
         assertEquals({ ...io, z: null }, { ...uo, z: null });
         assertEquals(typeof uo.z, "symbol");
         assertEquals(io.z.description, uo.z.description);
@@ -396,31 +525,24 @@ Deno.test("serialize() and deserialize()", async (t) => {
   };
 
   for (const [k, v] of Object.entries(data)) {
-    await t.step(k, async (t) => {
+    await t.step(k, () => {
       const i = typeof v.input === "function" ? v.input() : v.input;
 
-      let packed: unknown;
-      let unpacked: unknown;
-      await t.step(`serialize()`, () => {
-        packed = serialize(i, v.localSerializers);
-      });
-      await t.step(`deserialize()`, () => {
-        unpacked = deserialize(v.output, v.localSerializers);
-      });
+      const serialized = serialize(i, v.serializers);
+      const deserialized = deserialize(v.output, v.serializers);
 
       if (v.custom) {
-        await t.step(`custom asserts`, () => v.custom!({
+        v.custom({
           input: i,
           output: v.output,
-          packed,
-          unpacked,
-        }));
-      } else {
-        await t.step(`standard asserts`, () => {
-          assertEquals(packed, v.output);
-          assertEquals(unpacked, i);
+          serialized: serialized,
+          deserialized: deserialized,
         });
+      } else {
+        assertEquals(serialized, v.output);
+        assertEquals(deserialized, i);
       }
     });
   }
 });
+

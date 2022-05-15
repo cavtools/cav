@@ -11,7 +11,6 @@ import {
   deserialize,
   deserializeBody,
 } from "./serial.ts";
-
 import type { Serializers } from "./serial.ts";
 import type {
   Parser,
