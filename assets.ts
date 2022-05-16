@@ -1,5 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
+// TODO: Add option for source maps for prepared bundles
+
 import { path, fileServer, graph } from "./deps.ts";
 import { HttpError } from "./serial.ts";
 

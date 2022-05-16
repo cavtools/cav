@@ -49,7 +49,8 @@ export interface RequestContext {
    * If this property isn't null, it's a redirect Response that should be
    * returned as soon as possible. It means the client requested a non-canonical
    * path that either ends in a trailing slash or contains empty path segments.
-   * Cav requires redirects all non-canonical paths to their canonical version.
+   * Cav mandates redirects from all non-canonical paths to their canonical
+   * version.
    */
   redirect: Response | null;
 }
@@ -66,17 +67,18 @@ const _requestContext = Symbol("cav_requestContext");
  * generated on the first call is returned without further modification.
  */
 export function requestContext(request: Request): RequestContext {
-  const req = request as Request & Record<typeof _requestContext, RequestContext>;
+  const req = request as Request & { [_requestContext]?: RequestContext };
   if (req[_requestContext]) {
-    return req[_requestContext];
+    return req[_requestContext]!;
   }
 
   const url = new URL(req.url);
   const path = `/${url.pathname.split("/").filter(p => !!p).join("/")}`;
-  const redirect = (
-    path !== url.pathname ? Response.redirect(url.href, 302)
-    : null
-  );
+  let redirect: Response | null = null;
+  if (path !== url.pathname) {
+    url.pathname = path;
+    redirect = Response.redirect(url.href, 302);
+  }
 
   const query: Record<string, string | string[]> = {};
   url.searchParams.forEach((v, k) => {

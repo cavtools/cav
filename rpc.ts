@@ -3,7 +3,7 @@
 // TODO: html, css, js template tag utilities
 
 // TODO: What happens when you try to upgrade for an assets request?  
-// TODO: accept multiple strings for the path init option  
+// TODO: accept multiple strings for the path schema option  
 // TODO: files and blobs that flush to disk when a certain memory threshold is
 // reached. Using them works the same as regular files and blobs. They get
 // deleted at the end of the request  
@@ -28,6 +28,7 @@ import type {
 } from "./client.ts";
 import type { Cookie } from "./http.ts";
 import type {
+  Parser,
   AnyParser,
   ParserOutput,
   ParserInput,
@@ -40,34 +41,42 @@ import type { ServeAssetOptions } from "./assets.ts";
  * of Cav server applications, the other being Stacks. Stacks are responsible
  * for routing a request, Rpcs are responsible for handling them.
  */
-export interface Rpc<I extends AnyRpcInit = Record<never, never>> {
+export interface Rpc<S extends AnyRpcSchema = AnyRpcSchema> {
   (
     req: EndpointRequest<
-      ParserInput<I["query"]>,
-      ParserInput<I["message"]>,
-      I["upgrade"] extends true ? true : never
+      S["query"] extends Parser ? ParserInput<S["query"]> : unknown,
+      S["message"] extends Parser ? ParserInput<S["message"]> : unknown,
+      S["upgrade"] extends true ? true : false
     >,
     conn: http.ConnInfo,
   ): Promise<EndpointResponse<
     // deno-lint-ignore no-explicit-any
-    I["resolve"] extends (...a: any[]) => Promise<infer R> | infer R ? R
-    : "resolve" extends keyof I ? never
+    S["resolve"] extends (...a: any[]) => Promise<infer R> | infer R ? R
+    : "resolve" extends keyof S ? never
     : undefined
   >>;
-  /** The RpcInit options used to construct this Rpc. */
-  readonly init: I;
+  /** The RpcSchema options used to construct this Rpc. */
+  readonly schema: S;
 }
 
-/** Alias for an Rpc with any init type. Useful for type constraints. */
-export type AnyRpc = Rpc<AnyRpcInit>;
+/** Alias for an Rpc with any schema type. Useful for type constraints. */
+export interface AnyRpc {
+  (
+    // deno-lint-ignore no-explicit-any
+    req: EndpointRequest<any, any, any>,
+    conn: http.ConnInfo,
+  // deno-lint-ignore no-explicit-any
+  ): Promise<EndpointResponse<any>>,
+  readonly schema: AnyRpcSchema;
+}
 
-/** Initializer options for constructing Rpcs. */
-export interface RpcInit<
+/** Schema options for constructing Rpcs. */
+export interface RpcSchema<
   Resp = unknown,
-  Groups extends AnyParser | null = null,
-  Context extends AnyCtx | null = null,
-  Query extends AnyParser | null = null,
-  Message extends AnyParser | null = null,
+  Groups extends AnyParser | null = Parser,
+  Context extends AnyCtx | null = Ctx<unknown>,
+  Query extends AnyParser | null = Parser,
+  Message extends AnyParser | null = Parser,
   Upgrade extends boolean | null = null,
 >{
   /**
@@ -159,26 +168,27 @@ export interface RpcInit<
 }
 
 /**
- * Constructs a new RpcInit. This simply returns the first argument, it's only
+ * Constructs a new RpcSchema. This simply returns the first argument, it's only
  * provided for typing purposes so that you don't need to manually specify the
- * types when extracting out an spreadable RpcInit object. Use this to stay DRY.
+ * types when extracting out an spreadable RpcSchema object. Use this to stay
+ * DRY.
  */
-export function rpcInit<
+export function rpcSchema<
+  S,
   Resp,
   Groups extends AnyParser | null,
   Context extends AnyCtx | null,
   Query extends AnyParser | null,
   Message extends AnyParser | null,
   Upgrade extends boolean | null,
-  I,
 >(
-  init: I & RpcInit<Resp, Groups, Context, Query, Message, Upgrade>,
-): I {
-  return init;
+  schema: S & RpcSchema<Resp, Groups, Context, Query, Message, Upgrade>,
+): S {
+  return schema;
 }
 
-/** Matches any RpcInit. Useful for type constraints. */
-export type AnyRpcInit = RpcInit<
+/** Matches any RpcSchema. Useful for type constraints. */
+export type AnyRpcSchema = RpcSchema<
   // deno-lint-ignore no-explicit-any
   any,
   AnyParser | null,
@@ -225,7 +235,7 @@ export interface CtxArg {
    * Response object was already sent.
    */
   cookie: Cookie;
-  /** The path that matched the Rpc's path init option. */
+  /** The path that matched the Rpc's path schema option. */
   path: string;
   /** The raw query object associated with this request. */
   query: Record<string, string | string[]>;
@@ -286,10 +296,13 @@ export interface ResolveArg<
   conn: http.ConnInfo;
   /** A Cookie baked with the req and res headers. */
   cookie: Cookie;
-  /** The path that matched this Rpc's path init option. */
+  /** The path that matched this Rpc's path schema option. */
   path: string;
   /** The parsed path groups object captured while routing the request. */
-  groups: ParserOutput<Groups>;
+  groups: (
+    Groups extends AnyParser ? ParserOutput<Groups>
+    : Record<string, string>
+  );
   /** The context created by this Rpc's Ctx function. */
   ctx: Context extends Ctx<infer C> ? C : undefined;
   /** The parsed query string parameters object. */
@@ -312,7 +325,7 @@ export interface ResolveArg<
   redirect: (to: string, status?: number) => Response;
   /**
    * Upgrades the request to become a web socket. This is only available if the
-   * `upgrade` init option is `true`. The Response returned by this function
+   * `upgrade` schema option is `true`. The Response returned by this function
    * should be returned by the Rpc's resolve function.
    */
   upgrade: Upgrade extends true ? <Send = unknown>() => Socket<Send, (
@@ -364,7 +377,7 @@ export interface ResolveErrorArg {
 
 /** Creates an endpoint handler for resolving Requests into Responses. */
 export function rpc<
-  I,
+  S,
   Resp = undefined,
   Groups extends AnyParser | null = null,
   Context extends AnyCtx | null = null,
@@ -372,7 +385,7 @@ export function rpc<
   Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 >(
-  init: I & RpcInit<
+  schema: S & RpcSchema<
     Resp,
     Groups,
     Context,
@@ -380,24 +393,24 @@ export function rpc<
     Message,
     Upgrade
   >,
-): Rpc<I> {
+): Rpc<S> {
   const checkMethod = methodChecker({
-    message: init.message,
-    upgrade: init.upgrade,
+    message: schema.message,
+    upgrade: schema.upgrade,
   });
   const matchPath = pathMatcher({
-    path: init.path,
-    groups: init.groups,
+    path: schema.path,
+    groups: schema.groups,
   });
   const parseInput = inputParser({
-    query: init.query,
-    message: init.message,
-    maxBodySize: init.maxBodySize,
-    serializers: init.serializers,
+    query: schema.query,
+    message: schema.message,
+    maxBodySize: schema.maxBodySize,
+    serializers: schema.serializers,
   });
-  const upgradeSocket = init.upgrade && socketUpgrader({
-    message: init.message,
-    serializers: init.serializers,
+  const upgradeSocket = schema.upgrade && socketUpgrader({
+    message: schema.message,
+    serializers: schema.serializers,
   });
 
   const handler = async (req: Request, conn: http.ConnInfo) => {
@@ -423,15 +436,15 @@ export function rpc<
       const cookie = await bakeCookie({
         req,
         headers: res.headers,
-        keys: init.keys || undefined,
+        keys: schema.keys || undefined,
       });
       cleanupTasks.push(() => cookie.flush());
 
       // Create the custom context, if there is one
       const url = reqCtx.url;
       let ctx: unknown = undefined;
-      if (init.ctx) {
-        ctx = await init.ctx({
+      if (schema.ctx) {
+        ctx = await schema.ctx({
           req, res, url, conn, cookie, path,
           query: reqCtx.query,
           groups: unparsedGroups,
@@ -448,13 +461,17 @@ export function rpc<
       // Resolve to the output
       let socket: Socket | null = null;
       let socketResponse: Response | null = null;
-      output = !init.resolve ? undefined : await init.resolve({
+      output = !schema.resolve ? undefined : await schema.resolve({
         req, res, url,
         conn, cookie, path,
-        groups: groups as ParserOutput<Groups>,
-        ctx: ctx as Context extends Ctx<infer C> ? C : undefined,
-        query: query as ParserOutput<Query>,
-        message: message as ParserOutput<Message>,
+        // deno-lint-ignore no-explicit-any
+        groups: groups as any,
+        // deno-lint-ignore no-explicit-any
+        ctx: ctx as any,
+        // deno-lint-ignore no-explicit-any
+        query: query as any,
+        // deno-lint-ignore no-explicit-any
+        message: message as any,
         asset: (opt: ServeAssetOptions) => serveAsset(req, opt),
         redirect: (to: string, status?: number) => {
           if (to.startsWith(".")) {
@@ -463,9 +480,8 @@ export function rpc<
           const u = new URL(to, url.origin);
           return Response.redirect(u.href, status || 302);
         },
-        // This next block is overly verbose. Don't dwell on it
         upgrade: (
-          !init.upgrade ? undefined
+          !schema.upgrade ? undefined
           : () => {
             if (socket) {
               throw new Error(
@@ -478,32 +494,27 @@ export function rpc<
             socketResponse = u.response;
             return socket;
           }
-        ) as (
-          Upgrade extends true ? <Send = unknown>() => Socket<Send, (
-            Message extends AnyParser ? ParserOutput<Message>
-            : undefined
-          )>
-          : undefined
-        ),
+        // deno-lint-ignore no-explicit-any
+        ) as any,
       });
 
       // Make sure the socket got returned if this is an upgraded Rpc (this
       // restriction is to make the constructed Socket type available to the
       // client() function)
-      if (init.upgrade && (!socket || output !== socket)) {
+      if (schema.upgrade && (!socket || output !== socket)) {
         throw new Error(
           "Upgraded Rpcs must resolve to the Socket returned by the upgrade() utility",
         );
-      } else if (init.upgrade) {
+      } else if (schema.upgrade) {
         output = socketResponse;
       }
     } catch (err) {
       // Check to see if the resolveError function can handle it
       let error = err;
       let errorHandled = false;
-      if (init.resolveError) {
+      if (schema.resolveError) {
         try {
-          output = await init.resolveError({
+          output = await schema.resolveError({
             req, res, url,
             conn, error,
             path: reqCtx.path,
@@ -541,7 +552,7 @@ export function rpc<
     // Serialize the response, and handle HEAD requests appropriately
     const response = endpointResponse(output, {
       ...res,
-      serializers: init.serializers || undefined,
+      serializers: schema.serializers || undefined,
     });
     if (req.method === "HEAD") {
       return new Response(null, {
@@ -553,7 +564,7 @@ export function rpc<
     return response;
   };
 
-  return Object.assign(handler, { init });
+  return Object.assign(handler, { schema });
 }
 
 /**
@@ -689,7 +700,7 @@ function pathMatcher(opt: {
 
 /**
  * Creates an input parser that processes the Rpc input using the relevant
- * RpcInit options. If parsing fails, a 400 HttpError will be thrown with the
+ * RpcSchema options. If parsing fails, a 400 HttpError will be thrown with the
  * offending error exposed on the "expose" property. If it succeeds, the parsed
  * query and message will be returned.
  */
@@ -760,7 +771,7 @@ function inputParser(opt: {
 /**
  * Returns a function that upgrades the request into a web socket, returning the
  * Response to return to the client as well as the socket instance. The relevant
- * RpcInit options, like the message parser, should be provided. This should
+ * RpcSchema options, like the message parser, should be provided. This should
  * only be used for upgraded Rpcs.
  */
 function socketUpgrader(opt: {

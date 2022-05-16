@@ -1,7 +1,6 @@
 # Cav
 
 NOTE: This is new and probably broken somehow, don't use it in production.
-(Unless you're [me](https://connor.lol) lol)
 
 Cav is an experimental full stack web framework for [Deno](https://deno.land).
 Here's some notable features:

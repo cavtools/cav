@@ -9,10 +9,13 @@ import { requestContext } from "./http.ts";
 
 import type { RouterRequest, RouterShape, Handler } from "./client.ts";
 
+/** A valid routes object for initializing a Stack. */
+export type StackRoutes = RouterShape;
+
 /**
  * Handler that routes requests to Rpcs (endpoints) or other Stacks (routers).
  */
-export interface Stack<S extends RouterShape = RouterShape> {
+export interface Stack<S extends StackRoutes = StackRoutes> {
   (req: RouterRequest<S>, connInfo: http.ConnInfo): Promise<Response>;
   /**
    * The routes specified when this Stack was constructed.
@@ -28,7 +31,7 @@ const nextPathGroupName = "__nextPath";
  * documentation for more information about how Stack routing works. TODO: the
  * documentation about how Stack routing works
  */
-export function stack<S extends RouterShape>(routes: S): Stack<S> {
+export function stack<R extends StackRoutes>(routes: R): Stack<R> {
   // Stack routes can only use some of the features of URLPattern. If attempts
   // are made to use features that aren't supported, throw an error
   for (const [k, _] of Object.entries(routes)) {
@@ -42,7 +45,7 @@ export function stack<S extends RouterShape>(routes: S): Stack<S> {
     // Make sure the stack route is simple
     for (const s of split) {
       if (
-        !s.match(/^:[a-zA-Z_$][a-zA-Z_$0-9]$/) &&
+        !s.match(/^:[a-zA-Z_$]+[a-zA-Z_$0-9]*$/) &&
         !s.match(/^[^:*?(){}]*$/) // TODO: I don't think this is fully correct
       ) {
         throw new SyntaxError(
