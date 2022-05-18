@@ -27,16 +27,10 @@ Here's some notable features:
   [json-dry](https://github.com/11ways/json-dry)
 - [Next.js](https://nextjs.org/) / [Aleph.js](https://alephjs.org/)
 
-## Resources
+## Status
 
-...
+Cav is currently broken, but just barely. Many features are working but everything is still in flux and the types aren't 100% yet.
 
-## Introduction
+Also, I (shamefully) didn't write tests or docs in the beginning so now I'm trying to catch up. Once tests are done, I'll focus on docs/walkthroughs/etc. When v0.1 happens, I'll [toot](https://fosstodon.org/@connorlogin) and [tweet](https://twitter.com/connorlogin) about it.
 
-Cav requires [Deno](https://deno.land) v1.21.3 or higher. If you're new to Deno,
-read [the manual](https://deno.land/manual/introduction) to get up to speed.
-
-A simple "hello world" app in Cav looks like this:
-
-TODO: Start with the smallest hello world possible, introduce other features
-step by step, building it out into a full blown app
+To get a hint of the syntax Cav is aiming for, read this code: https://github.com/connorlogin/connor-lol
