@@ -164,8 +164,8 @@ const watchingAssets = new Set<string>();
 /**
  * Asset preparation procedure that does the following:
  *
- * - Bundles every *_bundle.ts and *_bundle.tsx file in the folder (recursive)
- *   into an adjacent _bundle.ts(x).js file
+ * - Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder (recursive)
+ *   into an adjacent file with the same name plus a .js suffix
  * - Optionally uses a filesystem watcher to rebundle whenever a change is made
  *   to the typescript files or one of their local dependencies. (The default is
  *   to set watching to true)
@@ -236,7 +236,14 @@ export async function prepareAssets(opt: {
     for await (const entry of Deno.readDir(dir)) {
       if (
         entry.isFile &&
-        (entry.name.endsWith("_bundle.ts") || entry.name.endsWith("_bundle.tsx"))
+        (
+          entry.name.endsWith("_bundle.ts") ||
+          entry.name.endsWith("_bundle.tsx")
+        ) ||
+        (
+          entry.name === "bundle.ts" ||
+          entry.name === "bundle.tsx"
+        )
       ) {
         modules.push(path.join(dir, entry.name));
       } else if (entry.isDirectory) {
