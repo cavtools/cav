@@ -1,0 +1,21 @@
+{
+  "scriptId": "40",
+  "url": "deno:ext/crypto/00_crypto.js",
+  "functions": [
+    {
+      "functionName": "getRandomValues",
+      "ranges": [
+        { "startOffset": 103188, "endOffset": 104783, "count": 1 },
+        { "startOffset": 103723, "endOffset": 103846, "count": 0 },
+        { "startOffset": 103847, "endOffset": 103926, "count": 0 },
+        { "startOffset": 103927, "endOffset": 104007, "count": 0 },
+        { "startOffset": 104008, "endOffset": 104087, "count": 0 },
+        { "startOffset": 104088, "endOffset": 104168, "count": 0 },
+        { "startOffset": 104169, "endOffset": 104288, "count": 0 },
+        { "startOffset": 104289, "endOffset": 104372, "count": 0 },
+        { "startOffset": 104391, "endOffset": 104545, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    }
+  ]
+}

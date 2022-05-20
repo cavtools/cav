@@ -1,5 +1,5 @@
 .DS_Store
 .ignore/
-/test/cov_profile/
-/test/cov_profile.lcov
-/test/cov_html/
+/cov_profile/
+/cov_profile.lcov
+/cov_html/

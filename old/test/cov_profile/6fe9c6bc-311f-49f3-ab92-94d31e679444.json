@@ -1,0 +1,99 @@
+{
+  "scriptId": "10",
+  "url": "deno:ext/url/01_urlpattern.js",
+  "functions": [
+    {
+      "functionName": "<instance_members_initializer>",
+      "ranges": [{ "startOffset": 1161, "endOffset": 6316, "count": 17 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "URLPattern",
+      "ranges": [
+        { "startOffset": 1321, "endOffset": 2226, "count": 17 },
+        { "startOffset": 1930, "endOffset": 2181, "count": 136 },
+        { "startOffset": 2075, "endOffset": 2173, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "get protocol",
+      "ranges": [{ "startOffset": 2232, "endOffset": 2364, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "get username",
+      "ranges": [{ "startOffset": 2370, "endOffset": 2502, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "get password",
+      "ranges": [{ "startOffset": 2508, "endOffset": 2640, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "get hostname",
+      "ranges": [{ "startOffset": 2646, "endOffset": 2778, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "get port",
+      "ranges": [{ "startOffset": 2784, "endOffset": 2908, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "get pathname",
+      "ranges": [{ "startOffset": 2914, "endOffset": 3046, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "get search",
+      "ranges": [{ "startOffset": 3052, "endOffset": 3180, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "get hash",
+      "ranges": [{ "startOffset": 3186, "endOffset": 3310, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "test",
+      "ranges": [{ "startOffset": 3429, "endOffset": 4323, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "exec",
+      "ranges": [
+        { "startOffset": 4458, "endOffset": 5929, "count": 39 },
+        { "startOffset": 5097, "endOffset": 5127, "count": 0 },
+        { "startOffset": 5195, "endOffset": 5226, "count": 0 },
+        { "startOffset": 5372, "endOffset": 5901, "count": 268 },
+        { "startOffset": 5588, "endOffset": 5622, "count": 22 },
+        { "startOffset": 5622, "endOffset": 5901, "count": 246 },
+        { "startOffset": 5901, "endOffset": 5928, "count": 17 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [
+        { "startOffset": 5716, "endOffset": 5755, "count": 21 },
+        { "startOffset": 5749, "endOffset": 5754, "count": 9 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 5935, "endOffset": 6312, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "webidl.converters.URLPatternInput",
+      "ranges": [
+        { "startOffset": 7149, "endOffset": 7357, "count": 56 },
+        { "startOffset": 7241, "endOffset": 7304, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    }
+  ]
+}

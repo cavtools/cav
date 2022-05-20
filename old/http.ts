@@ -113,7 +113,7 @@ const methodsWithBodies = new Set([
 
 /**
  * Returns a parsed body from a given request after checking size constraints.
- * Uses deserializeBody to deserialize the request body.
+ * Uses `deserializeBody`.
  */
 export async function requestBody(req: Request, opt?: {
   maxSize?: number;

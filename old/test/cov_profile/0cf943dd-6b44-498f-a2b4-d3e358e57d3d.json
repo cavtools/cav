@@ -1,0 +1,85 @@
+{
+  "scriptId": "80",
+  "url": "file:///Users/connor/Desktop/Git/cav/stack.ts",
+  "functions": [
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 0, "endOffset": 18108, "count": 1 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "stack",
+      "ranges": [
+        { "startOffset": 91, "endOffset": 3727, "count": 2 },
+        { "startOffset": 165, "endOffset": 722, "count": 8 },
+        { "startOffset": 265, "endOffset": 301, "count": 0 },
+        { "startOffset": 392, "endOffset": 436, "count": 7 },
+        { "startOffset": 438, "endOffset": 706, "count": 0 },
+        { "startOffset": 789, "endOffset": 995, "count": 8 },
+        { "startOffset": 859, "endOffset": 879, "count": 0 },
+        { "startOffset": 881, "endOffset": 928, "count": 0 },
+        { "startOffset": 1753, "endOffset": 2023, "count": 8 },
+        { "startOffset": 1849, "endOffset": 1902, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 209, "endOffset": 217, "count": 8 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [
+        { "startOffset": 1072, "endOffset": 1684, "count": 6 },
+        { "startOffset": 1105, "endOffset": 1138, "count": 0 },
+        { "startOffset": 1176, "endOffset": 1209, "count": 0 },
+        { "startOffset": 1247, "endOffset": 1281, "count": 0 },
+        { "startOffset": 1312, "endOffset": 1365, "count": 0 },
+        { "startOffset": 1396, "endOffset": 1449, "count": 0 },
+        { "startOffset": 1587, "endOffset": 1626, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 1489, "endOffset": 1497, "count": 6 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 1546, "endOffset": 1554, "count": 6 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 1798, "endOffset": 1806, "count": 8 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "handler",
+      "ranges": [
+        { "startOffset": 2044, "endOffset": 3677, "count": 8 },
+        { "startOffset": 2140, "endOffset": 2187, "count": 0 },
+        { "startOffset": 2319, "endOffset": 3647, "count": 29 },
+        { "startOffset": 2412, "endOffset": 2453, "count": 21 },
+        { "startOffset": 2453, "endOffset": 2584, "count": 8 },
+        { "startOffset": 2584, "endOffset": 2589, "count": 1 },
+        { "startOffset": 2836, "endOffset": 3211, "count": 0 },
+        { "startOffset": 3211, "endOffset": 3517, "count": 8 },
+        { "startOffset": 3406, "endOffset": 3499, "count": 0 },
+        { "startOffset": 3544, "endOffset": 3637, "count": 8 },
+        { "startOffset": 3647, "endOffset": 3676, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "didMatch",
+      "ranges": [
+        { "startOffset": 3728, "endOffset": 3949, "count": 8 },
+        { "startOffset": 3791, "endOffset": 3930, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    }
+  ]
+}

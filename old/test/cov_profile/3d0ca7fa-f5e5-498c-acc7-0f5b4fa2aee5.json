@@ -1,0 +1,46 @@
+{
+  "scriptId": "112",
+  "url": "https://deno.land/std@0.132.0/path/_util.ts",
+  "functions": [
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 0, "endOffset": 13848, "count": 1 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "assertPath",
+      "ranges": [{ "startOffset": 165, "endOffset": 324, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "isPosixPathSeparator",
+      "ranges": [{ "startOffset": 332, "endOffset": 411, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "isPathSeparator",
+      "ranges": [{ "startOffset": 419, "endOffset": 524, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "isWindowsDeviceRoot",
+      "ranges": [{ "startOffset": 532, "endOffset": 705, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "normalizeString",
+      "ranges": [{ "startOffset": 713, "endOffset": 3174, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "_format",
+      "ranges": [{ "startOffset": 3182, "endOffset": 3488, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "encodeWhitespace",
+      "ranges": [{ "startOffset": 3656, "endOffset": 3793, "count": 0 }],
+      "isBlockCoverage": false
+    }
+  ]
+}

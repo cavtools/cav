@@ -1,0 +1,84 @@
+{
+  "scriptId": "89",
+  "url": "https://deno.land/std@0.132.0/http/file_server.ts",
+  "functions": [
+    {
+      "functionName": "",
+      "ranges": [
+        { "startOffset": 0, "endOffset": 75133, "count": 1 },
+        { "startOffset": 20179, "endOffset": 20194, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "contentType",
+      "ranges": [{ "startOffset": 5012, "endOffset": 5081, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "createEtagHash",
+      "ranges": [{ "startOffset": 5082, "endOffset": 5471, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "modeToString",
+      "ranges": [{ "startOffset": 5472, "endOffset": 6002, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "fileLenToString",
+      "ranges": [{ "startOffset": 6003, "endOffset": 6389, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "serveFile",
+      "ranges": [{ "startOffset": 6397, "endOffset": 9712, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "serveDirIndex",
+      "ranges": [{ "startOffset": 9713, "endOffset": 11335, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "serveFallback",
+      "ranges": [{ "startOffset": 11336, "endOffset": 11870, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "serverLog",
+      "ranges": [{ "startOffset": 11871, "endOffset": 12150, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "setBaseHeaders",
+      "ranges": [{ "startOffset": 12151, "endOffset": 12364, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "dirViewerTemplate",
+      "ranges": [{ "startOffset": 12365, "endOffset": 15333, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "serveDir",
+      "ranges": [{ "startOffset": 15341, "endOffset": 16864, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "normalizeURL",
+      "ranges": [{ "startOffset": 16865, "endOffset": 17603, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "main",
+      "ranges": [{ "startOffset": 17604, "endOffset": 19403, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "printUsage",
+      "ranges": [{ "startOffset": 19404, "endOffset": 20156, "count": 0 }],
+      "isBlockCoverage": false
+    }
+  ]
+}

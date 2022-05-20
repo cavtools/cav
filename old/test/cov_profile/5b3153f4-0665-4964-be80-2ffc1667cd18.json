@@ -1,0 +1,162 @@
+{
+  "scriptId": "79",
+  "url": "file:///Users/connor/Desktop/Git/cav/rpc.ts",
+  "functions": [
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 0, "endOffset": 59960, "count": 1 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "rpcSchema",
+      "ranges": [{ "startOffset": 241, "endOffset": 290, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "rpc",
+      "ranges": [
+        { "startOffset": 298, "endOffset": 5309, "count": 9 },
+        { "startOffset": 767, "endOffset": 867, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "handler",
+      "ranges": [
+        { "startOffset": 889, "endOffset": 5259, "count": 14 },
+        { "startOffset": 985, "endOffset": 1032, "count": 4 },
+        { "startOffset": 1032, "endOffset": 1223, "count": 10 },
+        { "startOffset": 1223, "endOffset": 1275, "count": 9 },
+        { "startOffset": 1275, "endOffset": 1301, "count": 8 },
+        { "startOffset": 1301, "endOffset": 1348, "count": 0 },
+        { "startOffset": 1348, "endOffset": 1500, "count": 8 },
+        { "startOffset": 1517, "endOffset": 1668, "count": 8 },
+        { "startOffset": 1668, "endOffset": 1997, "count": 0 },
+        { "startOffset": 1997, "endOffset": 2167, "count": 8 },
+        { "startOffset": 2167, "endOffset": 2178, "count": 1 },
+        { "startOffset": 2179, "endOffset": 3235, "count": 7 },
+        { "startOffset": 2837, "endOffset": 3218, "count": 0 },
+        { "startOffset": 3236, "endOffset": 3268, "count": 7 },
+        { "startOffset": 3268, "endOffset": 3301, "count": 0 },
+        { "startOffset": 3303, "endOffset": 3429, "count": 0 },
+        { "startOffset": 3429, "endOffset": 3523, "count": 8 },
+        { "startOffset": 3467, "endOffset": 3523, "count": 0 },
+        { "startOffset": 3542, "endOffset": 4731, "count": 2 },
+        { "startOffset": 3660, "endOffset": 4276, "count": 0 },
+        { "startOffset": 4385, "endOffset": 4721, "count": 0 },
+        { "startOffset": 4731, "endOffset": 4768, "count": 10 },
+        { "startOffset": 4768, "endOffset": 4850, "count": 8 },
+        { "startOffset": 4850, "endOffset": 4979, "count": 10 },
+        { "startOffset": 5028, "endOffset": 5228, "count": 0 },
+        { "startOffset": 5228, "endOffset": 5258, "count": 10 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 1548, "endOffset": 1568, "count": 8 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "cleanup",
+      "ranges": [{ "startOffset": 1880, "endOffset": 1962, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "asset",
+      "ranges": [{ "startOffset": 2416, "endOffset": 2445, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "redirect",
+      "ranges": [{ "startOffset": 2473, "endOffset": 2761, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "schema.resolve.schema.resolve.upgrade",
+      "ranges": [{ "startOffset": 2839, "endOffset": 3218, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "asset",
+      "ranges": [{ "startOffset": 3983, "endOffset": 4012, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "methodChecker",
+      "ranges": [
+        { "startOffset": 5310, "endOffset": 6708, "count": 9 },
+        { "startOffset": 5400, "endOffset": 5413, "count": 0 },
+        { "startOffset": 5436, "endOffset": 5455, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [
+        { "startOffset": 5512, "endOffset": 6705, "count": 9 },
+        { "startOffset": 5551, "endOffset": 6375, "count": 8 },
+        { "startOffset": 5626, "endOffset": 5714, "count": 0 },
+        { "startOffset": 5810, "endOffset": 6027, "count": 0 },
+        { "startOffset": 6062, "endOffset": 6122, "count": 0 },
+        { "startOffset": 6265, "endOffset": 6333, "count": 0 },
+        { "startOffset": 6414, "endOffset": 6501, "count": 1 },
+        { "startOffset": 6501, "endOffset": 6543, "count": 8 },
+        { "startOffset": 6543, "endOffset": 6678, "count": 0 },
+        { "startOffset": 6691, "endOffset": 6697, "count": 8 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "pathMatcher",
+      "ranges": [
+        { "startOffset": 6709, "endOffset": 7883, "count": 9 },
+        { "startOffset": 6770, "endOffset": 6797, "count": 7 },
+        { "startOffset": 6846, "endOffset": 6865, "count": 2 },
+        { "startOffset": 6866, "endOffset": 6883, "count": 7 },
+        { "startOffset": 6877, "endOffset": 6883, "count": 2 },
+        { "startOffset": 6958, "endOffset": 6970, "count": 0 },
+        { "startOffset": 6992, "endOffset": 7010, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [
+        { "startOffset": 7043, "endOffset": 7880, "count": 10 },
+        { "startOffset": 7137, "endOffset": 7158, "count": 2 },
+        { "startOffset": 7159, "endOffset": 7172, "count": 8 },
+        { "startOffset": 7250, "endOffset": 7328, "count": 1 },
+        { "startOffset": 7328, "endOffset": 7535, "count": 9 },
+        { "startOffset": 7535, "endOffset": 7879, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "inputParser",
+      "ranges": [
+        { "startOffset": 7884, "endOffset": 9310, "count": 9 },
+        { "startOffset": 7968, "endOffset": 7979, "count": 0 },
+        { "startOffset": 8000, "endOffset": 8017, "count": 0 },
+        { "startOffset": 8099, "endOffset": 8112, "count": 0 },
+        { "startOffset": 8135, "endOffset": 8154, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "",
+      "ranges": [
+        { "startOffset": 8187, "endOffset": 9307, "count": 8 },
+        { "startOffset": 8306, "endOffset": 8736, "count": 0 },
+        { "startOffset": 8791, "endOffset": 8806, "count": 0 },
+        { "startOffset": 8808, "endOffset": 9266, "count": 0 }
+      ],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "socketUpgrader",
+      "ranges": [{ "startOffset": 9311, "endOffset": 10101, "count": 0 }],
+      "isBlockCoverage": false
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "scriptId": "108",
+  "url": "https://deno.land/x/deno_graph@0.24.0/lib/loader.ts",
+  "functions": [
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 0, "endOffset": 6933, "count": 1 }],
+      "isBlockCoverage": true
+    },
+    {
+      "functionName": "requestRead",
+      "ranges": [{ "startOffset": 105, "endOffset": 293, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "requestNet",
+      "ranges": [{ "startOffset": 294, "endOffset": 491, "count": 0 }],
+      "isBlockCoverage": false
+    },
+    {
+      "functionName": "load",
+      "ranges": [{ "startOffset": 499, "endOffset": 1770, "count": 0 }],
+      "isBlockCoverage": false
+    }
+  ]
+}

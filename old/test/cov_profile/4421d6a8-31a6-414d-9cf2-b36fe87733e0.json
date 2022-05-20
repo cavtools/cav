@@ -1,0 +1,11 @@
+{
+  "scriptId": "82",
+  "url": "file:///Users/connor/Desktop/Git/cav/deps.ts",
+  "functions": [
+    {
+      "functionName": "",
+      "ranges": [{ "startOffset": 0, "endOffset": 1412, "count": 1 }],
+      "isBlockCoverage": true
+    }
+  ]
+}
