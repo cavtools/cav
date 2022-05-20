@@ -11,8 +11,8 @@ import {
   serialize,
   deserialize,
   serializer,
-} from "./serial.ts";
-import type { Serializers, Serializer } from "./serial.ts";
+} from "../serial.ts";
+import type { Serializers, Serializer } from "../serial.ts";
 
 Deno.test("de/serialize(): bad inputs", async t => {
   await t.step("serialize(): no matching serializer", () => {

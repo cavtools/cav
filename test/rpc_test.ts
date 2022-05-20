@@ -1,8 +1,8 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { rpc } from "./rpc.ts";
+import { rpc } from "../rpc.ts";
 // import { stack } from "../stack.ts";
-import type { http } from "./deps.ts";
+import type { http } from "../deps.ts";
 import { assertEquals } from "./deps_test.ts";
 
 const conn: http.ConnInfo = {
