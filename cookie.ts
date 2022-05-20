@@ -2,7 +2,10 @@
 
 import { http, base64 } from "./deps.ts";
 
+// TODO: Make every signed cookie a JWT, no separate signatures
 // TODO: A way to access cookies that have been set for a different path/domain
+// TODO: Edge case: The unsigned signatures don't update until the .sync(),
+// it's probably better to make all valid signatures inaccessible
 
 /**
  * A (mostly) synchronous interface for accessing HTTP cookies tied to a Request
@@ -10,26 +13,23 @@ import { http, base64 } from "./deps.ts";
  */
 export interface Cookie {
   /**
-   * Gets a cookie. Returns `null` if the cookie isn't set or the cookie's
-   * signature didn't match its value.
+   * Gets a cookie. Returns `null` if the cookie isn't set or the signed cookie
+   * JWT was invalid or expired.
    */
   get: (name: string, opt?: { signed?: boolean }) => string | undefined;
   /**
-   * Sets a cookie. If the signed option is true, a corresponding signature
-   * cookie will be set as well. See
-   * https://deno.land/std@0.140.0/http/cookie.ts#L9 for a list of other cookie
-   * options.
+   * Sets a cookie. If the signed option is true, the cookie will be stored as a
+   * JWT. See https://deno.land/std@0.140.0/http/cookie.ts#L9 for a list
+   * of other cookie options.
    */
   set: (name: string, value: string, opt?: (
     Omit<http.Cookie, "name" | "value"> & { signed?: boolean; }
   )) => void;
   /**
-   * Deletes a cookie. If the signed option is used, the cookie signature will
-   * also be deleted. The scope of the deletion can be limited using the
+   * Deletes a cookie. The scope of the deletion can be limited using the
    * provided path and domain options.
    */
   delete: (name: string, opt?: {
-    signed?: boolean;
     path?: string;
     domain?: string;
   }) => void;
@@ -41,11 +41,7 @@ export interface Cookie {
   sync: () => Promise<void>;
 }
 
-const random = new Uint8Array(32);
-crypto.getRandomValues(random);
-const decoder = new TextDecoder();
-const rand = decoder.decode(random);
-const fallbackKeys: [string, ...string[]] = [base64.encode(rand)];
+
 
 /**
  * Creates a new Cookie interface that's "baked" with the given Request and
@@ -140,7 +136,7 @@ export async function bakeCookie(init: {
       }
 
       // Update our copy if the cookie path and domain matched the current
-      // request or weren't specified
+      // request or weren't specified.
       if (opt?.signed) {
         signed[name] = value;
       } else {
@@ -149,9 +145,6 @@ export async function bakeCookie(init: {
     },
     delete(name, opt) {
       updates.push({ op: "delete", name, opt });
-      if (opt?.signed) {
-        updates.push({ op: "delete", name: `${name}_sig`, opt });
-      }
       
       // If the current request doesn't match the path and domain for the
       // deleted cookie, don't delete our cookie since the client's cookie for
@@ -166,12 +159,8 @@ export async function bakeCookie(init: {
         }
       }
 
-      if (opt?.signed) {
-        delete signed[name];
-        delete unsigned[`${name}_sig`];
-      } else {
-        delete unsigned[name];
-      }
+      delete signed[name];
+      delete unsigned[name];
     },
     signed() {
       return { ...signed };
@@ -209,61 +198,3 @@ export async function bakeCookie(init: {
   return cookie;
 }
 
-// I'm caching keys because I don't know the overhead of crypto.subtle.importKey
-// REVIEW: I don't know for sure if any of this is correct security-wise
-const keyCache = new Map<string, CryptoKey>();
-const encoder = new TextEncoder();
-const signingAlg = { name: "HMAC", hash: "SHA-256" } as const;
-
-async function importKey(key: string): Promise<CryptoKey> {
-  let k = keyCache.get(key);
-  if (k) {
-    return k;
-  }
-
-  k = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(key),
-    signingAlg,
-    false,
-    ["sign", "verify"],
-  );
-  keyCache.set(key, k);
-  return k;
-}
-
-async function verify(
-  data: string,
-  sig: string,
-  keys: [string, ...string[]],
-): Promise<boolean> {
-  try {
-    for (const key of keys) {
-      const k = await importKey(key);
-      if (
-        await crypto.subtle.verify(
-          signingAlg,
-          k,
-          base64.decode(sig),
-          encoder.encode(data),
-        )
-      ) {
-        return true;
-      }
-    }
-  } catch {
-    // continue
-  }
-  return false;
-}
-
-async function sign(data: string, key: string): Promise<string> {
-  const k = await importKey(key);
-  return base64.encode(
-    await crypto.subtle.sign(
-      signingAlg,
-      k,
-      encoder.encode(data),
-    ),
-  );
-}

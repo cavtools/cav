@@ -10,7 +10,7 @@ import { bakeCookie } from "../cookie.ts";
 // https://www.devglan.com/online-tools/hmac-sha256-online
 const req = new Request("http://localhost/test", {
   headers: {
-    "cookie": "signed=hello; signed_sig=q6EFfO1sLxVp3mxKg48ST23tb/TsRnbojG12MjRMisU=; unsigned=world",
+    "cookie": "signed=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXkiOiJzaWduZWQiLCJ2YWwiOiJoZWxsbyJ9.ksRla4FxNY73MtLG57WQCbpljR3IL4KHLnsGvuazUdE; unsigned=world",
   }
 });
 const keys: [string, ...string[]] = ["super-secret-test-key"];
@@ -26,7 +26,7 @@ Deno.test("Accessing previously set cookies", async () => {
 Deno.test("Changing the name of a signed cookie invalidates it", async () => {
   const req = new Request("http://localhost/test", {
     headers: {
-      "cookie": "_signed=hello; _signed_sig=q6EFfO1sLxVp3mxKg48ST23tb/TsRnbojG12MjRMisU=; unsigned=world",
+      "cookie": "_signed=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXkiOiJzaWduZWQiLCJ2YWwiOiJoZWxsbyJ9.ksRla4FxNY73MtLG57WQCbpljR3IL4KHLnsGvuazUdE; unsigned=world",
     },
   });
   const cookie = await bakeCookie({ keys, req, headers: new Headers() });
@@ -36,17 +36,7 @@ Deno.test("Changing the name of a signed cookie invalidates it", async () => {
 Deno.test("Changing the value of a signed cookie invalidates it", async () => {
   const req = new Request("http://localhost/test", {
     headers: {
-      "cookie": "signed=hell; signed_sig=q6EFfO1sLxVp3mxKg48ST23tb/TsRnbojG12MjRMisU=; unsigned=world",
-    },
-  });
-  const cookie = await bakeCookie({ keys, req, headers: new Headers() });
-  assertEquals(cookie.get("signed", { signed: true }), undefined);
-});
-
-Deno.test("Changing the value of a signed cookie sig invalidates", async () => {
-  const req = new Request("http://localhost/test", {
-    headers: {
-      "cookie": "signed=hello; signed_sig=r6EFfO1sLxVp3mxKg48ST23tb/TsRnbojG12MjRMisU=; unsigned=world",
+      "cookie": "signed=EyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXkiOiJzaWduZWQiLCJ2YWwiOiJoZWxsbyJ9.ksRla4FxNY73MtLG57WQCbpljR3IL4KHLnsGvuazUdE; unsigned=world",
     },
   });
   const cookie = await bakeCookie({ keys, req, headers: new Headers() });
@@ -74,9 +64,9 @@ Deno.test("Random fallback key is used if no key specified", async () => {
   // Should be able to access the cookies it did sign
   cookie.set("signed", "hello", { signed: true });
   await cookie.sync();
-  const pair = headers.get("set-cookie")!.split(", ").join("; ");
+  const pair = headers.get("set-cookie")!;
   const cookie2 = await bakeCookie({
-    req: new Request("http://localhost/test", { headers: { "cookie": pair, } }),
+    req: new Request("http://localhost/test", { headers: { "cookie": pair } }),
     headers: new Headers(),
   });
   assertEquals(cookie2.get("signed", { signed: true }), "hello");
@@ -100,9 +90,8 @@ Deno.test("Setting then getting", async () => {
 
   await cookie.sync();
   const updates = headers.get("set-cookie")!.split(", ");
-  assertEquals(updates[0], "signed2=goodbye");
-  assertEquals(updates[1].split("=")[0], "signed2_sig");
-  assertEquals(updates[2], "unsigned2=world");
+  assertEquals(updates[0].startsWith("signed2="), true); // FIXME
+  assertEquals(updates[1], "unsigned2=world");
 });
 
 Deno.test("Setting then getting with different path/domain", async () => {
@@ -115,6 +104,7 @@ Deno.test("Setting then getting with different path/domain", async () => {
 
   await cookie.sync();
   const updates = headers.get("set-cookie")!.split(", ");
+  // FIXME
   assertEquals(updates[0], "signed2=goodbye; Domain=google.com");
   assertEquals(updates[1].startsWith("signed2_sig"), true);
   assertEquals(updates[1].endsWith("; Domain=google.com"), true);
@@ -124,7 +114,7 @@ Deno.test("Setting then getting with different path/domain", async () => {
 Deno.test("Deleting then getting", async () => {
   const headers = new Headers();
   const cookie = await bakeCookie({ keys, req, headers });
-  cookie.delete("signed", { signed: true });
+  cookie.delete("signed");
   assertEquals(cookie.get("signed", { signed: true }), undefined);
   assertEquals(cookie.get("signed"), undefined);
   cookie.delete("unsigned");
@@ -134,14 +124,14 @@ Deno.test("Deleting then getting", async () => {
   const expires = "Expires=Thu, 01 Jan 1970 00:00:00 GMT";
   assertEquals(
     headers.get("set-cookie"),
-    `signed=; ${expires}, signed_sig=; ${expires}, unsigned=; ${expires}`,
+    `signed=; ${expires}, unsigned=; ${expires}`,
   );
 });
 
 Deno.test("Deleting then getting with different path/domain", async () => {
   const headers = new Headers();
   const cookie = await bakeCookie({ keys, req, headers });
-  cookie.delete("signed", { signed: true, domain: "google.com" });
+  cookie.delete("signed", { domain: "google.com" });
   assertEquals(cookie.get("signed", { signed: true }), "hello");
   cookie.delete("unsigned", { path: "/hello/world" });
   assertEquals(cookie.get("unsigned"), "world");
@@ -150,49 +140,29 @@ Deno.test("Deleting then getting with different path/domain", async () => {
   const expires = "Expires=Thu, 01 Jan 1970 00:00:00 GMT";
   assertEquals(
     headers.get("set-cookie"),
-    `signed=; Domain=google.com; ${expires}, signed_sig=; Domain=google.com; ${expires}, unsigned=; Path=/hello/world; ${expires}`,
+    `signed=; Domain=google.com; ${expires}, unsigned=; Path=/hello/world; ${expires}`,
   );
-});
-
-Deno.test("Deleting a signed cookie without signed: true", async () => {
-  const headers = new Headers();
-  const cookie = await bakeCookie({ keys, req, headers });
-  cookie.delete("signed");
-  await cookie.sync();
-  const expires = "Expires=Thu, 01 Jan 1970 00:00:00 GMT";
-  assertEquals(headers.get("set-cookie"), `signed=; ${expires}`);
-});
-
-Deno.test("Signatures are unsigned", async () => {
-  const cookie = await bakeCookie({ keys, req, headers: new Headers() });
-  assertEquals(
-    cookie.get("signed_sig"),
-    "q6EFfO1sLxVp3mxKg48ST23tb/TsRnbojG12MjRMisU=",
-  );
-  assertEquals(cookie.get("signed_sig", { signed: true }), undefined);
 });
 
 Deno.test("signed() and unsigned()", async () => {
   const cookie = await bakeCookie({ keys, req, headers: new Headers() });
   assertEquals(cookie.signed(), {
-    signed: "hello",
+    signed: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXkiOiJzaWduZWQiLCJ2YWwiOiJoZWxsbyJ9.ksRla4FxNY73MtLG57WQCbpljR3IL4KHLnsGvuazUdE",
   });
   assertEquals(cookie.unsigned(), {
     unsigned: "world",
-    signed_sig: "q6EFfO1sLxVp3mxKg48ST23tb/TsRnbojG12MjRMisU=",
   });
+  cookie.delete("signed");
   cookie.set("unsigned", "goodbye");
-  cookie.delete("signed", { signed: true });
   assertEquals(cookie.signed(), {});
   assertEquals(cookie.unsigned(), { unsigned: "goodbye" });
+  cookie.set("signed", "goodbye");
+  cookie.delete("unsigned");
+  assertEquals(cookie.signed(), { signed: "goodbye" });
+  assertEquals(cookie.unsigned(), {});
 });
 
-Deno.test("Invalid base64 signature (coverage)", async () => {
-  const req = new Request("http://localhost/test", {
-    headers: {
-      "cookie": "signed=hello; signed_sig=6EFfO1sLxVp3mxKg48ST23tb/TsRnbojG12MjRMisU=; unsigned=world",
-    },
-  });
-  const cookie = await bakeCookie({ keys, req, headers: new Headers() });
-  assertEquals(cookie.get("signed", { signed: true }), undefined);
+Deno.test("Setting cookie to expired date should delete it", () => {
+  // FIXME
+  throw new Error("TODO");
 });
