@@ -49,32 +49,28 @@ async function sign(data: string, key: string): Promise<string> {
 async function verify(
   data: string,
   sig: string,
-  keys: [string, ...string[]],
+  keys: string[],
 ): Promise<boolean> {
-  try {
-    for (const key of keys) {
-      const k = await importKey(key);
-      if (
-        await crypto.subtle.verify(
-          signingAlg,
-          k,
-          base64.decode(sig),
-          encoder.encode(data),
-        )
-      ) {
-        return true;
-      }
+  for (const key of keys) {
+    const k = await importKey(key);
+    if (
+      await crypto.subtle.verify(
+        signingAlg,
+        k,
+        base64.decode(sig),
+        encoder.encode(data),
+      )
+    ) {
+      return true;
     }
-  } catch {
-    // continue
   }
   return false;
 }
 
 /**
  * Creates a new JWT with the given payload. If no key is specified, a securely
- * random fallback will be used. The fallback key is only generated once during
- * startup and it's lost when the Deno process quits.
+ * random transient fallback will be used. The fallback key is only generated
+ * once during startup and it's lost when the Deno process quits.
  *
  * JWT header: `{ "alg": "HS256", "typ": "JWT" }`
  */
@@ -101,29 +97,27 @@ export async function encodeJwt(
  */
 export async function decodeJwt(
   jwt: string,
-  keys = [fallback] as [string, ...string[]],
+  keys = fallback as string | string[],
 ): Promise<Record<string, unknown>> {
   const parts = jwt.split(".");
 
   if (parts.length !== 3) {
     throw new Error("Invalid JWT - bad format");
   }
-  
-  if (! await verify(`${parts[0]}.${parts[1]}`, parts[2], keys)) {
-    throw new Error("Invalid JWT - invalid signature");
-  }
 
   try {
-    const header = JSON.parse(decoder.decode(base64.decode(parts[0])));
-    if (
-      Object.keys(header).length !== 2 ||
-      header.alg !== "HS256" ||
-      header.typ !== "JWT"
-    ) {
+    const header = decoder.decode(base64.decode(parts[0]));
+    const h = JSON.parse(header);
+    if (h.alg !== "HS256" || h.typ !== "JWT") {
       throw null;
     }
   } catch {
-    throw new Error("Invalid JWT - bad header");
+    throw new Error("Invalid JWT - unsupported header");
+  }
+
+  keys = Array.isArray(keys) ? keys : [keys];
+  if (! await verify(`${parts[0]}.${parts[1]}`, parts[2], keys)) {
+    throw new Error("Invalid JWT - bad signature");
   }
 
   let payload: Record<string, unknown>;
