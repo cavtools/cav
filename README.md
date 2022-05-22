@@ -5,23 +5,25 @@ NOTE: This is new and probably broken, don't use it in production.
 Cav is an experimental web framework for [Deno](https://deno.land). Here's some
 notable features:
 
-- The Basics: Signed cookies, static assets, custom context, multipart form
-  processing
+- The Basics:
+  - Query string parameter parsing
+  - JSON and Form body parsing (and others)
+  - Signed cookies and JWTs
+  - Static assets
+  - Custom context (for sessions, db, etc.)
+  - Web sockets
+- Modern syntax that's declarative, functional, and modular
 - Dev-time bundling for frontend TypeScript assets
-- Compatible with frontend frameworks like [Preact](https://preactjs.com)
-- RPC-centric syntax that's declarative, functional, and modular
+  - Compatible with frontend frameworks like [Preact](https://preactjs.com)
 - Automatic de/serialization of nearly any JavaScript value
 - Compatible with [Zod](https://github.com/colinhacks/zod) parsers, enabling
   [end-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
-- Web socket support
-- Zero third-party dependencies
-- Zero config (good defaults)
-- Zero magic
+- Zero...
+  - third-party dependencies
+  - config (i.e. solid defaults)
+  - CLI commands
+  - magic
 - [Deno Deploy](https://deno.com) without a build step
-
-<!-- ## Status -->
-
-<!-- Although Cav has 100% line coverage, it's still very new and not yet adequately tested in production. For now, it's recommended to only use Cav for small scale low-risk projects such as local businesses, personal sites, etc. -->
 
 ## Inspirations
 
