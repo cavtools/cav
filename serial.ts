@@ -419,6 +419,12 @@ export function deserialize<T = unknown>(
   return result as T;
 }
 
+/** Return type of serializeBody(). Includes the BodyInit and a content type. */
+export interface SerializedBody {
+  body: BodyInit;
+  type: string;
+}
+
 /**
  * Serializes a value into a type that's compatible with a BodyInit for a new
  * Response or a fetch() call, making it easy to serialize values for sending to
@@ -432,10 +438,10 @@ export function deserialize<T = unknown>(
  * placed anywhere on the input value, even if they are nested, inside a Map or
  * Set, etc. 
  */
-export function serializeBody(value: unknown, serializers?: Serializers): {
-  body: BodyInit;
-  mime: string;
-} {
+export function serializeBody(
+  value: unknown,
+  serializers?: Serializers,
+): SerializedBody {
   if (
     value instanceof ArrayBuffer ||
     value instanceof ReadableStream ||
@@ -443,25 +449,25 @@ export function serializeBody(value: unknown, serializers?: Serializers): {
   ) {
     return {
       body: value,
-      mime: "application/octet-stream",
+      type: "application/octet-stream",
     };
   }
   if (typeof value === "string") {
     return {
       body: value,
-      mime: "text/plain",
+      type: "text/plain",
     };
   }
   if (value instanceof URLSearchParams) {
     return {
       body: value,
-      mime: "application/x-www-form-urlencoded",
+      type: "application/x-www-form-urlencoded",
     };
   }
   if (value instanceof Blob) {
     return {
       body: value,
-      mime: value.type,
+      type: value.type,
     };
   }
   
@@ -489,15 +495,19 @@ export function serializeBody(value: unknown, serializers?: Serializers): {
   if (!fileKeys.size) {
     return {
       body: shape,
-      mime: "application/json",
+      type: "application/json",
     };
   }
-  form.set("__shape", new Blob([shape], {
-    type: "application/json",
-  }));
+
+  // TODO: Multipart bodies include a boundary that isn't generated until the
+  // request/response is constructed. The "type" property doesn't currently
+  // include that boundary because there's no way to determine it. Not sure if
+  // the current behavior is broken or not
+
+  form.set("__shape", new Blob([shape], { type: "application/json" }));
   return {
     body: form,
-    mime: "multipart/form-data",
+    type: "multipart/form-data",
   };
 }
 
@@ -508,23 +518,22 @@ const mimeJson = /^application\/json;?/;
 const mimeForm = /^multipart\/form-data;?/;
 
 /**
- * Deserializes a Request or Response object whose body was serialized with
- * `serializeBody()`. Any Serializers used outside of the library defaults
- * during serialization need to be provided here as well, or an error may be
- * thrown.
+ * Deserializes a Request or Response instance whose body was serialized with
+ * `serializeBody()`. Any Serializers specified during serialization need to be
+ * specified here as well.
  */
 export async function deserializeBody(
   from: Request | Response,
   serializers?: Serializers,
 ): Promise<unknown> {
-  const mime = from.headers.get("content-type");
-  if (!mime || mime.match(mimeStream)) {
+  const type = from.headers.get("content-type");
+  if (!type || type.match(mimeStream)) {
     return from.body;
   }
-  if (mime.match(mimeString)) {
+  if (type.match(mimeString)) {
     return await from.text();
   }
-  if (mime.match(mimeParams)) {
+  if (type.match(mimeParams)) {
     const form = await from.formData();
     const params = new URLSearchParams();
     for (const [k, v] of form.entries()) {
@@ -532,10 +541,10 @@ export async function deserializeBody(
     }
     return params;
   }
-  if (mime.match(mimeJson)) {
+  if (type.match(mimeJson)) {
     return deserialize(await from.json(), serializers);
   }
-  if (mime.match(mimeForm)) {
+  if (type.match(mimeForm)) {
     const form = await from.formData();
     const shape = form.get("__shape");
     if (
@@ -549,12 +558,12 @@ export async function deserializeBody(
       ...serializers,
       __blob: serializer({
         check: () => false, // Not needed here
-        serialize: () => false, // Not needed here
+        serialize: () => null, // Not needed here
         deserialize: (raw: string) => {
           const blob = form.get(raw);
           if (!blob || !(blob instanceof Blob)) {
             throw new Error(
-              `Referenced blob "${raw}" is missing from the form body`,
+              `Referenced blob "${raw}" is missing from the multipart form`,
             );
           }
           return blob;
@@ -568,9 +577,14 @@ export async function deserializeBody(
 /**
  * Utility function used in the serial functions that determines if an object is
  * a plain object or not. Because this is such a common operation when checking
- * and serializing unknown objects, it's being exported as part of the API.
+ * and serializing unknown objects, it's exported as part of the Serial API.
+ *
+ * This function is also useful for avoiding prototype poisoning; it returns
+ * false for any object that has a poisoned prototype after JSON.parsing it from
+ * a string. For more information about prototype poisoning, see
+ * https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution
  */
-export function isPojo(obj: unknown): obj is Record<string, unknown> {
+export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
   return (
     !!obj &&
     typeof obj === "object" &&

@@ -2,10 +2,14 @@
 
 import { base64 } from "./deps.ts";
 
-const header = base64.encode(JSON.stringify({
-  alg: "HS256",
-  typ: "JWT",
-}));
+// TODO: This is a very minimal API that doesn't do expiration checks or
+// anything like that. Should it?  
+// TODO: Make this browser compatible by removing the base64 dependency and
+// writing your own version with the help of
+// https://developer.mozilla.org.cach3.com/Web/API/WindowBase64/Base64_encoding_and_decoding  
+// TODO: Support keygrip?
+
+const header = base64.encode(JSON.stringify({ alg: "HS256" }));
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const random = new Uint8Array(32);
@@ -68,16 +72,20 @@ async function verify(
 }
 
 /**
- * Creates a new JWT with the given payload. If no key is specified, a securely
- * random transient fallback will be used. The fallback key is only generated
- * once during startup and it's lost when the Deno process quits.
+ * Creates a new JWT with the given payload, which is passed into JSON.stringify
+ * before encoding. If no key is specified, a securely random transient fallback
+ * will be used. The fallback key is only generated once during startup and it's
+ * lost when the Deno process quits.
  *
- * JWT header: `{ "alg": "HS256", "typ": "JWT" }`
+ * If multiple keys are specified, only the first key will be used.
+ *
+ * JWT header: `{ "alg": "HS256" }`
  */
 export async function encodeJwt(
-  payload: Record<string, unknown>,
-  key = fallback,
+  payload: unknown,
+  keys = fallback as string | string[],
 ): Promise<string> {
+  const key = Array.isArray(keys) ? keys[0] : keys;
   const jwt = `${header}.${base64.encode(JSON.stringify(payload))}`;
   const sig = await sign(jwt, key);
   return `${jwt}.${sig}`;
@@ -87,10 +95,9 @@ export async function encodeJwt(
  * Verifies the JWT and returns its parsed payload object. If verification
  * fails, an error will be thrown. Verification will fail if:
  *
- * - The header isn't `{ "alg": "HS256", "typ": "JWT" }`
+ * - The header isn't `{ "alg": "HS256" }`
  * - The JWT was signed with an unknown key
  * - The signature doesn't match its header/payload
- * - The "exp" claim exists on the payload and it's set to a date in the past
  *
  * Multiple keys can be provided to handle key rollover. If no keys are
  * provided, the module-level random fallback key will be used.
@@ -98,7 +105,7 @@ export async function encodeJwt(
 export async function decodeJwt(
   jwt: string,
   keys = fallback as string | string[],
-): Promise<Record<string, unknown>> {
+): Promise<unknown> {
   const parts = jwt.split(".");
 
   if (parts.length !== 3) {
@@ -108,7 +115,7 @@ export async function decodeJwt(
   try {
     const header = decoder.decode(base64.decode(parts[0]));
     const h = JSON.parse(header);
-    if (h.alg !== "HS256" || h.typ !== "JWT") {
+    if (h.alg !== "HS256") {
       throw null;
     }
   } catch {
@@ -120,21 +127,10 @@ export async function decodeJwt(
     throw new Error("Invalid JWT - bad signature");
   }
 
-  let payload: Record<string, unknown>;
   try {
-    payload = JSON.parse(decoder.decode(base64.decode(parts[1])));
+    const payload = decoder.decode(base64.decode(parts[1]));
+    return JSON.parse(payload);
   } catch {
     throw new Error("Invalid JWT - bad payload");
   }
-
-  try {
-    const exp = payload.exp;
-    if (typeof exp === "string" && new Date(exp).getTime() < Date.now()) {
-      throw null;
-    }
-  } catch {
-    throw new Error("Invalid JWT - expired");
-  }
-
-  return payload;
 }

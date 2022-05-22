@@ -1,200 +1,161 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { http, base64 } from "./deps.ts";
-
-// TODO: Make every signed cookie a JWT, no separate signatures
-// TODO: A way to access cookies that have been set for a different path/domain
-// TODO: Edge case: The unsigned signatures don't update until the .sync(),
-// it's probably better to make all valid signatures inaccessible
+import { base64 as b64, http } from "./deps.ts";
+import { encodeJwt, decodeJwt } from "./jwt.ts";
 
 /**
- * A (mostly) synchronous interface for accessing HTTP cookies tied to a Request
- * and response Headers instance. Supports signed cookies.
- */
-export interface Cookie {
-  /**
-   * Gets a cookie. Returns `null` if the cookie isn't set or the signed cookie
-   * JWT was invalid or expired.
-   */
-  get: (name: string, opt?: { signed?: boolean }) => string | undefined;
-  /**
-   * Sets a cookie. If the signed option is true, the cookie will be stored as a
-   * JWT. See https://deno.land/std@0.140.0/http/cookie.ts#L9 for a list
-   * of other cookie options.
-   */
-  set: (name: string, value: string, opt?: (
-    Omit<http.Cookie, "name" | "value"> & { signed?: boolean; }
-  )) => void;
-  /**
-   * Deletes a cookie. The scope of the deletion can be limited using the
-   * provided path and domain options.
-   */
-  delete: (name: string, opt?: {
-    path?: string;
-    domain?: string;
-  }) => void;
-  /** Returns a copy of the current unsigned cookies. */
-  unsigned: () => Record<string, string>;
-  /** Returns a copy of the current signed cookies. */
-  signed: () => Record<string, string>;
-  /** Syncs updates to the response Headers provided during initialization. */
-  sync: () => Promise<void>;
-}
-
-
-
-/**
- * Creates a new Cookie interface that's "baked" with the given Request and
- * response Headers instance. Keys can be provided for cookie signing. If no
- * keys are provided, a library-wide random fallback key will be used. The
- * fallback key is lost when the server shuts down.
- *
- * The Cookie interface provides synchronous access to its key-value pairs, but
- * it needs to be asynchronously `.sync()`-ed before updates are reflected in
- * the given response Headers.
+ * Signed cookies are just HS256 JWTs with the header omitted, for data saving
+ * purposes. To use the cookies as regular JWTs elsewhere in an application,
+ * this header will need to be prepended to the cookie value with a period
+ * separator to make the JWT valid. Like this:
  *
  * ```ts
- * import { bakeCookie } from "https://deno.land/x/cav/cookie.ts";
- * import { serve } from "https://deno.land/std/http/mod.ts";
- *
- * async function handler(req: Request) {
- *   const headers = new Headers();
- *   const cookie = await bakeCookie({
- *     req, 
- *     headers,
- *     keys: ["secret-key"],
- *   });
- *
- *   // Ex: Get a previously set cookie
- *   const session = cookie.get("session", { signed: true });
- *
- *   // Ex: Set a new cookie
- *   cookie.set("session", "1234", { signed: true, secure: true });
- *
- *   // Ex: Delete an old cookie
- *   cookie.delete("session");
- *
- *   // Ex: Get a record of all current cookies
- *   const signedCookies: Record<string, string> = cookie.signed();
- *   const unsignedCookies: Record<string, string> = cookie.unsigned();
- *
- *   // Required: Sync cookie updates before constructing the Response
- *   await cookie.sync();
- *   return new Response("hello", { headers });
- * }
- *
- * serve(handler);
+ * const jwt = await decodeJwt(COOKIE_JWT_HEADER + "." + value, secretKey);
  * ```
  */
-export async function bakeCookie(init: {
-  req: Request;
-  headers: Headers;
-  keys?: [string, ...string[]];
-}): Promise<Cookie> {
-  const keys = init.keys || fallbackKeys;
-  const unsigned = http.getCookies(init.req.headers);
-  const signed: Record<string, string> = {};
+export const COOKIE_JWT_HEADER = b64.encode(JSON.stringify({ alg: "HS256" }));
 
-  for (const [k, v] of Object.entries(unsigned)) {
-    const sig = unsigned[`${k}_sig`];
-    if (sig) {
-      if (await verify(`${k}=${v}`, sig, keys)) {
-        signed[k] = v;
-        delete unsigned[k];
+export interface CookieJar {
+  get: (name: string) => string | undefined;
+  set: (name: string, value: string, opt?: CookieSetOptions) => void;
+  delete: (name: string, opt?: CookieDeleteOptions) => void;
+  entries: () => [string, string][];
+  has: (name: string) => boolean;
+  isSigned: (name: string) => boolean;
+  applyUpdates: (headers: Headers) => Promise<void>;
+}
+
+export interface CookieSetOptions extends Omit<http.Cookie, "name" | "value"> {
+  signed?: boolean;
+}
+
+export interface CookieDeleteOptions {
+  path?: string;
+  domain?: string;
+}
+
+export async function cookieJar(
+  req: Request,
+  keys?: string | string[],
+): Promise<CookieJar> {
+  const unsigned = new Map(Object.entries(http.getCookies(req.headers)));
+  const signed = new Map<string, string>();
+
+  const updates: (
+    | { op: "set", name: string, value: string, opt?: CookieSetOptions }
+    | { op: "delete", name: string, opt?: CookieDeleteOptions }
+  )[] = [];
+
+  for (const [k, v] of unsigned.entries()) {
+    try {
+      const jwt = await decodeJwt(COOKIE_JWT_HEADER + "." + v, keys);
+      const [name, value, exp] = jwt as [string, string, number | undefined];
+      if (
+        name !== k ||
+        typeof value !== "string" ||
+        (typeof exp !== "number" && typeof exp !== "undefined")
+      ) {
+        // Leave it alone
+        continue;
       }
+
+      if (exp && Date.now() > exp) {
+        // DON'T leave it alone. It was valid but it expired, so it should get
+        // deleted
+        updates.push({ op: "delete", name });
+        unsigned.delete(k);
+        continue;
+      }
+
+      // Valid and not expired, move it over to signed
+      signed.set(k, value);
+      unsigned.delete(k);
+    } catch {
+      // Leave it alone
     }
   }
 
-  const updates: (
-    | {
-      op: "set",
-      name: string,
-      value: string,
-      opt?: Omit<http.Cookie, "name" | "value"> & { signed?: boolean; };
-    }
-    | { op: "delete", name: string, opt?: { path?: string; domain?: string } }
-  )[] = [];
-
-  const cookie: Cookie = {
-    get(name, opt) {
-      return opt?.signed ? signed[name] : unsigned[name];
+  return {
+    get: (name) => {
+      return signed.has(name) ? signed.get(name) : unsigned.get(name);
     },
-    set(name, value, opt) {
+    set: (name, value, opt) => {
       updates.push({ op: "set", name, value, opt });
 
       // If the current request doesn't match the path and domain for the set
-      // cookie, don't set our cookie since the client's cookie for this path
-      // and domain won't be set either
-      if (opt?.path || opt?.domain) {
-        const p = new URLPattern({
-          hostname: opt.domain ? `{*.}?${opt.domain}` : "*",
-          pathname: opt.path ? `${opt.path}/*?` : "*",
-        });
-        if (!p.exec(init.req.url)) {
-          return;
-        }
+      // options, don't update our copy since the client browser would still
+      // send the same cookie if they repeated the current request
+      if (!matchesDomainPath(req, opt?.domain, opt?.path)) {
+        return;
       }
 
-      // Update our copy if the cookie path and domain matched the current
-      // request or weren't specified.
       if (opt?.signed) {
-        signed[name] = value;
+        signed.set(name, value);
+        unsigned.delete(name);
       } else {
-        unsigned[name] = value;
+        unsigned.set(name, value);
+        signed.delete(name);
       }
     },
-    delete(name, opt) {
+    delete: (name, opt) => {
       updates.push({ op: "delete", name, opt });
-      
-      // If the current request doesn't match the path and domain for the
-      // deleted cookie, don't delete our cookie since the client's cookie for
-      // this path and domain won't be deleted either
-      if (opt?.path || opt?.domain) {
-        const p = new URLPattern({
-          hostname: opt.domain ? `{*.}?${opt.domain}` : "*",
-          pathname: opt.path ? `${opt.path}/*?` : "*",
-        });
-        if (!p.exec(init.req.url)) {
+
+      // See the comment in set()
+      if (!matchesDomainPath(req, opt?.domain, opt?.path)) {
+        return;
+      }
+
+      signed.delete(name);
+      unsigned.delete(name);
+    },
+    entries: () => {
+      return [
+        ...signed.entries(),
+        ...unsigned.entries(),
+      ];
+    },
+    has: (name) => {
+      return signed.has(name) || unsigned.has(name);
+    },
+    isSigned: (name) => {
+      return signed.has(name);
+    },
+    applyUpdates: async (headers) => {
+      for (const u of updates) {
+        if (u.op === "delete") {
+          http.deleteCookie(headers, u.name, u.opt);
+          continue;
+        }
+
+        // u.op === "set"
+        if (u.opt?.signed) {
+          const val = (
+            u.opt?.expires ? [u.name, u.value, u.opt.expires.getTime()]
+            : [u.name, u.value]
+          );
+
+          // Chop off the jwt header to save space
+          const jwt = (await encodeJwt(val, keys))
+            .split(".").slice(1).join(".");
+
+          http.setCookie(headers, { ...u.opt, name: u.name, value: jwt });
           return;
         }
-      }
-
-      delete signed[name];
-      delete unsigned[name];
-    },
-    signed() {
-      return { ...signed };
-    },
-    unsigned() {
-      return { ...unsigned };
-    },
-    async sync() {
-      let u = updates.shift();
-      while (u) {
-        if (u.op === "delete") {
-          http.deleteCookie(init.headers, u.name, u.opt);
-        }
-
-        if (u.op === "set") {
-          http.setCookie(init.headers, {
-            ...u.opt,
-            name: u.name,
-            value: u.value,
-          });
-          if (u.opt?.signed) {
-            http.setCookie(init.headers, {
-              ...u.opt,
-              name: `${u.name}_sig`,
-              value: await sign(`${u.name}=${u.value}`, keys[0]),
-            });
-          }
-        }
-
-        u = updates.shift();
+        http.setCookie(headers, { ...u.opt, name: u.name, value: u.value });
       }
     },
   };
-
-  return cookie;
 }
 
+function matchesDomainPath(req: Request, domain?: string, path?: string) {
+  if (path || domain) {
+    const p = new URLPattern({
+      hostname: domain ? `{*.}?${domain}` : "*",
+      pathname: path ? `${path}/*?` : "*",
+    });
+    if (!p.exec(req.url)) {
+      return false;
+    }
+  }
+  return true;
+}

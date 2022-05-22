@@ -3,12 +3,16 @@
 import { encodeJwt, decodeJwt } from "../jwt.ts";
 import { assertEquals, assertRejects } from "./deps_test.ts";
 
-// The correct JWTs were created with https://jwt.io
+// The correct JWTs were created with https://jwt.io. Note that the calculator
+// on that site handles strings differently; it strips quotation marks before
+// encoding if the payload is a plain string, but Cav's JWT implementation
+// leaves them in. I had to manually add them for the first test by setting the
+// payload to "\"some-payload\""
 
-Deno.test("Encoding / decoding without exp", async () => {
-  const payload = { some: "payload" };
+Deno.test("Encoding / decoding a string", async () => {
+  const payload = "some-payload";
   const key = "super-secret-test-key";
-  const correct = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzb21lIjoicGF5bG9hZCJ9.zkACJgmttxpXyWwHoL3smVhkSetrwhlpBrT_rl9JdKs";
+  const correct = "eyJhbGciOiJIUzI1NiJ9.InNvbWUtcGF5bG9hZCI.2t9E7iM0NUwK4rbtPV9WylaOsM5H4aG-4vhV8vdR1Pc";
 
   const encoded = await encodeJwt(payload, key);
   const decoded = await decodeJwt(encoded, key);
@@ -16,25 +20,15 @@ Deno.test("Encoding / decoding without exp", async () => {
   assertEquals(decoded, payload);
 });
 
-Deno.test("Encoding / decoding with unexpired exp", async () => {
-  const payload = { exp: "2100-01-01T00:00:00.000Z" };
-  const key = "different-secret-key";
-  const correct = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMTAwLTAxLTAxVDAwOjAwOjAwLjAwMFoifQ.NMT6oYe4oK2kNliUkhIXBMz0i5NSZVs3LZDl6rqKDUw";
-
-  const encoded = await encodeJwt(payload, key);
-  const decoded = await decodeJwt(encoded, key);
-  assertEquals(encoded, correct);
-  assertEquals(decoded, payload);
-});
-
-Deno.test("Encoding / decoding with expired exp", async () => {
+Deno.test("Encoding / decoding an object", async () => {
   const payload = { exp: "2000-01-01T00:00:00.000Z" };
-  const key = "secret-key";
-  const correct = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOiIyMDAwLTAxLTAxVDAwOjAwOjAwLjAwMFoifQ.exu--Brg9xKE6mDtOSUtpmUwfxYbgo2U1Sw5E51N2-s";
+  const key = "different-secret-key";
+  const correct = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOiIyMDAwLTAxLTAxVDAwOjAwOjAwLjAwMFoifQ.5MB6o_6lgMHl8w_08KvuhDtu0KR6Kae7dcvg3Gpqjms";
 
-  const encoded = await encodeJwt(payload, key);
+  const encoded = await encodeJwt(payload, [key]);
+  const decoded = await decodeJwt(encoded, [key]);
   assertEquals(encoded, correct);
-  await assertRejects(() => decodeJwt(encoded, key), Error, "expired");
+  assertEquals(decoded, payload);
 });
 
 Deno.test("Encoding / decoding with the fallback key", async () => {
@@ -47,7 +41,7 @@ Deno.test("Encoding / decoding with the fallback key", async () => {
 });
 
 Deno.test("Key rollover", async () => {
-  const payload = { foo: "bar" };
+  const payload = ["foo", { bar: "baz" }];
   const keys = ["bad", "bad2", "good"];
   const encoded = await encodeJwt(payload, keys[2]);
   const decoded = await decodeJwt(encoded, keys);
@@ -55,7 +49,7 @@ Deno.test("Key rollover", async () => {
 });
 
 Deno.test("Key rollover with correct key missing", async () => {
-  const payload = { foo: "bar" };
+  const payload = null;
   const keys = ["bad", "bad2", "bad3"];
   const encoded = await encodeJwt(payload, "good");
   await assertRejects(() => decodeJwt(encoded, keys), Error, "bad signature");
