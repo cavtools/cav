@@ -2,130 +2,68 @@
 
 import { assertEquals } from "./deps_test.ts";
 import { cookieJar } from "../cookie.ts";
+import type { CookieJar } from "../cookie.ts";
 
-Deno.test("Basic functionality", async t => {
-  // This was made with https://jwt.io  
-  // Signed cookie JWT value / key: ["signed", "abc123"] / "abc123"
-  const req = new Request("http://localhost/test", {
+// Useful: https://jwt.io  
+// Remember that signed cookies are just `{"alg":"HS256"}` JWTs with the header
+// removed
+
+function runTest(
+  desc: string,
+  opt: {
+    req: Request;
+    keys?: string | string[];
+    op: (cookie: CookieJar) => void,
+    get: Record<string, string | undefined>;
+    entries: [string, string][];
+    has: Record<string, boolean>;
+    isSigned: Record<string, boolean>;
+    applyUpdates: [string, string][];
+  },
+): void {
+  Deno.test(desc, async () => {
+    const cookie = await cookieJar(opt.req, opt.keys);
+    opt.op(cookie);
+
+    for (const [k, v] of Object.entries(opt.get)) {
+      assertEquals(cookie.get(k), v);
+    }
+
+    assertEquals(cookie.entries(), opt.entries);
+
+    for (const [k, v] of Object.entries(opt.has)) {
+      assertEquals(cookie.has(k), v);
+    }
+
+    const headers = new Headers();
+    await cookie.applyUpdates(headers);
+    assertEquals(Array.from(headers.entries()), opt.applyUpdates);
+  });
+}
+
+runTest("Initial state of a bare request", {
+  req: new Request("http://localhost/test"),
+  op: () => {},
+  get: { foo: undefined },
+  entries: [],
+  has: { bar: false },
+  isSigned: { baz: false },
+  applyUpdates: [],
+});
+
+runTest("Initial state of a request with 1 signed and 1 unsigned cookie", {
+  req: new Request("http://localhost/test", {
     headers: {
-      "cookie": "unsigned=hello; signed=WyJzaWduZWQiLCJhYmMxMjMiXQ.J-qThUqE0APQBF3fldtGKMSkIsha_L3qe_mLe4U3q1U"
+      "cookie": "a=WyJhIiwiYWJjMTIzIl0.X6o_6Iy1LpDyTx1RYcZAAm6vZMn0ohZD3pP3_ox4fxI; b=hello"
     },
-  });
-  const cookie = await cookieJar(req, "abc123");
-
-  const check = async (
-    desc: string,
-    state: {
-      get: Record<string, string | undefined>;
-      entries: [string, string][];
-      has: Record<string, boolean>;
-      isSigned: Record<string, boolean>;
-      applyUpdates: [string, string][];
-    },
-  ) => {
-    await t.step(desc, async () => {
-      for (const [k, v] of Object.entries(state.get)) {
-        assertEquals(cookie.get(k), v);
-      }
-
-      assertEquals(cookie.entries(), state.entries);
-
-      for (const [k, v] of Object.entries(state.has)) {
-        assertEquals(cookie.has(k), v);
-      }
-
-      const headers = new Headers();
-      await cookie.applyUpdates(headers);
-      assertEquals(Array.from(headers.entries()), state.applyUpdates);
-    });
-  };
-
-  await check("Initial state", {
-    get: {
-      unsigned: "hello",
-      signed: "abc123",
-      unsigned2: undefined,
-      signed2: undefined,
-    },
-    entries: [
-      ["signed", "abc123"],
-      ["unsigned", "hello"],
-    ],
-    has: {
-      unsigned: true,
-      signed: true,
-      unsigned2: false,
-      signed2: false,
-    },
-    isSigned: {
-      unsigned: false,
-      signed: true,
-      unsigned2: false,
-      signed2: false,
-    },
-    applyUpdates: [],
-  });
-
-  cookie.set("unsigned", "world");
-  await check("Updated old unsigned cookie", {
-    get: {
-      unsigned: "world",
-      signed: "abc123",
-      unsigned2: undefined,
-      signed2: undefined,
-    },
-    entries: [
-      ["signed", "abc123"],
-      ["unsigned", "world"],
-    ],
-    has: {
-      unsigned: true,
-      signed: true,
-      unsigned2: false,
-      signed2: false,
-    },
-    isSigned: {
-      unsigned: false,
-      signed: true,
-      unsigned2: false,
-      signed2: false,
-    },
-    applyUpdates: [
-      ["set-cookie", "unsigned=world"]
-    ],
-  });
-
-  cookie.set("signed", "def456", { signed: true });
-  await check("Updated old signed cookie", {
-    get: {
-      unsigned: "world",
-      signed: "def456",
-      unsigned2: undefined,
-      signed2: undefined,
-    },
-    entries: [
-      ["signed", "def456"],
-      ["unsigned", "world"],
-    ],
-    has: {
-      unsigned: true,
-      signed: true,
-      unsigned2: false,
-      signed2: false,
-    },
-    isSigned: {
-      unsigned: false,
-      signed: true,
-      unsigned2: false,
-      signed2: false,
-    },
-    applyUpdates: [
-      ["set-cookie", "unsigned=world"],
-      ["set-cookie", "signed=WyJzaWduZWQiLCJkZWY0NTYiXQ.XM0LAwc4_uZfP_hc-mhs1y-z9AAVdDSILUjKyHJkYpw"],
-    ],
-  });
-
-  // TODO: Keep going
+  }),
+  keys: "abc123",
+  op: () => {},
+  get: { a: "abc123", b: "hello", foo: undefined },
+  entries: [["a", "abc123"], ["b", "hello"]],
+  has: { a: true, b: true, bar: false },
+  isSigned: { a: true, b: false, baz: false },
+  applyUpdates: [],
 });
 
 // Deno.test("Switching cookies between signed and unsigned", async () => {

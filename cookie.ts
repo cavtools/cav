@@ -4,16 +4,31 @@ import { base64 as b64, http } from "./deps.ts";
 import { encodeJwt, decodeJwt } from "./jwt.ts";
 
 /**
- * Signed cookies are just HS256 JWTs with the header omitted, for data saving
- * purposes. To use the cookies as regular JWTs elsewhere in an application,
- * this header will need to be prepended to the cookie value with a period
- * separator to make the JWT valid. Like this:
+ * Signed cookies are just HS256 JWTs with the header omitted to save bandwidth.
+ * To inspect the cookies as regular JWTs, this header will need to be prepended
+ * to the cookie value with a period separator. Like this:
  *
  * ```ts
- * const jwt = await decodeJwt(COOKIE_JWT_HEADER + "." + value, secretKey);
+ * const token = await decodeJwt(COOKIE_JWT_HEADER + "." + value, secretKey);
+ * // === ["cookie-name", "cookie-value", <ms after epoch of cookie expiration>]
  * ```
+ * 
+ * The header JSON is `{ "alg": "HS256" }`.
  */
 export const COOKIE_JWT_HEADER = b64.encode(JSON.stringify({ alg: "HS256" }));
+
+function matchesDomainPath(req: Request, domain?: string, path?: string) {
+  if (path || domain) {
+    const p = new URLPattern({
+      hostname: domain ? `{*.}?${domain}` : "*",
+      pathname: path ? `${path}/*?` : "*",
+    });
+    if (!p.exec(req.url)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export interface CookieJar {
   get: (name: string) => string | undefined;
@@ -139,23 +154,10 @@ export async function cookieJar(
             .split(".").slice(1).join(".");
 
           http.setCookie(headers, { ...u.opt, name: u.name, value: jwt });
-          return;
+        } else {
+          http.setCookie(headers, { ...u.opt, name: u.name, value: u.value });
         }
-        http.setCookie(headers, { ...u.opt, name: u.name, value: u.value });
       }
     },
   };
-}
-
-function matchesDomainPath(req: Request, domain?: string, path?: string) {
-  if (path || domain) {
-    const p = new URLPattern({
-      hostname: domain ? `{*.}?${domain}` : "*",
-      pathname: path ? `${path}/*?` : "*",
-    });
-    if (!p.exec(req.url)) {
-      return false;
-    }
-  }
-  return true;
 }
