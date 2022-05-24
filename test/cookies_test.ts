@@ -333,7 +333,7 @@ test("Max-Age, Expires, and some other options", {
     const [val, httpOnly, maxAge, sameSite, expires, test] = bh.split("; ");
     let val2 = val.split("=")[1].split(".")[0];
     const decoder = new TextDecoder();
-    val2 = decoder.decode(base64.decode(val));
+    val2 = decoder.decode(base64.decode(val2));
     const [name, value, expiresMsTime] = JSON.parse(val2);
 
     assertEquals(name, "b");
