@@ -11,60 +11,15 @@ import {
   serialize,
   deserialize,
   serializer,
+  serializeBody,
+  deserializeBody,
 } from "../serial.ts";
 import type { Serializers, Serializer } from "../serial.ts";
 
-Deno.test("de/serialize(): bad inputs", async t => {
-  await t.step("serialize(): no matching serializer", () => {
-    assertThrows(() => {
-      serialize(new (class { constructor(){} }));
-    });
-  });
-
-  await t.step("deserialize(): prototype poisoning", () => {
-    assertThrows(() => {
-      deserialize({ __proto__: { hi: "hello" } });
-    });
-  });
-
-  await t.step("deserialize(): bad reference", () => {
-    assertThrows(() => {
-      deserialize({ $ref: ".hello" });
-    });
-  });
-
-  await t.step("deserialize(): No matching serializer", () => {
-    assertThrows(() => {
-      deserialize({ $huh: "what?" });
-    });
-  });
-});
-
-Deno.test("de/serialize() reserved serializer names", async t => {
-  const reserved = [
-    "httpError", "error", "date",
-    "undefined", "symbol", "map",
-    "set", "bigint", "regexp",
-    "number", "conflict", "ref", // Note that ref isn't a serializer
-  ];
-
-  for (const name of reserved) {
-    await t.step(name, () => {
-      assertThrows(() => {
-        serialize(null, { [name]: {} as Serializer });
-      });
-      assertThrows(() => {
-        deserialize(null, { [name]: {} as Serializer });
-      });
-    });
-  }
-});
-
-// Many of the following tests are modeled after superjson's tests as of March
-// 28, 2022: https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
-
-Deno.test("de/serialize(): basic IO", async t => {
-  const data: Record<string, {
+Deno.test("de/serialize()", async t => {
+  // Many of the following tests are modeled after superjson's tests as of March
+  // 28, 2022: https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
+  const fixtures: Record<string, {
     input: unknown;
     output: unknown;
     custom?: (x: {
@@ -524,7 +479,7 @@ Deno.test("de/serialize(): basic IO", async t => {
     // Skipping "regression #109: nested classes" (I'm lazy)
   };
 
-  for (const [k, v] of Object.entries(data)) {
+  for (const [k, v] of Object.entries(fixtures)) {
     await t.step(k, () => {
       const i = typeof v.input === "function" ? v.input() : v.input;
 
@@ -545,4 +500,70 @@ Deno.test("de/serialize(): basic IO", async t => {
     });
   }
 });
+Deno.test("de/serialize(): bad inputs", () => {
+    assertThrows(() => {
+      serialize(new (class { constructor(){} }));
+    });
 
+    assertThrows(() => {
+      deserialize({ __proto__: { hi: "hello" } });
+    });
+
+    assertThrows(() => {
+      deserialize({ $ref: ".hello" });
+    });
+
+    assertThrows(() => {
+      deserialize({ $huh: "what?" });
+    });
+});
+Deno.test("de/serialize(): reserved serializer names", async t => {
+  const reserved = [
+    "httpError", "error", "date",
+    "undefined", "symbol", "map",
+    "set", "bigint", "regexp",
+    "number", "conflict", "ref", // Note that ref isn't a serializer
+  ];
+
+  for (const name of reserved) {
+    await t.step(name, () => {
+      assertThrows(() => {
+        serialize(null, { [name]: {} as Serializer });
+      });
+      assertThrows(() => {
+        deserialize(null, { [name]: {} as Serializer });
+      });
+    });
+  }
+});
+
+function testSerializeBody(desc: string, opt: {
+  input: unknown;
+  serializers?: Serializers;
+  body?: unknown;
+  type?: unknown;
+}) {
+  Deno.test(`serializeBody(): ${desc}`, () => {
+    const sb = serializeBody(opt.input, opt.serializers);
+    if (opt.body) {
+      assertEquals(sb.body, opt.body);
+    }
+    if (opt.type) {
+      assertEquals(sb.type, opt.type);
+    }
+  });
+}
+
+testSerializeBody("ArrayBuffer", {
+  input: new ArrayBuffer(10),
+  body: new ArrayBuffer(10),
+  type: "application/octet-stream",
+});
+
+testSerializeBody("ArrayBufferView", {
+  input: new Uint8Array([1, 2, 3]),
+  body: new Uint8Array([1, 2, 3]),
+  type: "application/octet-stream",
+});
+
+testSerializeBody("ReadableStream")

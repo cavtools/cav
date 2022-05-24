@@ -28,7 +28,7 @@ export interface HttpErrorInit {
   detail?: Record<string, unknown>;
 }
 
-/** An error class for describing exceptions during HTTP processing. */
+/** Error class for describing exceptions during HTTP processing. */
 export class HttpError extends Error {
   /** An HTTP status code describing what kind of error this is. */
   status: number;
@@ -46,52 +46,44 @@ export class HttpError extends Error {
 }
 
 /**
- * A group of functions used to recognize (check), serialize, and deserialize
- * objects and special values that are not strings, basic numbers, booleans, or
- * nulls into objects that are JSON compatible.
+ * Interface for serializing and deserializing arbitrary non-JSON primitive
+ * values into JSON.
  */
 export interface Serializer<I = unknown, O = unknown> {
   /**
-   * Function for checking if the serializer applies to a given value. JSON
-   * primitives like basic numbers, strings, booleans, and nulls skip all
-   * serializers and are returned as-is. For example, `check: (v) => typeof v
-   * === "string"` always returns false.
+   * Checks if this serializer applies to the value. JSON primitives like basic
+   * numbers, strings, booleans, and nulls are never checked, they're kept as-is
    */
   check(value: unknown): boolean;
   /**
    * Transforms the value into its output on the resulting json-compatible
-   * object. The value returned by this function will be reserialized; the
-   * output does not need to be JSON-compatible. 
+   * object. The value returned by this function will be re-serialized; the
+   * output doesn't need to be JSON-compatible. 
    */
   serialize(value: I): O;
   /**
    * Transforms serialized values into their original shape and structure.
    * Initially, the value is only constructed from the raw serialized JSON.
+   *
    * Values that are more complex and need things like referential equality or
-   * non-POJO/Array objects will need to use the `whenDone` registration
-   * function to access the equivalent of the value returned from `serialize()`
-   * when the value was serialized. (See the docs for the WhenDone type for more
-   * details.)
+   * non-POJO/Array objects will need to use the `whenDone` function to wait to
+   * complete setup until all nested references have been instantiated. This is
+   * required because not every nested value on the raw JSON value will have
+   * references instantiated yet, and some of the nested values may have been
+   * re-serialized. `whenDone` executes the given function only after all values
+   * have been instanciated; each `whenDone` function is executed in stack order
+   * (LIFO). Generally, if a serialized value contains nested values that may
+   * also be serialized, an empty initial value should be returned and further
+   * setup should happen inside `whenDone`.
+   *
+   * See the serializers for Maps and Sets in serial.ts for an example of how to
+   * use `whenDone`.
    */
-  deserialize(raw: unknown, whenDone: WhenDone<O>): I;
+  deserialize(
+    raw: unknown,
+    whenDone: (fn: (ready: O) => void) => void,
+  ): I;
 }
-
-/**
- * A Serializer's `deserialize()` function receives the raw serialized JSON
- * value as its first argument and this registration function as the second.
- * Functions registered with whenDone will be run last-in-first-out (stack
- * order) when the raw JSON has been processed into the final object instance.
- * WhenDone functions are needed whenever the serialized data is more complex
- * than simple JSON values, for example when referential equality needs to be
- * maintained or when the serialize function returns anything that needs to be
- * re-serialized by some other serializer. Referenced objects may not be fully
- * initialized when the registered function is called, but its instance will be
- * instantiated so that references can be fixed.
- *
- * Credit goes to [json-dry](https://github.com/11ways/json-dry) for the
- * whenDone concept.
- */
-export type WhenDone<O> = (fn: (ready: O) => void) => void;
 
 /**
  * Constructs a Serializer. This simply returns the first argument, it's only

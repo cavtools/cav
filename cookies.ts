@@ -10,7 +10,7 @@ import { encodeJwt, decodeJwt } from "./jwt.ts";
  *
  * ```ts
  * const token = await decodeJwt(COOKIE_JWT_HEADER + "." + value, secretKey);
- * // === ["cookie-name", "cookie-value", <ms after epoch of cookie expiration>]
+ * // === ["cookie-name", "cookie-value", <epoch time of cookie expiration>?]
  * ```
  * 
  * The header JSON is `{ "alg": "HS256" }`.
@@ -30,7 +30,10 @@ function matchesDomainPath(req: Request, domain?: string, path?: string) {
   return true;
 }
 
-/** Interface for reading and updating the cookies for a Request. */
+/**
+ * Interface for reading and updating the cookies for a Request. Supports cookie
+ * signing.
+ */
 export interface CookieJar {
   /** Gets an up-to-date cookie value. */
   get: (name: string) => string | undefined;
