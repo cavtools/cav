@@ -330,11 +330,11 @@ test("Max-Age, Expires, and some other options", {
     const [[_, ah], [__, bh]] = Array.from(headers.entries());
     assertEquals(ah, "a=world; Secure");
 
-    let [val, httpOnly, maxAge, sameSite, expires, test] = bh.split("; ");
-    val = val.split("=")[1].split(".")[0];
+    const [val, httpOnly, maxAge, sameSite, expires, test] = bh.split("; ");
+    let val2 = val.split("=")[1].split(".")[0];
     const decoder = new TextDecoder();
-    val = decoder.decode(base64.decode(val));
-    const [name, value, expiresMsTime] = JSON.parse(val);
+    val2 = decoder.decode(base64.decode(val));
+    const [name, value, expiresMsTime] = JSON.parse(val2);
 
     assertEquals(name, "b");
     assertEquals(value, "foobar");

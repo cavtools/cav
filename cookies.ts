@@ -38,6 +38,9 @@ export interface CookieJar {
    * Updates a cookie's value. Cookies with the `signed` option set to true will
    * be stored as a JWT with the header removed, signed using the keys provided
    * when the CookieJar was created.
+   *
+   * When both the `maxAge` and `expires` options are specified, only `maxAge`
+   * will be used and `expires` will be ignored.
    */
   set: (name: string, value: string, opt?: CookieSetOptions) => void;
   /** Removes a cookie by clearing and expiring any previous value. */
@@ -47,7 +50,7 @@ export interface CookieJar {
    * ...unsigned]`
    */
   entries: () => [string, string][];
-  /** Checks if a cookie is set. */
+  /** Checks if a cookie exists in the CookieJar. */
   has: (name: string) => boolean;
   /** Checks if a cookie is signed or not. Non-existent cookies return false. */
   isSigned: (name: string) => boolean;
