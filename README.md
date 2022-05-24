@@ -2,29 +2,21 @@
 
 NOTE: This is new and probably broken, don't use it in production.
 
-Cav is an experimental web framework for [Deno](https://deno.land). Here's some
-notable features:
+Cav is an experimental web framework for [Deno](https://deno.land).
 
-- The Basics:
-  - Request routing & URL parsing via URLPatterns
-  - Query string parsing
-  - Body parsing (JSON, forms, etc.)
-  - Signed cookies and JWTs
-  - Static assets
-  - Custom context (for sessions, db, etc.)
-  - Web sockets
-- Modern syntax that's declarative, functional, and modular
-- Dev-time bundling for frontend TypeScript assets
-  - Works with frontend frameworks like [Preact](https://preactjs.com)
-- Automatic de/serialization of nearly any JavaScript value
-- Tuned for [Zod](https://github.com/colinhacks/zod) parsers
+## Goals
+
+- Modern server-side essentials
 - [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
+- Functional, with a declarative syntax
+- Dev-time bundling for frontend TypeScript modules
+- Automatic de/serialization of (nearly) any JavaScript value
+- [Deno Deploy](https://deno.com) without a build step
 - Zero:
   - Third-party dependencies
-  - Config (i.e. solid defaults)
+  - Config
   - CLI commands
   - Magic
-- [Deno Deploy](https://deno.com) without a build step
 
 ## Inspirations
 
