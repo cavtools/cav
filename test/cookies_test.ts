@@ -5,10 +5,6 @@ import { cookieJar } from "../cookies.ts";
 import type { CookieJar } from "../cookies.ts";
 import { base64 } from "../deps.ts";
 
-// TODO: With the way I wrote this, you can't get the nice test runner UI from
-// the Deno extension. To get the UI, individual tests need to start with
-// `Deno.test`
-
 // Useful: https://jwt.io  
 // Note: Signed cookies are just `{"alg":"HS256"}` JWTs with the header removed
 
@@ -366,6 +362,7 @@ Deno.test(
     op: async cookies => {
       cookies.set("a", "world", {
         secure: true,
+        maxAge: 24 * 60 * 60, // The unit is seconds, this is 24hr
       });
       cookies.set("b", "foobar", {
         signed: true,
@@ -373,33 +370,37 @@ Deno.test(
         httpOnly: true,
         sameSite: "Strict",
         unparsed: ["Test=test"],
-        maxAge: 60 * 60 * 24, // The unit is seconds, this is 24hr
+        maxAge: 60 * 60 * 24,
       });
 
       // Need to side step regular checks because maxAge creates dynamic
       // expiration dates, due to maxAge superceding expires when both are
-      // specified
+      // specified. Sorry this is so messy
 
       const headers = new Headers();
       await cookies.setCookies(headers);
       const [[_, ah], [__, bh]] = Array.from(headers.entries());
-      assertEquals(ah, "a=world; Secure");
+
+      const [aVal, aSecure, aMaxAge, aExpires] = ah.split("; ");
+      assertEquals(aVal, "a=world");
+      assertEquals(aSecure, "Secure");
+      assertEquals(aMaxAge, "Max-Age=86400");
+      const nowPlus24h = Date.now() + (60*60*24)*1000;
+      const aExpTime = new Date(aExpires.split("=")[1]).getTime();
+      assertEquals(nowPlus24h - aExpTime < 1000, true); // 1 second error margin
+      assertEquals(nowPlus24h - aExpTime >= 0, true);
 
       const [val, httpOnly, maxAge, sameSite, expires, test] = bh.split("; ");
       let val2 = val.split("=")[1].split(".")[0];
       const decoder = new TextDecoder();
       val2 = decoder.decode(base64.decode(val2));
       const [name, value, expiresMsTime] = JSON.parse(val2);
-
       assertEquals(name, "b");
       assertEquals(value, "foobar");
       assertEquals(httpOnly, "HttpOnly");
       assertEquals(maxAge, "Max-Age=86400");
       assertEquals(sameSite, "SameSite=Strict");
       assertEquals(test, "Test=test");
-
-      // Using an error margin of 1 second (1000 ms), which should be plenty
-      const nowPlus24h = Date.now() + (60*60*24)*1000;
       assertEquals(nowPlus24h - expiresMsTime < 1000, true);
       assertEquals(nowPlus24h - expiresMsTime >= 0, true);
       const expiresMsTime2 = new Date(expires.split("=")[1]).getTime();

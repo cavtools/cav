@@ -16,6 +16,84 @@ import {
 } from "../serial.ts";
 import type { Serializers, Serializer } from "../serial.ts";
 
+function testDeSerialize(opt: {
+  input: unknown;
+  json: unknown;
+  serializers?: Serializers;
+  custom?: (x: {
+    input: unknown;
+    json: unknown;
+    serialized: unknown;
+    deserialized: unknown;
+  }) => void;
+}) {
+  const i = typeof opt.input === "function" ? opt.input() : opt.input;
+  const serialized = serialize(i, opt.serializers);
+  const deserialized = deserialize(opt.json, opt.serializers);
+
+  if (opt.custom) {
+    opt.custom({
+      input: i,
+      json: opt.json,
+      serialized,
+      deserialized,
+    });
+  } else {
+    assertEquals(serialized, opt.json);
+    assertEquals(deserialized, i);
+  }
+}
+
+Deno.test(
+  "de/serialize(): JSON primitives",
+  () => testDeSerialize({
+    input: {
+      a: true,
+      b: null,
+      c: "hello",
+      d: 1234,
+      e: { nested: "object" },
+      f: ["something", 123],
+    },
+    json: {
+      a: true,
+      b: null,
+      c: "hello",
+      d: 1234,
+      e: { nested: "object" },
+      f: ["something", 123],
+    },
+  }),
+);
+
+Deno.test(
+  "de/serialize(): Objects with array-like keys",
+  () => testDeSerialize({
+    input: { 0: 0, 1: 1, 2: { 2: "2" } },
+    json: { 0: 0, 1: 1, 2: { 2: "2" } },
+  }),
+);
+
+Deno.test(
+  "de/serialize(): Sets",
+  () => testDeSerialize({
+    input: new Set([1, null, 2]),
+  }),
+);
+
+Deno.test(
+  "de/serialize(): undefined on an object",
+  () => testDeSerialize({
+    input: { test: undefined },
+    output: { test: undefined },
+
+  })
+);
+
+Deno.test(
+  "de/serialize(): undefined"
+)
+
 Deno.test("de/serialize()", async t => {
   // Many of the following tests are modeled after superjson's tests as of March
   // 28, 2022: https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
@@ -90,41 +168,6 @@ Deno.test("de/serialize()", async t => {
           { ...x.deserialized.b, stack: null },
           { ...x.input.b, stack: null, detail: {} },
         );
-      },
-    },
-    "objects": {
-      input: {
-        a: { 1: 5, 2: { 3: 'c' } },
-        b: null,
-      },
-      output: {
-        a: { 1: 5, 2: { 3: 'c' } },
-        b: null,
-      },
-      // This block is for covering the case where one of the serializers is
-      // null, i.e. ignored / turned off
-      serializers: {
-        null: null,
-      },
-    },
-    "special case: objects with array-like keys": {
-      input: {
-        a: { 0: 3, 1: 5, 2: { 3: "c" } },
-        b: null,
-      },
-      output: {
-        a: { 0: 3, 1: 5, 2: { 3: "c" } },
-        b: null,
-      },
-      // This line is for covering the case where the serializers obj is null
-      serializers: null,
-    },
-    "arrays": {
-      input: {
-        a: [1, undefined, 2],
-      },
-      output: {
-        a: [1, { $undefined: null }, 2],
       },
     },
     "Sets": {
@@ -500,6 +543,8 @@ Deno.test("de/serialize()", async t => {
     });
   }
 });
+
+
 Deno.test("de/serialize(): bad inputs", () => {
     assertThrows(() => {
       serialize(new (class { constructor(){} }));
@@ -536,34 +581,3 @@ Deno.test("de/serialize(): reserved serializer names", async t => {
     });
   }
 });
-
-function testSerializeBody(desc: string, opt: {
-  input: unknown;
-  serializers?: Serializers;
-  body?: unknown;
-  type?: unknown;
-}) {
-  Deno.test(`serializeBody(): ${desc}`, () => {
-    const sb = serializeBody(opt.input, opt.serializers);
-    if (opt.body) {
-      assertEquals(sb.body, opt.body);
-    }
-    if (opt.type) {
-      assertEquals(sb.type, opt.type);
-    }
-  });
-}
-
-testSerializeBody("ArrayBuffer", {
-  input: new ArrayBuffer(10),
-  body: new ArrayBuffer(10),
-  type: "application/octet-stream",
-});
-
-testSerializeBody("ArrayBufferView", {
-  input: new Uint8Array([1, 2, 3]),
-  body: new Uint8Array([1, 2, 3]),
-  type: "application/octet-stream",
-});
-
-testSerializeBody("ReadableStream")

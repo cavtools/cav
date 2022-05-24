@@ -112,7 +112,7 @@ Deno.test("Decoding a non-json payload throws", async () => {
     Error,
     "bad payload",
   );
-})
+});
 
 Deno.test("Zero-length key", async () => {
   await assertRejects(

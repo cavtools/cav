@@ -43,7 +43,7 @@ export interface CookieJar {
    * when the CookieJar was created.
    *
    * When both the `maxAge` and `expires` options are specified, only `maxAge`
-   * will be used and `expires` will be ignored.
+   * will be used; `expires` will be ignored.
    */
   set: (name: string, value: string, opt?: CookieSetOptions) => void;
   /** Removes a cookie by clearing and expiring any previous value. */
@@ -125,9 +125,9 @@ export async function cookieJar(
     set: (name, value, opt) => {
       updates.push({ op: "set", name, value, opt });
 
-      // If the current request doesn't match the path and domain for the set
-      // options, don't update our copy since the client browser would still
-      // send the same cookie if they repeated the current request
+      // If the request doesn't match the path and domain for the set options,
+      // don't update our copy since the client browser would still send the
+      // same cookie if they repeated the current request
       if (!matchesDomainPath(req, opt?.domain, opt?.path)) {
         return;
       }
@@ -176,15 +176,16 @@ export async function cookieJar(
           http.deleteCookie(headers, u.name, u.opt);
           continue;
         }
-
         // u.op === "set"
-        if (u.opt?.signed) {
-          // If both expires and max age are specified, only max age will be
-          // used and the expires date will be overwritten
-          if (u.opt.maxAge) {
-            u.opt.expires = new Date(Date.now() + 1000 * u.opt.maxAge);
-          }
 
+        // If both expires and max age are specified, only max age will be used
+        // and the expires date will be overwritten. For compatibility, both the
+        // Max-Age and Expires tags will be set to the calculated Max-Age date
+        if (u.opt?.maxAge) {
+          u.opt.expires = new Date(Date.now() + 1000 * u.opt.maxAge);
+        }
+
+        if (u.opt?.signed) {
           const val = (
             u.opt?.expires ? [u.name, u.value, u.opt.expires.getTime()]
             : [u.name, u.value]
