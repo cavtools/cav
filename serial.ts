@@ -3,8 +3,8 @@
 
 // This module is heavily inspired by https://github.com/blitz-js/superjson
 
-// TODO: Having $undefined be an object (which isn't falsy) is awkward. I see
-// why superjson did it the way they did it...  
+// TODO: I'm not happy with this format anymore. Might be better to do it the
+// way superjson does it  
 // TODO: Automatically escape strings for XSS, see
 // https://github.com/yahoo/serialize-javascript ?  
 // TODO: Support for ArrayBuffer/View  
@@ -110,6 +110,24 @@ export type AnySerializer = Serializer<any, any>;
 export type Serializers = Record<string, AnySerializer | null>;
 
 const defaults = new Map<string, AnySerializer>(Object.entries({
+  symbol: serializer({
+    check: (v) => typeof v === "symbol",
+    serialize: (v: symbol) => {
+      const key = Symbol.keyFor(v);
+      if (typeof key === "string") {
+        return { for: key };
+      }
+      return { desc: v.description };
+    },
+    // TODO: Type checks
+    deserialize: (raw: { for: string } | { desc: string }) => {
+      if ("for" in raw) {
+        return Symbol.for(raw.for);
+      }
+      return Symbol(raw.desc);
+    },
+  }),
+  // NOTE: This must come before the `error` serializer
   httpError: serializer({
     check: (v) => v instanceof HttpError,
     serialize: (v: HttpError) => ({
@@ -117,6 +135,7 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       message: v.message,
       expose: v.expose || null,
     }),
+    // TODO: Type checks
     deserialize: (raw: { status: number, message: string }, whenDone) => {
       const err = new HttpError(raw.message, { status: raw.status });
       whenDone(ready => {
@@ -128,26 +147,25 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
   error: serializer({
     check: (v) => v instanceof Error,
     serialize: (v: Error) => v.message,
+    // TODO: Type checks
     deserialize: (raw) => new Error(raw as string),
   }),
   date: serializer({
     check: (v) => v instanceof Date,
     serialize: (v: Date) => v.toJSON(),
+    // TODO: Type checks
     deserialize: (raw) => new Date(raw as string),
   }),
   undefined: serializer({
     check: (v) => typeof v === "undefined",
-    serialize: () => null,
+    serialize: () => true,
+    // TODO: Type checks
     deserialize: () => undefined,
-  }),
-  symbol: serializer({
-    check: (v) => typeof v === "symbol",
-    serialize: (v: symbol) => v.description,
-    deserialize: (raw) => Symbol(raw as string),
   }),
   map: serializer({
     check: (v) => v instanceof Map,
     serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
+    // TODO: Type checks
     deserialize: (_, whenDone) => {
       const map = new Map();
       whenDone(entries => {
@@ -159,6 +177,7 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
   set: serializer({
     check: (val) => val instanceof Set,
     serialize: (v: Set<unknown>) => Array.from(v.values()),
+    // TODO: Type checks
     deserialize: (_, whenDone) => {
       const set = new Set();
       whenDone(values => {
@@ -170,11 +189,13 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
   bigint: serializer({
     check: (v) => typeof v === "bigint",
     serialize: (v: bigint) => v.toString(),
+    // TODO: Type checks
     deserialize: (raw) => BigInt(raw as string),
   }),
   regexp: serializer({
     check: (v) => v instanceof RegExp,
     serialize: (v: RegExp) => v.toString(),
+    // TODO: Type checks
     deserialize: (raw) => {
       const r = (raw as string).slice(1).split("/");
       return new RegExp(r[0], r[1]);
@@ -193,6 +214,7 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       : v === Number.NEGATIVE_INFINITY ? "-infinity"
       : "nan"
     ),
+    // TODO: Type checks
     deserialize: (raw: string) => (
       raw === "-zero" ? -0
       : raw === "+infinity" ? Number.POSITIVE_INFINITY
@@ -209,6 +231,7 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       return keys.length === 1 && keys[0].startsWith("$");
     },
     serialize: (v: Record<string, string>) => Object.entries(v)[0],
+    // TODO: Type checks
     deserialize: (_, whenDone) => {
       const result: Record<string, unknown> = {};
       whenDone(entry => {
