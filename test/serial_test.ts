@@ -114,7 +114,9 @@ Deno.test("de/serialize()", async t => {
 
   const posInf = Number.POSITIVE_INFINITY;
   await t.step("+infinity", () => testDeSerialize({
-
+    input: posInf,
+    json: { $number: "+infinity" },
+    
   }));
 
   const negInf = Number.NEGATIVE_INFINITY;
