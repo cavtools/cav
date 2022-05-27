@@ -11,21 +11,19 @@ import {
   serialize,
   deserialize,
   serializer,
-  serializeBody,
-  deserializeBody,
 } from "../serial.ts";
-import type { Serializers, Serializer } from "../serial.ts";
+import type { Serializers } from "../serial.ts";
 
 interface TestDeSerializeOptions {
+  serializers?: Serializers;
   input: unknown;
   json: unknown;
   // `json` is forwarded from the `json` property on the opt
   // deno-lint-ignore no-explicit-any
-  checkSerialize?: false | ((x: { json: any; serialized: any }) => void);
+  checkSerialize?: (x: { json: any; serialized: any }) => void;
   // `input` is forwarded from the `input` property on the opt
   // deno-lint-ignore no-explicit-any
-  checkDeserialize?: false | ((x: { input: any; deserialized: any }) => void);
-  serializers?: Serializers;
+  checkDeserialize?: (x: { input: any; deserialized: any }) => void;
 }
 
 function testDeSerialize(opt: TestDeSerializeOptions) {
@@ -50,6 +48,7 @@ Deno.test("de/serialize()", async t => {
   // Primitives
 
   await t.step("boolean", () => testDeSerialize({
+    serializers: {},
     input: true,
     json: true,
   }));
@@ -127,20 +126,19 @@ Deno.test("de/serialize()", async t => {
 
   await t.step("httpError", () => testDeSerialize({
     input: new HttpError("httpError", {
-      status: 400,
       detail: { priv: true },
       expose: { pub: true },
     }),
     json: {
       $httpError: {
-        status: 400,
+        status: 500,
         message: "httpError",
         expose: { pub: true },
       },
     },
     checkDeserialize: x => {
       assertEquals(x.deserialized, new HttpError("httpError", {
-        status: 400,
+        status: 500,
         expose: { pub: true },
       }));
     },
@@ -181,7 +179,7 @@ Deno.test("de/serialize()", async t => {
     json: { $symbol: { for: "global" } },
   }));
 
-  // Not tested for nesting
+  // Not tested in nesting section
   await t.step("local symbol", () => testDeSerialize({
     input: Symbol("local"),
     json: { $symbol: { desc: "local" } },
@@ -191,7 +189,7 @@ Deno.test("de/serialize()", async t => {
     },
   }));
 
-  // Not tested for nesting
+  // Not tested in nesting section
   await t.step("jsonable instance", () => testDeSerialize({
     input: new (class { toJSON(key: string) { return { key } } }),
     json: { key: "" },
@@ -200,7 +198,7 @@ Deno.test("de/serialize()", async t => {
     },
   }));
 
-  // Not tested for nesting
+  // Not tested in nesting section
   await t.step("error subclass", () => testDeSerialize({
     input: new SyntaxError("syntaxError"),
     json: { $error: "syntaxError" },
@@ -442,7 +440,7 @@ Deno.test("de/serialize()", async t => {
 
   // References
 
-  const refObj = { hello: "world" }
+  const refObj = { hello: "world" };
   await t.step("referential equality for objects", () => testDeSerialize({
     input: {
       a: refObj,
@@ -462,6 +460,10 @@ Deno.test("de/serialize()", async t => {
   await t.step("referential equality for arrays", () => testDeSerialize({
     input: [refArr, refArr],
     json: [refArr, { $ref: ".0" }],
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized[0], x.deserialized[1]);
+    },
   }));
 
   const refSet = new Set<unknown>([123, "hello", {}]);
@@ -477,7 +479,9 @@ Deno.test("de/serialize()", async t => {
       ],
     },
     checkDeserialize: x => {
-      // TODO
+      assertEquals(x.deserialized, x.input);
+      const [a, b] = Array.from(x.deserialized.values());
+      assertEquals(a, b[0]);
     },
   }));
 
@@ -492,7 +496,9 @@ Deno.test("de/serialize()", async t => {
       ],
     },
     checkDeserialize: x => {
-      // TODO
+      assertEquals(x.deserialized, x.input);
+      const [[k, v]] = Array.from(x.deserialized.entries());
+      assertEquals(k, v);
     },
   }));
 
@@ -519,81 +525,315 @@ Deno.test("de/serialize()", async t => {
       },
     },
     checkDeserialize: x => {
-      // TODO
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized.expose.a, x.deserialized.expose.b);
     },
   }));
 
-  // await t.step("referential equality for errors", () => testDeSerialize({
+  const refError = new Error("message");
+  await t.step("referential equality for errors", () => testDeSerialize({
+    input: {
+      a: refError,
+      b: refError,
+    },
+    json: {
+      a: { $error: "message" },
+      b: { $ref: ".a" },
+    },
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized.a, x.deserialized.b);
+    },
+  }));
 
-  // }));
+  const refDate = new Date(2000, 0, 1);
+  await t.step("referential equality for dates", () => testDeSerialize({
+    input: {
+      a: refDate,
+      b: refDate,
+    },
+    json: {
+      a: { $date: refDate.toJSON() },
+      b: { $ref: ".a" },
+    },
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized.a, x.deserialized.b);
+    },
+  }));
 
-  // await t.step("referential equality for dates", () => testDeSerialize({
-    
-  // }));
+  const refRegexp = /^[^abc]/g;
+  await t.step("referential equality for regexps", () => testDeSerialize({
+    input: {
+      a: refRegexp,
+      b: refRegexp,
+    },
+    json: {
+      a: { $regexp: "/^[^abc]/g" },
+      b: { $ref: ".a" },
+    },
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized.a, x.deserialized.b);
+    },
+  }));
 
-  // await t.step("referential equality for regexps", () => testDeSerialize({
-    
-  // }));
+  const refLocalSym = Symbol("local");
+  await t.step("referential equality for local syms", () => testDeSerialize({
+    input: {
+      a: refLocalSym,
+      b: refLocalSym,
+    },
+    json: {
+      a: { $symbol: { desc: "local" } },
+      b: { $ref: ".a" },
+    },
+    checkDeserialize: x => {
+      assertStrictEquals(x.deserialized.a, x.deserialized.b);
+    },
+  }));
 
-  // await t.step("referential equality for local symbols", () => testDeSerialize({
-    
-  // }));
+  const refGlobalSym = Symbol.for("global");
+  await t.step("referential equality for global syms", () => testDeSerialize({
+    input: {
+      a: refGlobalSym,
+      b: refGlobalSym,
+    },
+    json: {
+      a: { $symbol: { for: "global" } },
+      b: { $ref: ".a" },
+    },
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized.a, x.deserialized.b);
+    },
+  }));
 
-  // await t.step("referential equality for global symbols", () => testDeSerialize({
+  const refObj2 = {};
+  const refObj3 = {};
+  await t.step("references to paths containing '.'", () => testDeSerialize({
+    input: {
+      "a..b.": refObj2,
+      "c.d": [refObj2, refObj3],
+      e: refObj3,
+    },
+    json: {
+      "a..b.": {},
+      "c.d": [{ $ref: ".a\\.\\.b\\." }, {}],
+      e: { $ref: ".c\\.d.1" },
+    },
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized["a..b."], x.deserialized["c.d"][0]);
+      assertStrictEquals(x.deserialized.e, x.deserialized["c.d"][1]);
+    },
+  }));
 
-  // }));
+  await t.step("references to paths containing '\\'", () => testDeSerialize({
+    input: {
+      "a\\\\b\\": refObj2,
+      "c\\d\\.": [refObj2, refObj3],
+      e: refObj3,
+    },
+    json: {
+      "a\\\\b\\": {},
+      "c\\d\\.": [{ $ref: ".a\\\\b\\" }, {}],
+      e: { $ref: ".c\\d\\\\..1" },
+    },
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(
+        x.deserialized["a\\\\b\\"],
+        x.deserialized["c\\d\\."][0],
+      );
+      assertStrictEquals(x.deserialized["c\\d\\."][1], x.deserialized.e);
+    },
+  }));
 
-  // await t.step("references to serialized nested values", () => testDeSerialize({
+  const refCircular = {
+    set: new Set(),
+    map: new Map(),
+    top: null as unknown,
+  };
+  refCircular.top = refCircular;
+  refCircular.set.add(refCircular.set);
+  refCircular.map.set(refCircular.map, refCircular.map);
+  await t.step("circular references", () => testDeSerialize({
+    input: refCircular,
+    json: {
+      set: { $set: [{ $ref: ".set" }] },
+      map: { $map: [[{ $ref: ".map" }, { $ref: ".map" }]] },
+      top: { $ref: "" },
+    },
+    checkDeserialize: x => {
+      assertStrictEquals(x.deserialized, x.deserialized.top);
+      const setValues = Array.from(x.deserialized.set);
+      assertStrictEquals(setValues[0], x.deserialized.set);
+      const mapEntries: [unknown, unknown][] = Array.from(
+        x.deserialized.map.entries(),
+      );
+      assertStrictEquals(mapEntries[0][0], mapEntries[0][1]);
+      assertStrictEquals(mapEntries[0][0], x.deserialized.map);
+    },
+  }));
 
-  // }));
+  // Exceptions
 
-  // await t.step("references to paths containing '.'", () => testDeSerialize({
+  await t.step("throws when prototype poisoned", () => {
+    assertThrows(
+      () => serialize({ __proto__: { a: true }, b: true }),
+      TypeError,
+      "No matching serializers for [object Object]",
+    );
 
-  // }));
+    assertThrows(
+      () => deserialize({ __proto__: { a: true }, b: true }),
+      TypeError,
+      "Non-plain objects can't be deserialized - Path: \"\"",
+    );
+  });
 
-  // await t.step("references to paths containing '\\'", () => testDeSerialize({
+  await t.step("throws when deserializing non-plain objects", () => {
+    assertThrows(
+      () => deserialize({ date: new Date() }),
+      TypeError,
+      "Non-plain objects can't be deserialized - Path: \".date\"",
+    );
+  });
 
-  // }));
+  await t.step("throws when non-jsonable instance", () => {
+    assertThrows(
+      () => serialize(new (class{})),
+      TypeError,
+      "No matching serializers for [object Object]",
+    );
+  });
 
-  // await t.step("circular references", () => testDeSerialize({
-  //   // TODO: a reference to top level parent as well as non-top level parent
-  // }));
+  await t.step("throws when unknown reference", () => {
+    assertThrows(
+      () => deserialize({ $ref: ".a.b" }),
+      Error,
+      "Invalid reference \".a.b\" - Path: \"\"",
+    );
+  });
 
-  // Bad inputs
+  await t.step("throws when serializer unknown", () => {
+    assertThrows(
+      () => deserialize({ $unknown: "hello" }),
+      Error,
+      "No matching serializer with name \"unknown\" - Path: \"\"",
+    );
+  });
 
-  // await t.step("throws when prototype poisoned", () => testDeSerialize({
+  await t.step("throws when using reserved serializer name", () => {
+    const s = serializer({
+      check: () => true,
+      serialize: () => null,
+      deserialize: () => null,
+    });
 
-  // }));
+    assertThrows(
+      () => serialize(null, { symbol: s }),
+      Error,
+      "Conflict: The serializer key \"symbol\" is reserved",
+    );
+    assertThrows(() => serialize(null, { httpError: s }));
+    assertThrows(() => serialize(null, { error: s }));
+    assertThrows(() => serialize(null, { date: s }));
+    assertThrows(() => serialize(null, { undefined: s }));
+    assertThrows(() => serialize(null, { map: s }));
+    assertThrows(() => serialize(null, { set: s }));
+    assertThrows(() => serialize(null, { bigint: s }));
+    assertThrows(() => serialize(null, { regexp: s }));
+    assertThrows(() => serialize(null, { number: s }));
+    assertThrows(() => serialize(null, { conflict: s }));
 
-  // await t.step("throws when non-jsonable instance", () => testDeSerialize({
+    assertThrows(
+      () => deserialize(null, { symbol: s }),
+      Error,
+      "Conflict: The serializer key \"symbol\" is reserved",
+    );
+    assertThrows(() => deserialize(null, { httpError: s }));
+    assertThrows(() => deserialize(null, { error: s }));
+    assertThrows(() => deserialize(null, { date: s }));
+    assertThrows(() => deserialize(null, { undefined: s }));
+    assertThrows(() => deserialize(null, { map: s }));
+    assertThrows(() => deserialize(null, { set: s }));
+    assertThrows(() => deserialize(null, { bigint: s }));
+    assertThrows(() => deserialize(null, { regexp: s }));
+    assertThrows(() => deserialize(null, { number: s }));
+    assertThrows(() => deserialize(null, { conflict: s }));
+  });
 
-  // }));
+  await t.step("throws for bad json when deserializing serialized val", () => {
+    assertThrows(() => deserialize({ $symbol: "hello" }));
+    assertThrows(() => deserialize({ $httpError: ["foo", 124] }));
+    assertThrows(() => deserialize({ $map: [null, [2, 1]] }));
+    assertThrows(() => deserialize({ $set: null }));
+    assertThrows(() => deserialize({ $bigint: "yo" }));
 
-  // await t.step("throws when unknown reference", () => testDeSerialize({
-
-  // }));
-
-  // await t.step("throws when serializer unknown", () => testDeSerialize({
-
-  // }));
-
-  // await t.step("throws when using reserved serializer name", () => {
-
-  // });
+    // These ones don't throw when the JSON isn't formatted correctly
+    assertEquals(
+      deserialize({ $error: { msg: "hi" } }),
+      new Error("[object Object]"),
+    );
+    assertEquals(deserialize({ $date: "nooooooo" }), new Date("noooooo"));
+    assertEquals(deserialize({ $undefined: null }), undefined);
+    assertEquals(deserialize({ $regexp: "not-a-regexp" }), /ot-a-regexp/);
+    assertEquals(deserialize({ $number: "hey" }), NaN);
+    assertEquals(deserialize({ $conflict: [null, null] }), { null: null });
+  });
 
   // Misc
 
-  // await t.step("custom serializers", () => testDeSerialize({
+  await t.step("custom serializers", () => {
+    class Custom {
+      a: unknown;
+      constructor(a: unknown) {
+        this.a = a;
+      }
+    }
 
-  // }));
+    const custom = serializer({
+      check: v => v instanceof Custom,
+      serialize: (v: Custom) => v.a,
+      deserialize: (_, whenDone) => {
+        const inst = new Custom(null);
+        whenDone(ready => {
+          inst.a = ready;
+        });
+        return inst;
+      },
+    });
 
-  // await t.step("object with array-like keys", () => testDeSerialize({
+    const inst = new Custom(null);
+    inst.a = inst;
+    testDeSerialize({
+      serializers: { custom, custom2: null },
+      input: inst,
+      json: {
+        $custom: { $ref: "" },
+      },
+      checkDeserialize: x => {
+        assertStrictEquals(x.deserialized.a, x.deserialized);
+        assert(x.deserialized instanceof Custom);
+      },
+    })
+  });
 
-  // }));
-
-  // await t.step("two local symbols with the same description", () => testDeSerialize({
-
-  // }));
-
-  // await t.step("Incorrectly typed json when deserializing <non-primitive>")
+  await t.step("two local symbols with the same desc", () => testDeSerialize({
+    input: {
+      a: Symbol("local"),
+      b: Symbol("local"),
+    },
+    json: {
+      a: { $symbol: { desc: "local" } },
+      b: { $symbol: { desc: "local" } },
+    },
+    checkDeserialize: x => {
+      assert(typeof x.deserialized.a === "symbol");
+      assert(typeof x.deserialized.b === "symbol");
+      assert(x.deserialized.a !== x.deserialized.b);
+    },
+  }));
 });

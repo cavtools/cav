@@ -119,12 +119,11 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       }
       return { desc: v.description };
     },
-    // TODO: Type checks
     deserialize: (raw: { for: string } | { desc: string }) => {
-      if ("for" in raw) {
+      if ("for" in raw && typeof raw.for === "string") {
         return Symbol.for(raw.for);
       }
-      return Symbol(raw.desc);
+      return Symbol((raw as { desc: string }).desc);
     },
   }),
   // NOTE: This must come before the `error` serializer
@@ -135,8 +134,18 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       message: v.message,
       expose: v.expose || null,
     }),
-    // TODO: Type checks
     deserialize: (raw: { status: number, message: string }, whenDone) => {
+      // Type check this one since HttpError doesn't do type checking itself
+      if (
+        !raw ||
+        typeof raw !== "object" ||
+        typeof raw.status !== "number" ||
+        typeof raw.message !== "string" ||
+        !("expose" in raw)
+      ) {
+        throw new TypeError("Invalid $httpError format");
+      }
+
       const err = new HttpError(raw.message, { status: raw.status });
       whenDone(ready => {
         err.expose = ready.expose;
@@ -147,25 +156,21 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
   error: serializer({
     check: (v) => v instanceof Error,
     serialize: (v: Error) => v.message,
-    // TODO: Type checks
     deserialize: (raw) => new Error(raw as string),
   }),
   date: serializer({
     check: (v) => v instanceof Date,
     serialize: (v: Date) => v.toJSON(),
-    // TODO: Type checks
     deserialize: (raw) => new Date(raw as string),
   }),
   undefined: serializer({
     check: (v) => typeof v === "undefined",
     serialize: () => true,
-    // TODO: Type checks
     deserialize: () => undefined,
   }),
   map: serializer({
     check: (v) => v instanceof Map,
     serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
-    // TODO: Type checks
     deserialize: (_, whenDone) => {
       const map = new Map();
       whenDone(entries => {
@@ -177,7 +182,6 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
   set: serializer({
     check: (val) => val instanceof Set,
     serialize: (v: Set<unknown>) => Array.from(v.values()),
-    // TODO: Type checks
     deserialize: (_, whenDone) => {
       const set = new Set();
       whenDone(values => {
@@ -189,13 +193,11 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
   bigint: serializer({
     check: (v) => typeof v === "bigint",
     serialize: (v: bigint) => v.toString(),
-    // TODO: Type checks
     deserialize: (raw) => BigInt(raw as string),
   }),
   regexp: serializer({
     check: (v) => v instanceof RegExp,
     serialize: (v: RegExp) => v.toString(),
-    // TODO: Type checks
     deserialize: (raw) => {
       const r = (raw as string).slice(1).split("/");
       return new RegExp(r[0], r[1]);
@@ -214,7 +216,6 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       : v === Number.NEGATIVE_INFINITY ? "-infinity"
       : "nan"
     ),
-    // TODO: Type checks
     deserialize: (raw: string) => (
       raw === "-zero" ? -0
       : raw === "+infinity" ? Number.POSITIVE_INFINITY
@@ -231,7 +232,6 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       return keys.length === 1 && keys[0].startsWith("$");
     },
     serialize: (v: Record<string, string>) => Object.entries(v)[0],
-    // TODO: Type checks
     deserialize: (_, whenDone) => {
       const result: Record<string, unknown> = {};
       whenDone(entry => {
@@ -377,7 +377,7 @@ export function deserialize<T = unknown>(
     // NOTE: This block should protect against prototype poisoning
     if (!isPojo(val)) {
       throw new TypeError(
-        `Non-plain objects can't be deserialized - Path: ${path}`,
+        `Non-plain objects can't be deserialized - Path: "${path}"`,
       );
     }
 
