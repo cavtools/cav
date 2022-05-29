@@ -3,6 +3,8 @@
 import { encodeJwt, decodeJwt } from "../jwt.ts";
 import { assertEquals, assertRejects } from "./deps_test.ts";
 
+// TODO: Read up on how to test Cav's use of cryptography for security holes
+
 // The correct JWTs were created with https://jwt.io. Note that the calculator
 // on that site handles strings differently; it strips quotation marks before
 // encoding if the payload is a plain string, but Cav's JWT implementation

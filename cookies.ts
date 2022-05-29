@@ -4,15 +4,15 @@ import { base64 as b64, http } from "./deps.ts";
 import { encodeJwt, decodeJwt } from "./jwt.ts";
 
 /**
- * Signed cookies are just HS256 JWTs with the header omitted to save bandwidth.
- * To inspect the cookies as regular JWTs, this header will need to be prepended
- * to the cookie value with a period separator. Like this:
+ * Signed cookies are HS256 JWTs with the header omitted to keep the cookies
+ * small. To inspect the cookies as regular JWTs, this header needs to be
+ * prepended to the cookie value with a period separator. Like this:
  *
  * ```ts
  * const token = await decodeJwt(COOKIE_JWT_HEADER + "." + value, secretKey);
  * // === ["cookie-name", "cookie-value", <epoch time of cookie expiration>?]
  * ```
- * 
+ *
  * The header JSON is `{ "alg": "HS256" }`.
  */
 export const COOKIE_JWT_HEADER = b64.encode(JSON.stringify({ alg: "HS256" }));
@@ -60,7 +60,7 @@ export interface CookieJar {
   /**
    * Calculates the set-cookie headers for all updates applied to this CookieJar
    * and appends them to the given Headers instance. Note that this operation is
-   * asynchronous while all other operations are synchronous.
+   * asynchronous while all other CookieJar operations are synchronous.
    */
   setCookies: (headers: Headers) => Promise<void>;
 }

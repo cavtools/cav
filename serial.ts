@@ -3,21 +3,23 @@
 
 // This module is heavily inspired by https://github.com/blitz-js/superjson
 
-// TODO: I'm not happy with this format anymore. Might be better to do it the
-// way superjson does it  
+// TODO: IMPORTANT: Serialized values should be wrapped in a metadata object
+// that encodes the version of cav that serialized it (e.g. 0.1)  
+
+// TODO: serialize() should first scan the input's values recursively to see if
+// it needs serializing. If it doesn't, it should return the input without the
+// metadata wrapper
+
 // TODO: Automatically escape strings for XSS, see
 // https://github.com/yahoo/serialize-javascript ?  
 // TODO: Support for ArrayBuffer/View  
 // TODO: Support for functions?
 
-// HttpError is defined here so that serial.ts can be self-contained, and
-// because the default serializers need to be able to handle an error class with
-// some exposed data by default. Also, the error class needs to be available on
-// the client, therefore it can't go in http.ts which is server-only
+// HttpError is defined here so that serial.ts can be self-contained
 
 /**
- * Initializer arguments for constructing HttpErrors, which can expose arbitrary
- * data and status codes during de/serialization.
+ * Init options for constructing HttpErrors, which can expose arbitrary data and
+ * status codes during de/serialization.
  */
 export interface HttpErrorInit {
   /** An HTTP status code describing what kind of error this is. */
@@ -51,33 +53,21 @@ export class HttpError extends Error {
  */
 export interface Serializer<I = unknown, O = unknown> {
   /**
-   * Checks if this serializer applies to the value. JSON primitives like basic
-   * numbers, strings, booleans, and nulls are never checked, they're kept as-is
+   * Checks if this serializer applies to the value.
    */
   check(value: unknown): boolean;
   /**
-   * Transforms the value into its output on the resulting json-compatible
-   * object. The value returned by this function will be re-serialized; the
-   * output doesn't need to be JSON-compatible. 
+   * Transforms the value into its JSON-compatible format. The value returned by
+   * this function will be re-serialized, i.e. not every nested value needs to
+   * be JSON compatible.
    */
   serialize(value: I): O;
   /**
-   * Transforms serialized values into their original shape and structure.
-   * Initially, the value is only constructed from the raw serialized JSON.
-   *
-   * Values that are more complex and need things like referential equality or
-   * non-POJO/Array objects will need to use the `whenDone` function to wait to
-   * complete setup until all nested references have been instantiated. This is
-   * required because not every nested value on the raw JSON value will have
-   * references instantiated yet, and some of the nested values may have been
-   * re-serialized. `whenDone` executes the given function only after all values
-   * have been instanciated; each `whenDone` function is executed in stack order
-   * (LIFO). Generally, if a serialized value contains nested values that may
-   * also be serialized, an empty initial value should be returned and further
-   * setup should happen inside `whenDone`.
-   *
-   * See the serializers for Maps and Sets in serial.ts for an example of how to
-   * use `whenDone`.
+   * Transforms serialized values into their original input. Nested serialized
+   * values will still be serialized when this function is called; use the
+   * `whenDone` registration function to finish setting up the resulting output
+   * only when each of the nested values is finished deserializing. (i.e.
+   * "ready")
    */
   deserialize(
     raw: unknown,
@@ -108,6 +98,24 @@ export type AnySerializer = Serializer<any, any>;
  * deserialize the value on the other side.
  */
 export type Serializers = Record<string, AnySerializer | null>;
+
+/**
+ * Determines if the object is a plain object or not. This also checks for
+ * prototype poisoning; it returns false whenever the prototype of an input
+ * object was poisoned before JSON.parsing it. See
+ * https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution
+ * for more information on prototype poisoning.
+ */
+ export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
+  return (
+    !!obj &&
+    typeof obj === "object" &&
+    (
+      Object.getPrototypeOf(obj) === Object.prototype ||
+      Object.getPrototypeOf(obj) === null
+    )
+  );
+}
 
 const defaults = new Map<string, AnySerializer>(Object.entries({
   symbol: serializer({
@@ -271,9 +279,8 @@ function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
 /**
  * Serializes a value recursively until it's JSON-compatible. Serializers can be
  * plugged in to extend the accepted types beyond what Cav supports by default.
- * Referential equality will be preserved whenever the same object or symbol
- * value is encountered more than once. If a value isn't recognized by any of
- * the provided serializers or the default serializers, an error is thrown.
+ * If a value isn't recognized by any of the provided or default serializers, an
+ * error will be thrown.
  */
 export function serialize(
   value: unknown,
@@ -348,9 +355,9 @@ export function serialize(
 }
 
 /**
- * Deserializes a value returned by `serialize()` into the original input value.
- * Referential equality will be restored on the output object. An error will be
- * thrown if a value was serialized with an unknown/unused serializer.
+ * Deserializes a JSON value that was `serialize()`d back into the original
+ * input. An error will be thrown if a value was serialized with an unknown
+ * serializer.
  */
 export function deserialize<T = unknown>(
   value: unknown,
@@ -435,60 +442,60 @@ export function deserialize<T = unknown>(
 }
 
 /** Return type of serializeBody(). Includes the BodyInit and a content type. */
-export interface SerializedBody {
-  body: BodyInit;
-  type: string;
-}
+// export interface SerializedBody {
+//   body: BodyInit;
+//   type: string;
+// }
 
-/**
- * Serializes a value into a type that's compatible with a BodyInit for a new
- * Response or a fetch() call, making it easy to serialize values for sending to
- * an external host/client via HTTP. If a provided value is already compatible
- * with BodyInit, it will be returned with an appropriate mime type, skipping
- * the serialization process. During serialization, this function extends the
- * serializable types to include Blobs and Files. If a Blob is encountered
- * during serialization, the resulting body will be a multipart FormData that
- * encodes the shape of the input as well as the blobs that were encountered.
- * Otherwise, a regular JSON string will be returned. Blobs and Files can be
- * placed anywhere on the input value, even if they are nested, inside a Map or
- * Set, etc. 
- */
-export function serializeBody(
-  value: unknown,
+// /**
+//  * Serializes a value into a type that's compatible with a BodyInit for a new
+//  * Response or a fetch() call, making it easy to serialize values for sending to
+//  * an external host/client via HTTP. If a provided value is already compatible
+//  * with BodyInit, it will be returned with an appropriate mime type, skipping
+//  * the serialization process. During serialization, this function extends the
+//  * serializable types to include Blobs and Files. If a Blob is encountered
+//  * during serialization, the resulting body will be a multipart FormData that
+//  * encodes the shape of the input as well as the blobs that were encountered.
+//  * Otherwise, a regular JSON string will be returned. Blobs and Files can be
+//  * placed anywhere on the input value, even if they are nested, inside a Map or
+//  * Set, etc. 
+//  */
+function packBody(
+  body: unknown,
   serializers?: Serializers,
-): SerializedBody {
+): { body: unknown; type: string } {
   if (
-    value instanceof ArrayBuffer ||
-    value instanceof ReadableStream ||
-    ArrayBuffer.isView(value)
+    body instanceof ReadableStream ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body)
   ) {
     return {
-      body: value,
+      body,
       type: "application/octet-stream",
     };
   }
-  if (typeof value === "string") {
+  if (typeof body === "string") {
     return {
-      body: value,
+      body,
       type: "text/plain",
     };
   }
-  if (value instanceof URLSearchParams) {
+  if (body instanceof URLSearchParams) {
     return {
-      body: value,
+      body,
       type: "application/x-www-form-urlencoded",
     };
   }
-  if (value instanceof Blob) {
+  if (body instanceof Blob) {
     return {
-      body: value,
-      type: value.type,
+      body,
+      type: body.type,
     };
   }
   
   const form = new FormData();
   const fileKeys = new Map<Blob, string>();
-  const shape = JSON.stringify(serialize(value, {
+  const shape = JSON.stringify(serialize(body, {
     ...serializers,
     __blob: serializer({
       check: (v) => v instanceof Blob,
@@ -532,12 +539,7 @@ const mimeParams = /^application\/x-www-form-urlencoded;?/;
 const mimeJson = /^application\/json;?/;
 const mimeForm = /^multipart\/form-data;?/;
 
-/**
- * Deserializes a Request or Response instance whose body was serialized with
- * `serializeBody()`. Any Serializers specified during serialization need to be
- * specified here as well.
- */
-export async function deserializeBody(
+async function unpackBody(
   from: Request | Response,
   serializers?: Serializers,
 ): Promise<unknown> {
@@ -589,23 +591,37 @@ export async function deserializeBody(
   return await from.blob();
 }
 
-/**
- * Utility function used in the serial functions that determines if an object is
- * a plain object or not. Because this is such a common operation when checking
- * and serializing unknown objects, it's exported as part of the Serial API.
- *
- * This function is also useful for avoiding prototype poisoning; it returns
- * false for any object that has a poisoned prototype after JSON.parsing it from
- * a string. For more information about prototype poisoning, see
- * https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution
- */
-export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
-  return (
-    !!obj &&
-    typeof obj === "object" &&
-    (
-      Object.getPrototypeOf(obj) === Object.prototype ||
-      Object.getPrototypeOf(obj) === null
-    )
-  );
+export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
+  serializers?: Serializers;
+  query?: Record<string, string | string[]>;
+  message?: unknown;
+}
+
+export function packRequest(url: string, init: PackRequestInit): Request {
+  
+}
+
+export async function unpackRequest(
+  req: Request,
+  serializers?: Serializers,
+): Promise<{
+  query: Record<string, string | string[]>;
+  message: unknown;
+}> {
+
+}
+
+export interface PackResponseInit extends ResponseInit {
+  serializers?: Serializers;
+}
+
+export function packResponse(body: unknown, init?: PackResponseInit): Response {
+
+}
+
+export async function unpackResponse(
+  res: Response,
+  serializers?: Serializers,
+): Promise<unknown> {
+
 }

@@ -2,6 +2,7 @@
 
 import { base64 } from "./deps.ts";
 
+// TODO: Allow changing the header (but not alg yet)  
 // TODO: This is a very minimal API that doesn't do expiration checks or
 // anything like that. Should it?  
 // TODO: Make this browser compatible by removing the base64 dependency and

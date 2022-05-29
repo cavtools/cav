@@ -11,10 +11,14 @@ import {
   serialize,
   deserialize,
   serializer,
+  packRequest,
+  unpackRequest,
+  packResponse,
+  unpackResponse,
 } from "../serial.ts";
 import type { Serializers } from "../serial.ts";
 
-interface TestDeSerializeOptions {
+function testDeSerialize(opt: {
   serializers?: Serializers;
   input: unknown;
   json: unknown;
@@ -24,22 +28,20 @@ interface TestDeSerializeOptions {
   // `input` is forwarded from the `input` property on the opt
   // deno-lint-ignore no-explicit-any
   checkDeserialize?: (x: { input: any; deserialized: any }) => void;
-}
-
-function testDeSerialize(opt: TestDeSerializeOptions) {
+}) {
   const i = typeof opt.input === "function" ? opt.input() : opt.input;
   const serialized = serialize(i, opt.serializers);
   const deserialized = deserialize(opt.json, opt.serializers);
 
   if (opt.checkSerialize) {
     opt.checkSerialize({ serialized, json: opt.json });
-  } else if (opt.checkSerialize !== false) {
+  } else {
     assertEquals(serialized, opt.json);
   }
 
   if (opt.checkDeserialize) {
     opt.checkDeserialize({ deserialized, input: opt.input });
-  } else if (opt.checkDeserialize !== false) {
+  } else {
     assertEquals(deserialized, opt.input);
   }
 }
@@ -179,6 +181,11 @@ Deno.test("de/serialize()", async t => {
     json: { $symbol: { for: "global" } },
   }));
 
+  await t.step("array buffer view", () => testDeSerialize({
+    input: new Uint8Array([0,1,2,3,4,5]),
+    json: { $buffer: { uint8: "AAECAwQF" } },
+  }));
+
   // Not tested in nesting section
   await t.step("local symbol", () => testDeSerialize({
     input: Symbol("local"),
@@ -225,6 +232,7 @@ Deno.test("de/serialize()", async t => {
       l: new Map<unknown, unknown>([["hello", 0], [null, null]]),
       m: { $foo: "bar" },
       n: Symbol.for("global"),
+      o: new Int32Array([1,2,3]),
     },
     json: {
       a: { $undefined: true },
@@ -241,6 +249,7 @@ Deno.test("de/serialize()", async t => {
       l: { $map: [["hello", 0], [null, null]] },
       m: { $conflict: ["$foo", "bar"] },
       n: { $symbol: { for: "global" } },
+      o: { $buffer: { int32: "AQID" } },
     },
   }));
 
@@ -260,6 +269,7 @@ Deno.test("de/serialize()", async t => {
       new Map<unknown, unknown>([["hello", 0], [null, null]]),
       { $foo: "bar" },
       Symbol.for("global"),
+      new Int32Array([1,2,3]),
     ],
     json: [
       { $undefined: true },
@@ -276,6 +286,7 @@ Deno.test("de/serialize()", async t => {
       { $map: [["hello", 0], [null, null]] },
       { $conflict: ["$foo", "bar"] },
       { $symbol: { for: "global" } },
+      { $buffer: { int32: "AQID" } },
     ],
   }));
 
@@ -295,6 +306,7 @@ Deno.test("de/serialize()", async t => {
       new Map<unknown, unknown>([["hello", 0], [null, null]]),
       { $foo: "bar" },
       Symbol.for("global"),
+      new Int32Array([1,2,3]),
     ]),
     json: {
       $set: [
@@ -313,12 +325,16 @@ Deno.test("de/serialize()", async t => {
         { $map: [["hello", 0], [null, null]] },
         { $conflict: ["$foo", "bar"] },
         { $symbol: { for: "global" } },
+        { $buffer: { int32: "AQID" } },
       ],
     },
   }));
 
   await t.step("map with non-primitives nested", () => testDeSerialize({
     input: new Map<unknown, unknown>([
+      // I'm not testing references here, so I switched global to global2 in
+      // this first entry. Besides that, the values are just the keys in reverse
+      // order
       [undefined, Symbol.for("global2")],
       [Number.POSITIVE_INFINITY, { $foo: "bar" }],
       [Number.NEGATIVE_INFINITY, new Map<unknown, unknown>([["hello", 0], [null, null]])],
@@ -333,6 +349,8 @@ Deno.test("de/serialize()", async t => {
       [new Map<unknown, unknown>([["hello", 0], [null, null]]), Number.NEGATIVE_INFINITY],
       [{ $foo: "bar" }, Number.POSITIVE_INFINITY],
       [Symbol.for("global"), undefined],
+      // Added later, not redoing the order
+      [new Int32Array([1,2,3]), new Int32Array([4,5,6])],
     ]),
     json: {
       $map: [
@@ -351,6 +369,8 @@ Deno.test("de/serialize()", async t => {
         [{ $map: [["hello", 0], [null, null]] }, { $number: "-infinity" }],
         [{ $conflict: ["$foo", "bar"] }, { $number: "+infinity" }],
         [{ $symbol: { for: "global" } }, { $undefined: true }],
+        // Added later, not redoing the order
+        [{ $buffer: { int32: "AQID" } }, { $buffer: { int32: "BAUG" } }],
       ],
     },
   }));
@@ -373,6 +393,7 @@ Deno.test("de/serialize()", async t => {
         l: new Map<unknown, unknown>([["hello", 0], [null, null]]),
         m: { $foo: "bar" },
         n: Symbol.for("global"),
+        o: new Int16Array([1,2,3]),
       },
     }),
     json: {
@@ -394,6 +415,7 @@ Deno.test("de/serialize()", async t => {
           l: { $map: [["hello", 0], [null, null]] },
           m: { $conflict: ["$foo", "bar"] },
           n: { $symbol: { for: "global" } },
+          o: { $buffer: { int16: "AQID" } },
         },
       },
     },
@@ -416,6 +438,7 @@ Deno.test("de/serialize()", async t => {
         l: new Map<unknown, unknown>([["hello", 0], [null, null]]),
         m: { $foo: "bar" },
         n: Symbol.for("global"),
+        o: new Float64Array([1,2,3]),
       },
     },
     json: {
@@ -434,6 +457,7 @@ Deno.test("de/serialize()", async t => {
         l: { $map: [["hello", 0], [null, null]] },
         m: { $conflict: ["$foo", "bar"] },
         n: { $symbol: { for: "global" } },
+        o: { $buffer: { float64: "AQID" } },
       }],
     },
   }));
@@ -609,6 +633,22 @@ Deno.test("de/serialize()", async t => {
     },
   }));
 
+  const refBuffer = new Float32Array([1,2,3]);
+  await t.step("referential equality for array buffer views", () => testDeSerialize({
+    input: {
+      a: refBuffer,
+      b: refBuffer,
+    },
+    json: {
+      a: { $buffer: { float32: "AQID" } },
+      b: { $ref: ".a" },
+    },
+    checkDeserialize: x => {
+      assertEquals(x.deserialized, x.input);
+      assertStrictEquals(x.deserialized.a, x.deserialized.b);
+    },
+  }));
+
   const refObj2 = {};
   const refObj3 = {};
   await t.step("references to paths containing '.'", () => testDeSerialize({
@@ -693,7 +733,7 @@ Deno.test("de/serialize()", async t => {
     );
   });
 
-  await t.step("throws when deserializing non-plain objects", () => {
+  await t.step("throws when deserializing non-plain objects like Dates", () => {
     assertThrows(
       () => deserialize({ date: new Date() }),
       TypeError,
@@ -701,11 +741,24 @@ Deno.test("de/serialize()", async t => {
     );
   });
 
-  await t.step("throws when non-jsonable instance", () => {
+  await t.step("throws when ArrayBuffer but not a typed array", () => {
     assertThrows(
-      () => serialize(new (class{})),
+      () => serialize(new ArrayBuffer(10)),
       TypeError,
-      "No matching serializers for [object Object]",
+      "No matching serializers for [object ArrayBuffer]",
+    );
+    assertThrows(
+      () => serialize(new DataView(new ArrayBuffer(10))),
+      TypeError,
+      "No matching serializers for [object DataView]",
+    );
+  });
+
+  await t.step("throws for functions", () => {
+    assertThrows(
+      () => serialize(() => {}),
+      TypeError,
+      "No matching serializers for () => {}",
     );
   });
 
@@ -836,4 +889,284 @@ Deno.test("de/serialize()", async t => {
       assert(x.deserialized.a !== x.deserialized.b);
     },
   }));
+});
+
+async function testUnPackRequest(opt: {
+  /** Serializers plugged into both packRequest and unpackRequest. */
+  serializers?: Serializers;
+  /** Url for the request. Default: `"http://localhost/test"` */
+  url?: string;
+  /** Query to use when packing the request. */
+  query?: Record<string, string | string[]>;
+  /** Message to use when packing the request. */
+  message?: unknown;
+  /** Headers to include when packing the request. */
+  headers?: Headers;
+  /**
+   * Optionally check that the packed Request object has these properties. If
+   * not provided, no checks will be made.
+   */
+  packed?: {
+    url?: string;
+    headers?: [string, string][];
+    body?: string | FormData | Record<string, unknown> | null;
+  },
+  /**
+   * By default, the result of unpackRequest is checked against the opt.query
+   * and opt.message. Sometimes, the unpacked value isn't equal to the packed
+   * value. In those cases, these values will override the original input when
+   * checking.
+   */
+  unpacked?: {
+    query?: Record<string, string | string[]>;
+    message?: unknown;
+  },
+}) {
+  const packed = packRequest(opt.url || "http://localhost/test", {
+    serializers: opt.serializers,
+    headers: opt.headers,
+    query: opt.query,
+    message: opt.message,
+  });
+  const packed2 = packed.clone();
+  if (opt.packed?.url) {
+    assertEquals(packed.url, opt.packed.url);
+  }
+  if (opt.packed?.headers) {
+    assertEquals(Array.from(packed.headers.entries()), opt.packed.headers);
+  }
+  if (typeof opt.packed?.body !== "undefined") {
+    if (opt.packed.body instanceof FormData) {
+      assertEquals(packed.body && await packed.formData(), opt.packed.body);
+    } else if (typeof opt.packed.body === "string") {
+      assertEquals(packed.body && await packed.text(), opt.packed.body);
+    } else { // null
+      assertEquals(packed.body, opt.packed.body);
+    }
+  }
+
+  const unpacked = await unpackRequest(packed2, opt.serializers);
+  assertEquals(unpacked.query, opt.unpacked?.query || opt.query);
+  assertEquals(unpacked.message, opt.unpacked?.message || opt.message);
+}
+
+Deno.test("un/packRequest()", async t => {
+  await t.step("query", () => testUnPackRequest({
+    query: {
+      hello: "world",
+      foo: ["bar", "baz"],
+    },
+  }));
+
+  await t.step("message", () => testUnPackRequest({
+    message: new Map([[1, 2]]),
+    packed: {
+      headers: [
+        ["content-type", "application/json"],
+      ],
+      body: `{"$map":[[1,2]]}`,
+    },
+  }));
+
+  await t.step("query and message", () => testUnPackRequest({
+    query: { foo: "bar" },
+    message: new HttpError("baz", { status: 418, expose: "yourself" }),
+    packed: {
+      headers: [
+        ["content-type", "application/json"],
+      ],
+      body: `{"$httpError":{"status":418,"message":"baz","expose":"yourself"}}`,
+    },
+  }));
+
+  await t.step("message: ReadableStream", () => testUnPackRequest({
+    message: new ReadableStream({
+      start(controller) {
+        controller.enqueue("foobar");
+        controller.close();
+      },
+    }),
+    packed: {
+      headers: [
+        ["content-type", "application/octet-stream"]
+      ],
+      body: "foobar",
+    },
+    unpacked: {
+      message: new Blob(["foobar"]),
+    },
+  }));
+
+  await t.step("message: ArrayBuffer view", () => testUnPackRequest({
+    message: new Int32Array([1,2,3]),
+    packed: {
+      headers: [
+        ["content-type", "application/octet-stream"],
+      ],
+      body: "\x01\x02\x03",
+    },
+    unpacked: {
+      message: new Blob(["\x01\x02\x03"]),
+    },
+  }));
+
+  await t.step("message: string", () => testUnPackRequest({
+    message: "hello world",
+    packed: {
+      headers: [
+        ["content-type", "text/plain"],
+      ],
+      body: "hello world",
+    },
+    unpacked: {
+      message: "hello world",
+    },
+  }));
+
+  await t.step("message: URLSearchParams", () => testUnPackRequest({
+    message: new URLSearchParams([
+      ["field1", "hello world"],
+      ["field2", "foo-bar"],
+    ]),
+    packed: {
+      headers: [
+        ["content-type", "application/x-www-form-urlencoded"],
+      ],
+      body: "field1=hello+world&field2=foo-bar",
+    },
+    unpacked: {
+      message: {
+        field1: "hello world",
+        field2: "foo-bar",
+      },
+    },
+  }));
+
+  await t.step(
+    "message: object with string | string[]",
+    () => testUnPackRequest({
+      message: {
+        hello: "world",
+        foo: ["bar","baz"],
+      },
+      packed: {
+        headers: [
+          ["content-type", "application/x-www-form-urlencoded"],
+        ],
+        body: "hello=world&foo=bar&foo=baz",
+      },
+    }),
+  );
+
+  await t.step("message: File", () => testUnPackRequest({
+    message: new File(["true"], "input.json", { type: "application/json" }),
+    packed: {
+      headers: [
+        ["content-type", "application/json"],
+      ],
+      body: "true",
+    },
+    unpacked: {
+      // NOTE: When the file is sent as a top-level message, the file name is
+      // lost
+      message: new Blob(["true"], { type: "application/json" }),
+    },
+  }));
+
+  await t.step("message: Blob", () => testUnPackRequest({
+    message: new Blob(["1234"], { type: "text/plain" }),
+    packed: {
+      headers: [
+        ["content-type", "text/plain"],
+      ],
+      body: "1234",
+    },
+    unpacked: {
+      // NOTE: Plain text files / blobs sent will be unpacked as strings
+      message: "1234",
+    },
+  }));
+
+  const form = new FormData();
+  form.append("string", "foobar");
+  form.append("file", new File(["hello"], "hello.txt", { type: "text/plain" }));
+  await t.step("message: FormData", () => testUnPackRequest({
+    message: form,
+    packed: {
+      headers: [
+        ["content-type", "multipart/form-data"],
+      ],
+      body: form,
+    },
+    unpacked: {
+      message: {
+        string: "foobar",
+        file: new File(["hello"], "hello.txt", { type: "text/plain" }),
+      },
+    },
+  }));
+
+  form.append("files", new File(["hello"], "hello.txt"));
+  form.append("files", new File([], "empty.txt"));
+  await t.step("message: object with File | File[]", () => testUnPackRequest({
+    message: {
+      string: "foobar",
+      file: new File(["hello"], "hello.txt", { type: "text/plain" }),
+      files: [new File(["hello"], "hello.txt"), new File([], "empty.txt")],
+    },
+    packed: {
+      headers: [
+        ["content-type", "multipart/form-data"],
+      ],
+      body: form,
+    },
+  }));
+
+  const form2 = new FormData();
+  form2.append("string", "eh");
+  form2.append("blob", new Blob(["foo"]));
+  form2.append("blobs", new Blob(["test,value"], { type: "text/csv" }));
+  form2.append("blobs", new Blob(["eh"], { type: "application/octet-stream" }));
+  await t.step("message: object with Blob | Blob[]", () => testUnPackRequest({
+    message: {
+      string: "foobar",
+      blob: new Blob(["foo"]),
+      blobs: [
+        new Blob(["test,value"], { type: "text/csv" }),
+        new Blob(["eh"], { type: "application/octet-stream" }),
+      ],
+    },
+    packed: {
+      headers: [
+        ["content-type", "multipart/form-data"],
+      ],
+      body: form2,
+    },
+  }));
+
+  // Returns dynamic results because of the file uuid
+  await t.step("message: File[]", () => {
+
+  });
+
+  // Returns dynamic results because of the file uuid
+  await t.step("message: File as keys and values in a map", () => {
+
+  });
+
+  await t.step("query appends existing parameters", () => {
+
+  });
+
+  await t.step("extra headers", () => {
+
+  });
+
+  await t.step("content-type header conflict", () => {
+
+  });
+
+  await t.step("custom serializers", () => {
+
+  });
 });
