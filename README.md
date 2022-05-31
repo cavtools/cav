@@ -3,7 +3,7 @@
 NOTE: This is an MVP. Nothing has been properly battle tested. You probably
 shouldn't use this in production yet.
 
-Cav is an experimental web framework for [Deno](https://deno.land).
+Cav is a web framework for [Deno](https://deno.land).
 
 ## Inspirations
 
@@ -17,7 +17,7 @@ Cav is an experimental web framework for [Deno](https://deno.land).
 
 ## Goals
 
-- Learn everything I can about backend web frameworks, by writing one
+- Learn everything I can about backend web frameworks, by writing one (?)
   - [x] Zero third-party dependencies
 - It should come with everything I need to build any modern web app (minus the
   database)

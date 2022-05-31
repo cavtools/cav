@@ -134,37 +134,56 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       return Symbol((raw as { desc: string }).desc);
     },
   }),
-  // NOTE: This must come before the `error` serializer
-  httpError: serializer({
-    check: (v) => v instanceof HttpError,
-    serialize: (v: HttpError) => ({
-      status: v.status,
-      message: v.message,
-      expose: v.expose || null,
-    }),
-    deserialize: (raw: { status: number, message: string }, whenDone) => {
-      // Type check this one since HttpError doesn't do type checking itself
-      if (
-        !raw ||
-        typeof raw !== "object" ||
-        typeof raw.status !== "number" ||
-        typeof raw.message !== "string" ||
-        !("expose" in raw)
-      ) {
-        throw new TypeError("Invalid $httpError format");
-      }
-
-      const err = new HttpError(raw.message, { status: raw.status });
-      whenDone(ready => {
-        err.expose = ready.expose;
-      });
-      return err;
-    },
-  }),
   error: serializer({
     check: (v) => v instanceof Error,
-    serialize: (v: Error) => v.message,
-    deserialize: (raw) => new Error(raw as string),
+    serialize: (v: Error) => {
+      if (v instanceof HttpError) {
+        return {
+          type: "HttpError",
+          message: v.message,
+          status: v.status,
+          expose: v.expose,
+        };
+      }
+      // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
+      switch (v.name) {
+        case "EvalError":
+        case "RangeError":
+        case "ReferenceError":
+        case "SyntaxError":
+        case "TypeError":
+        case "URIError":
+        case "AggregateError": return { type: v.name, message: v.message };
+        default: return v.message;
+      }
+    },
+    // deno-lint-ignore no-explicit-any
+    deserialize: (raw: any, whenDone) => {
+      if (typeof raw === "string") {
+        return new Error(raw);
+      }
+
+      switch (raw.type) {
+        case "HttpError": {
+          const err = new HttpError(raw.message, {
+            status: parseInt(raw.status, 10), // Should be parsed first
+          });
+          // deno-lint-ignore no-explicit-any
+          whenDone((ready: any) => {
+            err.expose = ready.expose
+          });
+          return err;
+        }
+        case "EvalError": return new EvalError(raw.message);
+        case "RangeError": return new RangeError(raw.message);
+        case "ReferenceError": return new ReferenceError(raw.message);
+        case "SyntaxError": return new SyntaxError(raw.message);
+        case "TypeError": return new TypeError(raw.message);
+        case "URIError": return new URIError(raw.message);
+        case "AggregateError": return new AggregateError(raw.message);
+        default: return new Error(raw.message);
+      }
+    },
   }),
   date: serializer({
     check: (v) => v instanceof Date,
@@ -248,6 +267,47 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       return result;
     },
   }),
+  buffer: serializer({
+    check: v => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
+    // TODO: This could be faster - https://jsben.ch/wnaZC
+    serialize: (v: ArrayBufferView | ArrayBuffer) => {
+      let base64 = "";
+      const data = new Uint8Array(
+        v instanceof ArrayBuffer ? v : v.buffer
+      );
+      for (let i = 0; i < data.length; i++) {
+        base64 += String.fromCharCode(data[i]);
+      }
+      return {
+        type: v.constructor.name,
+        data: self.btoa(base64),
+      };
+    },
+    deserialize: (raw: { type: string, data: string }) => {
+      const data = self.atob(raw.data);
+      const buf = new Uint8Array(data.length);
+      for (let i = 0; i < data.length; i++) {
+        buf[i] = data.charCodeAt(i);
+      }
+
+      switch (raw.type) {
+        case "ArrayBuffer": return buf.buffer;
+        case "Int8Array": return new Int8Array(buf.buffer);
+        case "Uint8Array": return new Uint8Array(buf.buffer);
+        case "Uint8ClampedArray": return new Uint8ClampedArray(buf.buffer);
+        case "Int16Array": return new Int16Array(buf.buffer);
+        case "Uint16Array": return new Uint16Array(buf.buffer);
+        case "Int32Array": return new Int32Array(buf.buffer);
+        case "Uint32Array": return new Uint32Array(buf.buffer);
+        case "Float32Array": return new Float32Array(buf.buffer);
+        case "Float64Array": return new Float64Array(buf.buffer);
+        case "BigInt64Array": return new BigInt64Array(buf.buffer);
+        case "BigUint64Array": return new BigUint64Array(buf.buffer);
+        case "DataView": return new DataView(buf.buffer);
+        default: return buf; // Uint8Array is the fallback
+      }
+    },
+  })
 }));
 
 function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
@@ -441,29 +501,18 @@ export function deserialize<T = unknown>(
   return result as T;
 }
 
-/** Return type of serializeBody(). Includes the BodyInit and a content type. */
-// export interface SerializedBody {
-//   body: BodyInit;
-//   type: string;
-// }
+interface PackedBody {
+  body: BodyInit | null;
+  headers?: HeadersInit;
+}
 
-// /**
-//  * Serializes a value into a type that's compatible with a BodyInit for a new
-//  * Response or a fetch() call, making it easy to serialize values for sending to
-//  * an external host/client via HTTP. If a provided value is already compatible
-//  * with BodyInit, it will be returned with an appropriate mime type, skipping
-//  * the serialization process. During serialization, this function extends the
-//  * serializable types to include Blobs and Files. If a Blob is encountered
-//  * during serialization, the resulting body will be a multipart FormData that
-//  * encodes the shape of the input as well as the blobs that were encountered.
-//  * Otherwise, a regular JSON string will be returned. Blobs and Files can be
-//  * placed anywhere on the input value, even if they are nested, inside a Map or
-//  * Set, etc. 
-//  */
 function packBody(
   body: unknown,
   serializers?: Serializers,
-): { body: unknown; type: string } {
+): PackedBody {
+  if (body === null || typeof body === "undefined") {
+    return { body: null };
+  }
   if (
     body instanceof ReadableStream ||
     body instanceof ArrayBuffer ||
@@ -471,25 +520,42 @@ function packBody(
   ) {
     return {
       body,
-      type: "application/octet-stream",
+      headers: { "content-type": "application/octet-stream" },
     };
   }
   if (typeof body === "string") {
     return {
       body,
-      type: "text/plain",
+      headers: { "content-type": "text/plain" },
     };
   }
   if (body instanceof URLSearchParams) {
+    // No need to specify the type since its inferred because it's a form
     return {
       body,
-      type: "application/x-www-form-urlencoded",
+      // headers: { "content-type": "application/x-www-form-urlencoded" },
     };
+  }
+  if (body instanceof FormData) {
+    // No need to specify the type since its inferred because it's a form
+    return { body };
+  }
+  if (body instanceof File) {
+    return {
+      body,
+      headers: {
+        "content-type": body.type,
+        "content-disposition": `attachment; filename="${body.name}"`,
+      },
+    }
   }
   if (body instanceof Blob) {
     return {
       body,
-      type: body.type,
+      headers: {
+        "content-type": body.type,
+        "content-disposition": "attachment",
+      },
     };
   }
   
@@ -517,23 +583,44 @@ function packBody(
   if (!fileKeys.size) {
     return {
       body: shape,
-      type: "application/json",
+      headers: { "content-type": "application/json" },
     };
   }
 
-  // TODO: Multipart bodies include a boundary that isn't generated until the
-  // request/response is constructed. The "type" property doesn't currently
-  // include that boundary because there's no way to determine it. Not sure if
-  // the current behavior is broken or not
+  form.set("__shape", new File([shape], "__shape.json", {
+    type: "application/json",
+  }));
 
-  form.set("__shape", new Blob([shape], { type: "application/json" }));
-  return {
-    body: form,
-    type: "multipart/form-data",
-  };
+  // No need to specify the type since its inferred because it's a form
+  return { body: form };
 }
 
-const mimeStream = /^application\/octet-stream;?/;
+export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
+  serializers?: Serializers;
+  message?: unknown;
+}
+
+export function packRequest(url: string, init: PackRequestInit): Request {
+  const packed = (
+    typeof init.message === "undefined" ? undefined
+    : packBody(init.message, init.serializers)
+  );
+
+  const headers = new Headers(packed?.headers);
+  const initHeaders = new Headers(init.headers);
+  for (const [k, v] of initHeaders.entries()) {
+    headers.append(k, v);
+  }
+
+  return new Request(url, {
+    method: packed ? "POST" : "GET",
+    ...init,
+    headers,
+    body: packed?.body,
+  });
+}
+
+// const mimeStream = /^application\/octet-stream;?/;
 const mimeString = /^text\/plain;?/;
 const mimeParams = /^application\/x-www-form-urlencoded;?/;
 const mimeJson = /^application\/json;?/;
@@ -543,20 +630,44 @@ async function unpackBody(
   from: Request | Response,
   serializers?: Serializers,
 ): Promise<unknown> {
-  const type = from.headers.get("content-type");
-  if (!type || type.match(mimeStream)) {
-    return from.body;
+  if (!from.body) {
+    return null;
   }
+
+  // Files and Blobs are sent with a "content-disposition: attachment" header
+  const type = from.headers.get("content-type") || "";
+  const disposition = from.headers.get("content-disposition");
+  if (disposition) {
+    const match = disposition.match(/^attachment; filename="(.+)"/);
+    if (match) {
+      const filename = match[1];
+      return new File([await from.blob()], filename, { type });
+    }
+    if (disposition.match(/^attachment;?/)) {
+      return from.blob();
+    }
+  }
+
+  const parseForm = (form: FormData) => {
+    const result: Record<string, string | File | (string | File)[]> = {};
+    for (const [k, v] of form.entries()) {
+      const old = result[k];
+      if (Array.isArray(old)) {
+        old.push(v);
+      } else if (typeof old === "undefined") {
+        result[k] = v;
+      } else  {
+        result[k] = [old, v];
+      }
+    }
+    return result;
+  };
+
   if (type.match(mimeString)) {
     return await from.text();
   }
   if (type.match(mimeParams)) {
-    const form = await from.formData();
-    const params = new URLSearchParams();
-    for (const [k, v] of form.entries()) {
-      params.append(k, v as string);
-    }
-    return params;
+    return parseForm(await from.formData());
   }
   if (type.match(mimeJson)) {
     return deserialize(await from.json(), serializers);
@@ -569,59 +680,41 @@ async function unpackBody(
       !(shape instanceof Blob) ||
       shape.type !== "application/json"
     ) {
-      return form;
+      return parseForm(form);
     }
-    return JSON.parse(deserialize(await shape.text(), {
+    return deserialize(JSON.parse(await shape.text()), {
       ...serializers,
       __blob: serializer({
         check: () => false, // Not needed here
         serialize: () => null, // Not needed here
-        deserialize: (raw: string) => {
-          const blob = form.get(raw);
-          if (!blob || !(blob instanceof Blob)) {
-            throw new Error(
-              `Referenced blob "${raw}" is missing from the multipart form`,
-            );
-          }
-          return blob;
-        },
+        deserialize: (raw: string) => form.get(raw),
       }),
-    }));
+    });
   }
+
+  // Fallback is to return the body as a blob. You can force this behavior by
+  // specifying a "content-type: attachment" header
   return await from.blob();
-}
-
-export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
-  serializers?: Serializers;
-  query?: Record<string, string | string[]>;
-  message?: unknown;
-}
-
-export function packRequest(url: string, init: PackRequestInit): Request {
-  
 }
 
 export async function unpackRequest(
   req: Request,
   serializers?: Serializers,
-): Promise<{
-  query: Record<string, string | string[]>;
-  message: unknown;
-}> {
-
-}
-
-export interface PackResponseInit extends ResponseInit {
-  serializers?: Serializers;
-}
-
-export function packResponse(body: unknown, init?: PackResponseInit): Response {
-
-}
-
-export async function unpackResponse(
-  res: Response,
-  serializers?: Serializers,
 ): Promise<unknown> {
-
+  return await unpackBody(req, serializers);
 }
+
+// export interface PackResponseInit extends ResponseInit {
+//   serializers?: Serializers;
+// }
+
+// export function packResponse(body: unknown, init?: PackResponseInit): Response {
+  
+// }
+
+// export async function unpackResponse(
+//   res: Response,
+//   serializers?: Serializers,
+// ): Promise<unknown> {
+
+// }

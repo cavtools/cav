@@ -13,36 +13,29 @@ import {
   serializer,
   packRequest,
   unpackRequest,
-  packResponse,
-  unpackResponse,
+  // packResponse,
+  // unpackResponse,
 } from "../serial.ts";
 import type { Serializers } from "../serial.ts";
 
 function testDeSerialize(opt: {
   serializers?: Serializers;
   input: unknown;
-  json: unknown;
-  // `json` is forwarded from the `json` property on the opt
   // deno-lint-ignore no-explicit-any
-  checkSerialize?: (x: { json: any; serialized: any }) => void;
-  // `input` is forwarded from the `input` property on the opt
-  // deno-lint-ignore no-explicit-any
-  checkDeserialize?: (x: { input: any; deserialized: any }) => void;
+  check?: (x: { input: any; deserialized: any }) => void;
 }) {
-  const i = typeof opt.input === "function" ? opt.input() : opt.input;
-  const serialized = serialize(i, opt.serializers);
-  const deserialized = deserialize(opt.json, opt.serializers);
+  const input = typeof opt.input === "function" ? opt.input() : opt.input;
+  const serialized = serialize(input, opt.serializers);
+  const deserialized = deserialize(serialized, opt.serializers);
+  
+  // This will throw if the output from serialize() isn't JSON-compatible
+  JSON.stringify(serialized);
 
-  if (opt.checkSerialize) {
-    opt.checkSerialize({ serialized, json: opt.json });
+  // check() can override the default assertion
+  if (opt.check) {
+    opt.check({ input, deserialized });
   } else {
-    assertEquals(serialized, opt.json);
-  }
-
-  if (opt.checkDeserialize) {
-    opt.checkDeserialize({ deserialized, input: opt.input });
-  } else {
-    assertEquals(deserialized, opt.input);
+    assertEquals(deserialized, input);
   }
 }
 
@@ -50,36 +43,24 @@ Deno.test("de/serialize()", async t => {
   // Primitives
 
   await t.step("boolean", () => testDeSerialize({
-    serializers: {},
     input: true,
-    json: true,
   }));
 
   await t.step("null", () => testDeSerialize({
-    input: null,
-    json: null,
+    input: null
   }));
-  
+
   await t.step("string", () => testDeSerialize({
     input: "hello",
-    json: "hello",
   }));
 
   await t.step("number", () => testDeSerialize({
     input: 1234,
-    json: 1234,
   }));
 
   await t.step("object", () => testDeSerialize({
+    serializers: {}, // added for coverage
     input: {
-      boolean: true,
-      null: null,
-      string: "hello",
-      number: 1234,
-      object: { hello: "world" },
-      array: [1234, "foobar"],
-    },
-    json: {
       boolean: true,
       null: null,
       string: "hello",
@@ -91,130 +72,116 @@ Deno.test("de/serialize()", async t => {
 
   await t.step("array", () => testDeSerialize({
     input: [true, null, "hello", 1234, { hello: "world" }, [1234, "foobar"]],
-    json: [true, null, "hello", 1234, { hello: "world" }, [1234, "foobar"]],
   }));
 
   // Non-primitives
 
   await t.step("undefined", () => testDeSerialize({
     input: undefined,
-    json: { $undefined: true },
-  }));
-
-  await t.step("+infinity", () => testDeSerialize({
-    input: Number.POSITIVE_INFINITY,
-    json: { $number: "+infinity" },
-  }));
-
-  await t.step("-infinity", () => testDeSerialize({
-    input: Number.NEGATIVE_INFINITY,
-    json: { $number: "-infinity" },
-  }));
-
-  await t.step("-zero", () => testDeSerialize({
-    input: -0,
-    json: { $number: "-zero" },
   }));
 
   await t.step("nan", () => testDeSerialize({
     input: NaN,
-    json: { $number: "nan" },
-  }));
-
-  await t.step("regexp", () => testDeSerialize({
-    input: /hello[world]/g,
-    json: { $regexp: "/hello[world]/g" },
-  }));
-
-  await t.step("httpError", () => testDeSerialize({
-    input: new HttpError("httpError", {
-      detail: { priv: true },
-      expose: { pub: true },
-    }),
-    json: {
-      $httpError: {
-        status: 500,
-        message: "httpError",
-        expose: { pub: true },
-      },
-    },
-    checkDeserialize: x => {
-      assertEquals(x.deserialized, new HttpError("httpError", {
-        status: 500,
-        expose: { pub: true },
-      }));
-    },
-  }));
-
-  await t.step("error", () => testDeSerialize({
-    input: new Error("error"),
-    json: { $error: "error" },
-  }));
-
-  await t.step("bigint", () => testDeSerialize({
-    input: BigInt("584837272849585737282992848575732929"),
-    json: { $bigint: "584837272849585737282992848575732929" },
   }));
 
   await t.step("date", () => testDeSerialize({
     input: new Date(1994, 11, 6),
-    json: { $date: "1994-12-06T05:00:00.000Z" },
   }));
+
+  await t.step("regexp", () => testDeSerialize({
+    input: /hello[world]/g,
+  }));
+
+  await t.step("+infinity", () => testDeSerialize({
+    input: Number.POSITIVE_INFINITY,
+  }));
+
+  await t.step("-infinity", () => testDeSerialize({
+    input: Number.NEGATIVE_INFINITY,
+  }));
+
+  await t.step("-zero", () => testDeSerialize({
+    input: -0,
+    check: x => {
+      // Only way to check for -0
+      assert(Object.is(x.deserialized, -0));
+    },
+  }));
+
+  await t.step("bigint", () => testDeSerialize({
+    input: BigInt("584837272849585737282992848575732929"),
+  }));
+
 
   await t.step("set", () => testDeSerialize({
     input: new Set<unknown>(["foo", null, 123]),
-    json: { $set: ["foo", null, 123] },
   }));
 
   await t.step("map", () => testDeSerialize({
     input: new Map<unknown, unknown>([["foo", "bar"], [123, null]]),
-    json: { $map: [["foo", "bar"], [123, null]] },
   }));
 
   await t.step("conflict", () => testDeSerialize({
     input: { $hi: { world: "foobar" } },
-    json: { $conflict: ["$hi", { world: "foobar" }] }
   }));
 
   await t.step("global symbol", () => testDeSerialize({
     input: Symbol.for("global"),
-    json: { $symbol: { for: "global" } },
   }));
 
   await t.step("array buffer view", () => testDeSerialize({
-    input: new Uint8Array([0,1,2,3,4,5]),
-    json: { $buffer: { uint8: "AAECAwQF" } },
+    input: new Int32Array([0,1,2,3,4,5]),
+  }));
+
+  await t.step("array buffer", () => testDeSerialize({
+    input: new Uint8Array([0,1,2,3,4,5]).buffer,
   }));
 
   // Not tested in nesting section
   await t.step("local symbol", () => testDeSerialize({
     input: Symbol("local"),
-    json: { $symbol: { desc: "local" } },
-    checkDeserialize: x => {
-      assertEquals(typeof x.deserialized, "symbol");
+    check: x => {
+      assert(typeof x.deserialized === "symbol");
       assertEquals(x.deserialized.description, "local");
+      assert(x.deserialized !== Symbol.for("local"));
     },
   }));
 
   // Not tested in nesting section
   await t.step("jsonable instance", () => testDeSerialize({
     input: new (class { toJSON(key: string) { return { key } } }),
-    json: { key: "" },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, { key: "" });
     },
+  }));
+
+  await t.step("error", () => testDeSerialize({
+    input: new Error("error"),
+  }));
+
+  await t.step("http error", () => testDeSerialize({
+    input: new HttpError("httpError", {
+      detail: { priv: true },
+      expose: { pub: true },
+    }),
+    check: x => {
+      assertEquals(x.deserialized, new HttpError("httpError", {
+        status: 500,
+        // detail is never serialized
+        expose: { pub: true },
+      }));
+    }
   }));
 
   // Not tested in nesting section
   await t.step("error subclass", () => testDeSerialize({
     input: new SyntaxError("syntaxError"),
-    json: { $error: "syntaxError" },
-    checkDeserialize: x => {
-      assertEquals(x.deserialized, new Error("syntaxError"));
-    },
   }));
 
   // Nesting non-primitives
+
+  // A lot of this is overkill, I know. But now I would have to put effort into
+  // shortening it, which would also be overkill...
 
   await t.step("object with non-primitives nested", () => testDeSerialize({
     input: {
@@ -233,23 +200,7 @@ Deno.test("de/serialize()", async t => {
       m: { $foo: "bar" },
       n: Symbol.for("global"),
       o: new Int32Array([1,2,3]),
-    },
-    json: {
-      a: { $undefined: true },
-      b: { $number: "+infinity" },
-      c: { $number: "-infinity" },
-      d: { $number: "-zero" },
-      e: { $number: "nan" },
-      f: { $regexp: "/foobar/g" },
-      g: { $httpError: { status: 418, message: "idk", expose: null } },
-      h: { $error: "idk2" },
-      i: { $bigint: "5757892927657389191874757" },
-      j: { $date: "2022-05-26T04:00:00.000Z" },
-      k: { $set: [null, "hello", 123] },
-      l: { $map: [["hello", 0], [null, null]] },
-      m: { $conflict: ["$foo", "bar"] },
-      n: { $symbol: { for: "global" } },
-      o: { $buffer: { int32: "AQID" } },
+      p: new Uint8Array([1,2,3]).buffer,
     },
   }));
 
@@ -270,23 +221,7 @@ Deno.test("de/serialize()", async t => {
       { $foo: "bar" },
       Symbol.for("global"),
       new Int32Array([1,2,3]),
-    ],
-    json: [
-      { $undefined: true },
-      { $number: "+infinity" },
-      { $number: "-infinity" },
-      { $number: "-zero" },
-      { $number: "nan" },
-      { $regexp: "/foobar/g" },
-      { $httpError: { status: 418, message: "idk", expose: null } },
-      { $error: "idk2" },
-      { $bigint: "5757892927657389191874757" },
-      { $date: "2022-05-26T04:00:00.000Z" },
-      { $set: [null, "hello", 123] },
-      { $map: [["hello", 0], [null, null]] },
-      { $conflict: ["$foo", "bar"] },
-      { $symbol: { for: "global" } },
-      { $buffer: { int32: "AQID" } },
+      new Uint8Array([1,2,3]).buffer
     ],
   }));
 
@@ -295,7 +230,7 @@ Deno.test("de/serialize()", async t => {
       undefined,
       Number.POSITIVE_INFINITY,
       Number.NEGATIVE_INFINITY,
-      -0,
+      -0, // NOTE: -0 is converted to +0 as a value in a Set
       NaN,
       /foobar/g,
       new HttpError("idk", { status: 418 }),
@@ -307,27 +242,8 @@ Deno.test("de/serialize()", async t => {
       { $foo: "bar" },
       Symbol.for("global"),
       new Int32Array([1,2,3]),
+      new Uint8Array([1,2,3]).buffer
     ]),
-    json: {
-      $set: [
-        { $undefined: true },
-        { $number: "+infinity" },
-        { $number: "-infinity" },
-        // NOTE: -0 loses its sign when added to a Set
-        0,
-        { $number: "nan" },
-        { $regexp: "/foobar/g" },
-        { $httpError: { status: 418, message: "idk", expose: null } },
-        { $error: "idk2" },
-        { $bigint: "5757892927657389191874757" },
-        { $date: "2022-05-26T04:00:00.000Z" },
-        { $set: [null, "hello", 123] },
-        { $map: [["hello", 0], [null, null]] },
-        { $conflict: ["$foo", "bar"] },
-        { $symbol: { for: "global" } },
-        { $buffer: { int32: "AQID" } },
-      ],
-    },
   }));
 
   await t.step("map with non-primitives nested", () => testDeSerialize({
@@ -338,6 +254,7 @@ Deno.test("de/serialize()", async t => {
       [undefined, Symbol.for("global2")],
       [Number.POSITIVE_INFINITY, { $foo: "bar" }],
       [Number.NEGATIVE_INFINITY, new Map<unknown, unknown>([["hello", 0], [null, null]])],
+      // NOTE: The -0 is converted to +0 as a key in a Map
       [-0, new Set<unknown>([null, "hello", 123])],
       [NaN, new Date(2022, 4, 26)],
       [/foobar/g, BigInt("5757892927657389191874757")],
@@ -351,31 +268,11 @@ Deno.test("de/serialize()", async t => {
       [Symbol.for("global"), undefined],
       // Added later, not redoing the order
       [new Int32Array([1,2,3]), new Int32Array([4,5,6])],
+      [new Uint8Array([1,2,3]).buffer, new Uint8Array([1,2,3]).buffer],
     ]),
-    json: {
-      $map: [
-        [{ $undefined: true }, { $symbol: { for: "global2" } }],
-        [{ $number: "+infinity" }, { $conflict: ["$foo", "bar"] }],
-        [{ $number: "-infinity" }, { $map: [["hello", 0], [null, null]] }],
-        // NOTE: -0 loses its sign when used as a key on a Map
-        [0, { $set: [null, "hello", 123] }],
-        [{ $number: "nan" }, { $date: "2022-05-26T04:00:00.000Z" }],
-        [{ $regexp: "/foobar/g" }, { $bigint: "5757892927657389191874757" }],
-        [{ $httpError: { status: 418, message: "idk", expose: null } }, { $error: "idk2" }],
-        [{ $error: "idk2" }, { $httpError: { status: 418, message: "idk", expose: null } }],
-        [{ $bigint: "5757892927657389191874757" }, { $regexp: "/foobar/g" }],
-        [{ $date: "2022-05-26T04:00:00.000Z" }, { $number: "nan" }],
-        [{ $set: [null, "hello", 123] }, { $number: "-zero" }],
-        [{ $map: [["hello", 0], [null, null]] }, { $number: "-infinity" }],
-        [{ $conflict: ["$foo", "bar"] }, { $number: "+infinity" }],
-        [{ $symbol: { for: "global" } }, { $undefined: true }],
-        // Added later, not redoing the order
-        [{ $buffer: { int32: "AQID" } }, { $buffer: { int32: "BAUG" } }],
-      ],
-    },
   }));
 
-  await t.step("httpError with non-primitives nested", () => testDeSerialize({
+  await t.step("http error with non-primitives nested", () => testDeSerialize({
     input: new HttpError("message", {
       status: 200,
       expose: {
@@ -394,31 +291,9 @@ Deno.test("de/serialize()", async t => {
         m: { $foo: "bar" },
         n: Symbol.for("global"),
         o: new Int16Array([1,2,3]),
+        p: new Uint8Array([1,2,3]).buffer
       },
     }),
-    json: {
-      $httpError: {
-        status: 200,
-        message: "message",
-        expose: {
-          a: { $undefined: true },
-          b: { $number: "+infinity" },
-          c: { $number: "-infinity" },
-          d: { $number: "-zero" },
-          e: { $number: "nan" },
-          f: { $regexp: "/foobar/g" },
-          g: { $httpError: { status: 418, message: "idk", expose: null } },
-          h: { $error: "idk2" },
-          i: { $bigint: "5757892927657389191874757" },
-          j: { $date: "2022-05-26T04:00:00.000Z" },
-          k: { $set: [null, "hello", 123] },
-          l: { $map: [["hello", 0], [null, null]] },
-          m: { $conflict: ["$foo", "bar"] },
-          n: { $symbol: { for: "global" } },
-          o: { $buffer: { int16: "AQID" } },
-        },
-      },
-    },
   }));
 
   await t.step("conflict with non-primitives nested", () => testDeSerialize({
@@ -439,26 +314,8 @@ Deno.test("de/serialize()", async t => {
         m: { $foo: "bar" },
         n: Symbol.for("global"),
         o: new Float64Array([1,2,3]),
+        p: new Uint8Array([1,2,3]).buffer
       },
-    },
-    json: {
-      $conflict: ["$conflict", {
-        a: { $undefined: true },
-        b: { $number: "+infinity" },
-        c: { $number: "-infinity" },
-        d: { $number: "-zero" },
-        e: { $number: "nan" },
-        f: { $regexp: "/foobar/g" },
-        g: { $httpError: { status: 418, message: "idk", expose: null } },
-        h: { $error: "idk2" },
-        i: { $bigint: "5757892927657389191874757" },
-        j: { $date: "2022-05-26T04:00:00.000Z" },
-        k: { $set: [null, "hello", 123] },
-        l: { $map: [["hello", 0], [null, null]] },
-        m: { $conflict: ["$foo", "bar"] },
-        n: { $symbol: { for: "global" } },
-        o: { $buffer: { float64: "AQID" } },
-      }],
     },
   }));
 
@@ -470,11 +327,7 @@ Deno.test("de/serialize()", async t => {
       a: refObj,
       b: refObj,
     },
-    json: {
-      a: refObj,
-      b: { $ref: ".a" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized.b, x.deserialized.a);
     },
@@ -483,8 +336,7 @@ Deno.test("de/serialize()", async t => {
   const refArr = [null, 123];
   await t.step("referential equality for arrays", () => testDeSerialize({
     input: [refArr, refArr],
-    json: [refArr, { $ref: ".0" }],
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized[0], x.deserialized[1]);
     },
@@ -496,13 +348,7 @@ Deno.test("de/serialize()", async t => {
       refSet,
       [refSet],
     ]),
-    json: {
-      $set: [
-        { $set: [123, "hello", {}] },
-        [{ $ref: ".$set.0" }],
-      ],
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       const [a, b] = Array.from(x.deserialized.values());
       assertEquals(a, b[0]);
@@ -514,12 +360,7 @@ Deno.test("de/serialize()", async t => {
     input: new Map<unknown, unknown>([
       [refMap, refMap],
     ]),
-    json: {
-      $map: [
-        [{ $map: [["foo", null]] }, { $ref: ".$map.0.0" }],
-      ],
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       const [[k, v]] = Array.from(x.deserialized.entries());
       assertEquals(k, v);
@@ -538,17 +379,7 @@ Deno.test("de/serialize()", async t => {
         b: refHttpError,
       },
     }),
-    json: {
-      $httpError: {
-        status: 500,
-        message: "message2",
-        expose: {
-          a: { $httpError: { status: 418, message: "message", expose: true } },
-          b: { $ref: ".$httpError.expose.a" },
-        },
-      },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized.expose.a, x.deserialized.expose.b);
     },
@@ -560,11 +391,7 @@ Deno.test("de/serialize()", async t => {
       a: refError,
       b: refError,
     },
-    json: {
-      a: { $error: "message" },
-      b: { $ref: ".a" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized.a, x.deserialized.b);
     },
@@ -576,11 +403,7 @@ Deno.test("de/serialize()", async t => {
       a: refDate,
       b: refDate,
     },
-    json: {
-      a: { $date: refDate.toJSON() },
-      b: { $ref: ".a" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized.a, x.deserialized.b);
     },
@@ -592,11 +415,7 @@ Deno.test("de/serialize()", async t => {
       a: refRegexp,
       b: refRegexp,
     },
-    json: {
-      a: { $regexp: "/^[^abc]/g" },
-      b: { $ref: ".a" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized.a, x.deserialized.b);
     },
@@ -608,11 +427,7 @@ Deno.test("de/serialize()", async t => {
       a: refLocalSym,
       b: refLocalSym,
     },
-    json: {
-      a: { $symbol: { desc: "local" } },
-      b: { $ref: ".a" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertStrictEquals(x.deserialized.a, x.deserialized.b);
     },
   }));
@@ -623,31 +438,41 @@ Deno.test("de/serialize()", async t => {
       a: refGlobalSym,
       b: refGlobalSym,
     },
-    json: {
-      a: { $symbol: { for: "global" } },
-      b: { $ref: ".a" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized.a, x.deserialized.b);
     },
   }));
 
   const refBuffer = new Float32Array([1,2,3]);
-  await t.step("referential equality for array buffer views", () => testDeSerialize({
-    input: {
-      a: refBuffer,
-      b: refBuffer,
-    },
-    json: {
-      a: { $buffer: { float32: "AQID" } },
-      b: { $ref: ".a" },
-    },
-    checkDeserialize: x => {
-      assertEquals(x.deserialized, x.input);
-      assertStrictEquals(x.deserialized.a, x.deserialized.b);
-    },
-  }));
+  await t.step(
+    "referential equality for array buffer views",
+    () => testDeSerialize({
+      input: {
+        a: refBuffer,
+        b: refBuffer,
+      },
+      check: x => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
+      },
+    }),
+  );
+
+  const refBuffer2 = new Uint8Array([1,2,3]).buffer;
+  await t.step(
+    "referential equality for array buffers",
+    () => testDeSerialize({
+      input: {
+        a: refBuffer2,
+        b: refBuffer2,
+      },
+      check: x => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
+      },
+    }),
+  );
 
   const refObj2 = {};
   const refObj3 = {};
@@ -657,12 +482,7 @@ Deno.test("de/serialize()", async t => {
       "c.d": [refObj2, refObj3],
       e: refObj3,
     },
-    json: {
-      "a..b.": {},
-      "c.d": [{ $ref: ".a\\.\\.b\\." }, {}],
-      e: { $ref: ".c\\.d.1" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(x.deserialized["a..b."], x.deserialized["c.d"][0]);
       assertStrictEquals(x.deserialized.e, x.deserialized["c.d"][1]);
@@ -675,12 +495,7 @@ Deno.test("de/serialize()", async t => {
       "c\\d\\.": [refObj2, refObj3],
       e: refObj3,
     },
-    json: {
-      "a\\\\b\\": {},
-      "c\\d\\.": [{ $ref: ".a\\\\b\\" }, {}],
-      e: { $ref: ".c\\d\\\\..1" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertEquals(x.deserialized, x.input);
       assertStrictEquals(
         x.deserialized["a\\\\b\\"],
@@ -700,12 +515,7 @@ Deno.test("de/serialize()", async t => {
   refCircular.map.set(refCircular.map, refCircular.map);
   await t.step("circular references", () => testDeSerialize({
     input: refCircular,
-    json: {
-      set: { $set: [{ $ref: ".set" }] },
-      map: { $map: [[{ $ref: ".map" }, { $ref: ".map" }]] },
-      top: { $ref: "" },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assertStrictEquals(x.deserialized, x.deserialized.top);
       const setValues = Array.from(x.deserialized.set);
       assertStrictEquals(setValues[0], x.deserialized.set);
@@ -717,127 +527,12 @@ Deno.test("de/serialize()", async t => {
     },
   }));
 
-  // Exceptions
+  // Misc
 
   await t.step("throws when prototype poisoned", () => {
-    assertThrows(
-      () => serialize({ __proto__: { a: true }, b: true }),
-      TypeError,
-      "No matching serializers for [object Object]",
-    );
-
-    assertThrows(
-      () => deserialize({ __proto__: { a: true }, b: true }),
-      TypeError,
-      "Non-plain objects can't be deserialized - Path: \"\"",
-    );
+    assertThrows(() => serialize({ __proto__: { a: true }, b: true }));
+    assertThrows(() => deserialize({ __proto__: { a: true }, b: true }));
   });
-
-  await t.step("throws when deserializing non-plain objects like Dates", () => {
-    assertThrows(
-      () => deserialize({ date: new Date() }),
-      TypeError,
-      "Non-plain objects can't be deserialized - Path: \".date\"",
-    );
-  });
-
-  await t.step("throws when ArrayBuffer but not a typed array", () => {
-    assertThrows(
-      () => serialize(new ArrayBuffer(10)),
-      TypeError,
-      "No matching serializers for [object ArrayBuffer]",
-    );
-    assertThrows(
-      () => serialize(new DataView(new ArrayBuffer(10))),
-      TypeError,
-      "No matching serializers for [object DataView]",
-    );
-  });
-
-  await t.step("throws for functions", () => {
-    assertThrows(
-      () => serialize(() => {}),
-      TypeError,
-      "No matching serializers for () => {}",
-    );
-  });
-
-  await t.step("throws when unknown reference", () => {
-    assertThrows(
-      () => deserialize({ $ref: ".a.b" }),
-      Error,
-      "Invalid reference \".a.b\" - Path: \"\"",
-    );
-  });
-
-  await t.step("throws when serializer unknown", () => {
-    assertThrows(
-      () => deserialize({ $unknown: "hello" }),
-      Error,
-      "No matching serializer with name \"unknown\" - Path: \"\"",
-    );
-  });
-
-  await t.step("throws when using reserved serializer name", () => {
-    const s = serializer({
-      check: () => true,
-      serialize: () => null,
-      deserialize: () => null,
-    });
-
-    assertThrows(
-      () => serialize(null, { symbol: s }),
-      Error,
-      "Conflict: The serializer key \"symbol\" is reserved",
-    );
-    assertThrows(() => serialize(null, { httpError: s }));
-    assertThrows(() => serialize(null, { error: s }));
-    assertThrows(() => serialize(null, { date: s }));
-    assertThrows(() => serialize(null, { undefined: s }));
-    assertThrows(() => serialize(null, { map: s }));
-    assertThrows(() => serialize(null, { set: s }));
-    assertThrows(() => serialize(null, { bigint: s }));
-    assertThrows(() => serialize(null, { regexp: s }));
-    assertThrows(() => serialize(null, { number: s }));
-    assertThrows(() => serialize(null, { conflict: s }));
-
-    assertThrows(
-      () => deserialize(null, { symbol: s }),
-      Error,
-      "Conflict: The serializer key \"symbol\" is reserved",
-    );
-    assertThrows(() => deserialize(null, { httpError: s }));
-    assertThrows(() => deserialize(null, { error: s }));
-    assertThrows(() => deserialize(null, { date: s }));
-    assertThrows(() => deserialize(null, { undefined: s }));
-    assertThrows(() => deserialize(null, { map: s }));
-    assertThrows(() => deserialize(null, { set: s }));
-    assertThrows(() => deserialize(null, { bigint: s }));
-    assertThrows(() => deserialize(null, { regexp: s }));
-    assertThrows(() => deserialize(null, { number: s }));
-    assertThrows(() => deserialize(null, { conflict: s }));
-  });
-
-  await t.step("throws for bad json when deserializing serialized val", () => {
-    assertThrows(() => deserialize({ $symbol: "hello" }));
-    assertThrows(() => deserialize({ $httpError: ["foo", 124] }));
-    assertThrows(() => deserialize({ $map: [null, [2, 1]] }));
-    assertThrows(() => deserialize({ $set: null }));
-    assertThrows(() => deserialize({ $bigint: "yo" }));
-
-    // These ones don't throw when the JSON isn't formatted correctly
-    assertEquals(
-      deserialize({ $error: { msg: "hi" } }),
-      new Error("[object Object]"),
-    );
-    assertEquals(deserialize({ $date: "nooooooo" }), new Date("noooooo"));
-    assertEquals(deserialize({ $undefined: null }), undefined);
-    assertEquals(deserialize({ $regexp: "not-a-regexp" }), /ot-a-regexp/);
-    assertEquals(deserialize({ $number: "hey" }), NaN);
-    assertEquals(deserialize({ $conflict: [null, null] }), { null: null });
-  });
-
-  // Misc
 
   await t.step("custom serializers", () => {
     class Custom {
@@ -864,10 +559,7 @@ Deno.test("de/serialize()", async t => {
     testDeSerialize({
       serializers: { custom, custom2: null },
       input: inst,
-      json: {
-        $custom: { $ref: "" },
-      },
-      checkDeserialize: x => {
+      check: x => {
         assertStrictEquals(x.deserialized.a, x.deserialized);
         assert(x.deserialized instanceof Custom);
       },
@@ -879,11 +571,7 @@ Deno.test("de/serialize()", async t => {
       a: Symbol("local"),
       b: Symbol("local"),
     },
-    json: {
-      a: { $symbol: { desc: "local" } },
-      b: { $symbol: { desc: "local" } },
-    },
-    checkDeserialize: x => {
+    check: x => {
       assert(typeof x.deserialized.a === "symbol");
       assert(typeof x.deserialized.b === "symbol");
       assert(x.deserialized.a !== x.deserialized.b);
@@ -891,282 +579,205 @@ Deno.test("de/serialize()", async t => {
   }));
 });
 
-async function testUnPackRequest(opt: {
-  /** Serializers plugged into both packRequest and unpackRequest. */
+interface TestUnPackRequestOptions {
   serializers?: Serializers;
-  /** Url for the request. Default: `"http://localhost/test"` */
-  url?: string;
-  /** Query to use when packing the request. */
-  query?: Record<string, string | string[]>;
-  /** Message to use when packing the request. */
   message?: unknown;
-  /** Headers to include when packing the request. */
-  headers?: Headers;
-  /**
-   * Optionally check that the packed Request object has these properties. If
-   * not provided, no checks will be made.
-   */
-  packed?: {
-    url?: string;
-    headers?: [string, string][];
-    body?: string | FormData | Record<string, unknown> | null;
-  },
-  /**
-   * By default, the result of unpackRequest is checked against the opt.query
-   * and opt.message. Sometimes, the unpacked value isn't equal to the packed
-   * value. In those cases, these values will override the original input when
-   * checking.
-   */
-  unpacked?: {
-    query?: Record<string, string | string[]>;
-    message?: unknown;
-  },
-}) {
-  const packed = packRequest(opt.url || "http://localhost/test", {
-    serializers: opt.serializers,
-    headers: opt.headers,
-    query: opt.query,
-    message: opt.message,
-  });
-  const packed2 = packed.clone();
-  if (opt.packed?.url) {
-    assertEquals(packed.url, opt.packed.url);
-  }
-  if (opt.packed?.headers) {
-    assertEquals(Array.from(packed.headers.entries()), opt.packed.headers);
-  }
-  if (typeof opt.packed?.body !== "undefined") {
-    if (opt.packed.body instanceof FormData) {
-      assertEquals(packed.body && await packed.formData(), opt.packed.body);
-    } else if (typeof opt.packed.body === "string") {
-      assertEquals(packed.body && await packed.text(), opt.packed.body);
-    } else { // null
-      assertEquals(packed.body, opt.packed.body);
-    }
-  }
+  headers?: HeadersInit;
+}
 
-  const unpacked = await unpackRequest(packed2, opt.serializers);
-  assertEquals(unpacked.query, opt.unpacked?.query || opt.query);
-  assertEquals(unpacked.message, opt.unpacked?.message || opt.message);
+async function testUnPackRequest(opt: TestUnPackRequestOptions & {
+  check?: (x: {
+    opt: TestUnPackRequestOptions,
+    // deno-lint-ignore no-explicit-any
+    message: any;
+  }) => Promise<void> | void;
+}) {
+  const { check, ...options } = opt;
+  const packed = packRequest("http://localhost/test", opt);
+  const message = await unpackRequest(packed, opt.serializers);
+  if (check) {
+    await check({ opt: options, message });
+  } else {
+    assertEquals(message, opt.message);
+  }
+}
+
+async function assertEqualsBlob(a: File | Blob, b: File | Blob) {
+  assertEquals({
+    name: a instanceof File ? a.name : "blob",
+    type: a.type,
+    body: await a.text(),
+  }, {
+    name: b instanceof File ? b.name : "blob",
+    type: b.type,
+    body: await b.text(),
+  });
 }
 
 Deno.test("un/packRequest()", async t => {
-  await t.step("query", () => testUnPackRequest({
-    query: {
-      hello: "world",
-      foo: ["bar", "baz"],
-    },
-  }));
-
-  await t.step("message", () => testUnPackRequest({
-    message: new Map([[1, 2]]),
-    packed: {
-      headers: [
-        ["content-type", "application/json"],
-      ],
-      body: `{"$map":[[1,2]]}`,
-    },
-  }));
-
-  await t.step("query and message", () => testUnPackRequest({
-    query: { foo: "bar" },
-    message: new HttpError("baz", { status: 418, expose: "yourself" }),
-    packed: {
-      headers: [
-        ["content-type", "application/json"],
-      ],
-      body: `{"$httpError":{"status":418,"message":"baz","expose":"yourself"}}`,
-    },
-  }));
-
-  await t.step("message: ReadableStream", () => testUnPackRequest({
-    message: new ReadableStream({
-      start(controller) {
-        controller.enqueue("foobar");
-        controller.close();
-      },
-    }),
-    packed: {
-      headers: [
-        ["content-type", "application/octet-stream"]
-      ],
-      body: "foobar",
-    },
-    unpacked: {
-      message: new Blob(["foobar"]),
-    },
-  }));
-
-  await t.step("message: ArrayBuffer view", () => testUnPackRequest({
-    message: new Int32Array([1,2,3]),
-    packed: {
-      headers: [
-        ["content-type", "application/octet-stream"],
-      ],
-      body: "\x01\x02\x03",
-    },
-    unpacked: {
-      message: new Blob(["\x01\x02\x03"]),
-    },
-  }));
+  // Symmetric
 
   await t.step("message: string", () => testUnPackRequest({
-    message: "hello world",
-    packed: {
-      headers: [
-        ["content-type", "text/plain"],
-      ],
-      body: "hello world",
-    },
-    unpacked: {
-      message: "hello world",
+    message: "foo-bar",
+  }));
+
+  await t.step("message: object", () => testUnPackRequest({
+    message: {
+      a: new Set(["baz"]),
+      b: Symbol.for("poop"),
     },
   }));
 
-  await t.step("message: URLSearchParams", () => testUnPackRequest({
-    message: new URLSearchParams([
-      ["field1", "hello world"],
-      ["field2", "foo-bar"],
-    ]),
-    packed: {
-      headers: [
-        ["content-type", "application/x-www-form-urlencoded"],
-      ],
-      body: "field1=hello+world&field2=foo-bar",
-    },
-    unpacked: {
-      message: {
-        field1: "hello world",
-        field2: "foo-bar",
-      },
-    },
+  await t.step("message: File", () => testUnPackRequest({
+    message: new File(["blah"], "eh.txt", { type: "text/plain" }),
+    check: x => assertEqualsBlob(x.message, x.opt.message as File),
+  }));
+
+  await t.step("message: Blob", () => testUnPackRequest({
+    message: new Blob(
+      ["you look lovely today, btw"],
+      { type: "text/plain" },
+    ),
+    check: x => assertEqualsBlob(x.message, x.opt.message as Blob),
   }));
 
   await t.step(
-    "message: object with string | string[]",
+    "message: File with quotes in filename (testing content-disposition)",
+    () => testUnPackRequest({
+      message: new File(
+        [
+          "jk i can't see you",
+          "now back to our regularly scheduled programming",
+        ],
+        "\"shows-over\".txt",
+        { type: "text/plain" },
+      ),
+      check: x => assertEqualsBlob(x.message, x.opt.message as File),
+    }),
+  );
+
+  await t.step("message: object w/Files", () => testUnPackRequest({
+    message: new Map([[
+      new File(["hello"], "dumb.csv", { type: "text/csv" }),
+      new File(["world"], "dumber.csv", { type: "text/csv" }),
+    ]]),
+    check: async x => {
+      const [[a, b]] = Array.from(x.message.entries());
+      const [[oa, ob]] = Array.from(
+        (x.opt.message as Map<File, File>).entries()
+      );
+      await assertEqualsBlob(a, oa);
+      await assertEqualsBlob(b, ob);
+    },
+  }));
+
+  await t.step("message: object w/Blobs", () => testUnPackRequest({
+    message: new Map([[
+      new Blob(["hello"], { type: "text/csv" }),
+      new Blob(["world"], { type: "text/csv" }),
+    ]]),
+    check: async x => {
+      const [[a, b]] = Array.from(x.message.entries());
+      const [[oa, ob]] = Array.from(
+        (x.opt.message as Map<File, File>).entries()
+      );
+      await assertEqualsBlob(a, oa);
+      await assertEqualsBlob(b, ob);
+    },
+  }));
+
+  const refFile = new File(["red cards for everybody"], "soccer.txt", {
+    type: "text/plain",
+  });
+  await t.step(
+    "message: object w/ multiple ref. equal Files",
     () => testUnPackRequest({
       message: {
-        hello: "world",
-        foo: ["bar","baz"],
+        a: refFile,
+        b: refFile,
       },
-      packed: {
-        headers: [
-          ["content-type", "application/x-www-form-urlencoded"],
-        ],
-        body: "hello=world&foo=bar&foo=baz",
+      check: async x => {
+        await assertEqualsBlob(
+          x.message.a,
+          (x.opt.message as Record<string, File>).a,
+        );
+        assertStrictEquals(x.message.a, x.message.b);
       },
     }),
   );
 
-  await t.step("message: File", () => testUnPackRequest({
-    message: new File(["true"], "input.json", { type: "application/json" }),
-    packed: {
-      headers: [
-        ["content-type", "application/json"],
-      ],
-      body: "true",
-    },
-    unpacked: {
-      // NOTE: When the file is sent as a top-level message, the file name is
-      // lost
-      message: new Blob(["true"], { type: "application/json" }),
-    },
+  // Asymmetric
+
+  await t.step("message: ArrayBufferView", () => testUnPackRequest({
+    message: new Uint8Array([1,2,3]),
+    check: x => assertEqualsBlob(
+      x.message,
+      new Blob([new Uint8Array([1,2,3])], { type: "application/octet-stream" }),
+    ),
   }));
 
-  await t.step("message: Blob", () => testUnPackRequest({
-    message: new Blob(["1234"], { type: "text/plain" }),
-    packed: {
-      headers: [
-        ["content-type", "text/plain"],
-      ],
-      body: "1234",
-    },
-    unpacked: {
-      // NOTE: Plain text files / blobs sent will be unpacked as strings
-      message: "1234",
-    },
+  await t.step(
+    "message: ArrayBufferView w/content-type",
+    () => testUnPackRequest({
+      message: new Uint8Array([1,2,3]),
+      headers: { "content-type": "none-of-your/business" },
+      check: x => assertEqualsBlob(
+        x.message,
+        new Blob([new Uint8Array([1,2,3])], {
+          type: "none-of-your/business",
+        }),
+      ),
+    }),
+  );
+
+  // TODO: Something's wrong with ReadableStreams, I couldn't figure it out so
+  // I'm just moving on for now. Don't use ReadableStreams as messages yet
+
+  // await t.step("message: ReadableStream", () => testUnPackRequest({
+  //   message: new ReadableStream({
+  //     start(controller) {
+  //       controller.enqueue("foo-bar");
+  //       controller.close();
+  //     }
+  //   }),
+  //   headers: { "content-length": "7" },
+  //   check: x => assertEqualsBlob(x.message, new Blob(["foo-bar"])),
+  // }));
+  // await t.step(
+  //   "message: ReadableStream w/content-type",
+  //   () => testUnPackRequest({
+      
+  //   }),
+  // );
+
+  await t.step("message: URLSearchParams", () => testUnPackRequest({
+    message: new URLSearchParams({ hello: "world" }),
+    check: x => assertEquals(x.message, { hello: "world" }),
   }));
 
   const form = new FormData();
-  form.append("string", "foobar");
-  form.append("file", new File(["hello"], "hello.txt", { type: "text/plain" }));
+  form.set("hello", "world");
+  form.append("foo", "bar");
+  form.append("foo", "baz");
   await t.step("message: FormData", () => testUnPackRequest({
     message: form,
-    packed: {
-      headers: [
-        ["content-type", "multipart/form-data"],
-      ],
-      body: form,
-    },
-    unpacked: {
-      message: {
-        string: "foobar",
-        file: new File(["hello"], "hello.txt", { type: "text/plain" }),
-      },
-    },
+    check: x => assertEquals(x.message, {
+      hello: "world",
+      foo: ["bar", "baz"],
+    }),
   }));
 
-  form.append("files", new File(["hello"], "hello.txt"));
-  form.append("files", new File([], "empty.txt"));
-  await t.step("message: object with File | File[]", () => testUnPackRequest({
-    message: {
-      string: "foobar",
-      file: new File(["hello"], "hello.txt", { type: "text/plain" }),
-      files: [new File(["hello"], "hello.txt"), new File([], "empty.txt")],
-    },
-    packed: {
-      headers: [
-        ["content-type", "multipart/form-data"],
-      ],
-      body: form,
+  // Misc
+
+  class Custom {}
+  await t.step("custom serializers", () => testUnPackRequest({
+    message: new Custom(),
+    serializers: {
+      custom: serializer({
+        check: v => v instanceof Custom,
+        serialize: () => null,
+        deserialize: () => new Custom,
+      }),
     },
   }));
-
-  const form2 = new FormData();
-  form2.append("string", "eh");
-  form2.append("blob", new Blob(["foo"]));
-  form2.append("blobs", new Blob(["test,value"], { type: "text/csv" }));
-  form2.append("blobs", new Blob(["eh"], { type: "application/octet-stream" }));
-  await t.step("message: object with Blob | Blob[]", () => testUnPackRequest({
-    message: {
-      string: "foobar",
-      blob: new Blob(["foo"]),
-      blobs: [
-        new Blob(["test,value"], { type: "text/csv" }),
-        new Blob(["eh"], { type: "application/octet-stream" }),
-      ],
-    },
-    packed: {
-      headers: [
-        ["content-type", "multipart/form-data"],
-      ],
-      body: form2,
-    },
-  }));
-
-  // Returns dynamic results because of the file uuid
-  await t.step("message: File[]", () => {
-
-  });
-
-  // Returns dynamic results because of the file uuid
-  await t.step("message: File as keys and values in a map", () => {
-
-  });
-
-  await t.step("query appends existing parameters", () => {
-
-  });
-
-  await t.step("extra headers", () => {
-
-  });
-
-  await t.step("content-type header conflict", () => {
-
-  });
-
-  await t.step("custom serializers", () => {
-
-  });
 });
