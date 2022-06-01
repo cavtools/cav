@@ -526,7 +526,7 @@ export function deserialize<T = unknown>(
 }
 
 interface PackedBody {
-  body: BodyInit | null;
+  body?: BodyInit | null;
   headers?: HeadersInit;
 }
 
@@ -534,10 +534,9 @@ function packBody(
   body: unknown,
   serializers?: Serializers,
 ): PackedBody {
-  if (body === null || typeof body === "undefined") {
-    return { body: null };
-  }
   if (
+    body === null ||
+    typeof body === "undefined" ||
     body instanceof ReadableStream ||
     body instanceof ArrayBuffer ||
     ArrayBuffer.isView(body) ||
@@ -547,23 +546,14 @@ function packBody(
   ) {
     return { body };
   }
-  if (typeof body === "string") {
-    return { body };
-  }
-  if (body instanceof URLSearchParams) {
-    // No need to specify the type since its inferred because it's a form
-    return { body };
-  }
-  if (body instanceof FormData) {
-    // No need to specify the type since its inferred because it's a form
-    return { body };
-  }
+
   if (body instanceof File) {
     return {
       body,
       headers: { "content-disposition": `attachment; filename="${body.name}"` },
     };
   }
+
   if (body instanceof Blob) {
     return {
       body,
@@ -571,9 +561,11 @@ function packBody(
     };
   }
 
+  // Anything else needs to be serialized either as JSON or as a multipart form
+  // if there's Blobs anywhere in the input
   const form = new FormData();
   const fileKeys = new Map<Blob, string>();
-  const shape = JSON.stringify(serialize(body, {
+  const json = JSON.stringify(serialize(body, {
     ...serializers,
     __blob: serializer({
       check: (v) => v instanceof Blob,
@@ -591,21 +583,18 @@ function packBody(
       deserialize: () => null, // Not needed here
     }),
   }));
-
   if (!fileKeys.size) {
     return {
-      body: shape,
+      body: json,
       headers: { "content-type": "application/json" },
     };
   }
-
   form.set(
     "__shape",
-    new File([shape], "__shape.json", {
+    new File([json], "__shape.json", {
       type: "application/json",
     }),
   );
-
   return { body: form };
 }
 
@@ -613,7 +602,11 @@ function mergeHeaders(a?: HeadersInit, b?: HeadersInit) {
   const ah = new Headers(a);
   const bh = new Headers(b);
   for (const [k, v] of bh.entries()) {
-    ah.append(k, v);
+    if (k === "content-type" || k === "content-disposition") {
+      ah.set(k, v);
+    } else {
+      ah.append(k, v);
+    }
   }
   return ah;
 }
@@ -623,13 +616,98 @@ export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
   message?: unknown;
 }
 
+/**
+ * Serializes a new Request, which can then be deserialized using `unpack()`.
+ * Only GET and POST requests are supported; the method used is automatically
+ * determined based on the presence of the `message` init option. If the message
+ * is `undefined`, the method is GET. Otherwise, it's POST, even for `null`
+ * messages. Any headers specified on the init options will override the headers
+ * determined during serialization.
+ *
+ * If the init `message` extends BodyInit, it'll be passed through to the
+ * Request constructor as the `body` RequestInit option. During `unpack()`,
+ * it'll be deserialized according to the content-type set on the request
+ * headers.
+ *
+ * If the init `message` is a File or Blob, it'll also be sent with a
+ * "content-disposition: attachment" header. During `unpack()`, it will be
+ * deserialized back into a regular Blob or File, along with the file name if
+ * there is one.
+ *
+ * If the init `message` is any other type, it'll first be serialized as JSON
+ * using `serialize()`. The default serializers are extended to include Files
+ * and Blobs; if a File or Blob exists on the serialized value, the request will
+ * be sent as a specially formatted FormData instead of JSON. During `unpack()`,
+ * it'll be deserialized back into the original `message` with all the Files and
+ * Blobs back in the right place. Referential equality for Files and Blobs will
+ * be preserved, so that duplicate Blobs only have 1 copy uploaded.
+ * 
+ * Examples:
+ *
+ * ```ts
+ * // Regular GET request, undefined message
+ * const getReq = packRequest("http://localhost/test");
+ * console.log(await unpack(getReq))
+ * // undefined
+ *
+ * // POST request with no body
+ * const postReq = packRequest("http://localhost/test", { message: null });
+ * console.log(await unpack(postReq));
+ * // null
+ *
+ * // String message (passthrough)
+ * const strReq = packRequest("http://localhost/test", {
+ *   message: "hello world",
+ * });
+ * const str: string = await unpack(strReq);
+ * console.log(str);
+ * // hello world
+ *
+ * // FormData message (passthrough)
+ * const formData = new FormData();
+ * formData.append("test", "a");
+ * formData.append("test", "b");
+ * const formReq = packRequest("http://localhost/test", {
+ *   message: formData,
+ * });
+ * const form = await unpack(formReq);
+ * console.log(form);
+ * // { test: [ "a", "b" ] }
+ *
+ * // File message (passthrough + disposition header)
+ * const fileReq = packRequest("http://localhost/test", {
+ *   message: new File(["fileReq"], "1.txt", { type: "text/plain" });
+ * });
+ * const file = await unpack(req1);
+ * console.log(file.constructor.name, res1.name, res1.type, await res1.text());
+ * // File 1.txt text/plain fileReq
+ *
+ * // Object message (serialized as JSON)
+ * const objReq = packRequest("http://localhost/test", {
+ *   message: { hello: "world" },
+ * });
+ * const obj = await unpack(objReq);
+ * console.log(obj);
+ * // { hello: "world" }
+ *
+ * // Map<File, string> message (serialized as multipart)
+ * const mapReq = packRequest("http://localhost/test", {
+ *   message: new Map([
+ *     [new File(["foo"], "bar"), "baz"],
+ *   ]),
+ * });
+ * const map = await unpack(mapReq);
+ * console.log(Array.from(map.entries()));
+ * // [ [ File { size: 3, type: "application/octet-stream" }, "baz" ] ]
+ * ```
+ */
 export function packRequest(url: string, init?: PackRequestInit): Request {
   const packed = packBody(init?.message, init?.serializers);
   return new Request(url, {
-    method: packed ? "POST" : "GET",
     ...init,
+    method: typeof packed.body === "undefined" ? "GET" : "POST",
     headers: mergeHeaders(packed.headers, init?.headers),
-    body: packed?.body,
+    body: packed.body,
   });
 }
 
@@ -657,19 +735,23 @@ export async function unpack(
   packed: Request | Response,
   serializers?: Serializers,
 ): Promise<unknown> {
+  // GET requests always return undefined, which is the message needed to use
+  // GET instead of POST. POST requests and Responses return null if there's no
+  // body
+  if (packed instanceof Request && packed.method === "GET") {
+    return undefined;
+  }
   if (!packed.body) {
     return null;
   }
 
-  // Files and Blobs sent with a "content-disposition: attachment" header skip
-  // the regular unpacking process
   const type = packed.headers.get("content-type") || "";
   const disposition = packed.headers.get("content-disposition");
   if (disposition) {
     const match = disposition.match(/^attachment; filename="(.+)"/);
     if (match) {
       const filename = match[1];
-      return new File([await packed.blob()], filename, { type });
+      return new File([await packed.blob()], filename, { type }); // REVIEW
     }
     if (disposition.match(/^attachment;?/)) {
       return packed.blob();
@@ -720,5 +802,6 @@ export async function unpack(
     });
   }
 
+  // The fallback behavior just returns a Blob
   return await packed.blob();
 }

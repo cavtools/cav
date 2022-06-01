@@ -730,14 +730,9 @@ Deno.test("packing and unpacking", async (t) => {
     "File with quotes in filename (testing content-disposition)",
     () =>
       testPacking({
-        message: new File(
-          [
-            "jk i can't see you",
-            "now back to our regularly scheduled programming",
-          ],
-          '"shows-over".txt',
-          { type: "text/plain" },
-        ),
+        message: new File(["jk i can't see you"], 'thank "god".txt', {
+          type: "text/plain",
+        }),
         check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as File),
       }),
   );
@@ -825,17 +820,11 @@ Deno.test("packing and unpacking", async (t) => {
 
   await t.step("ReadableStream w/o content-type", () =>
     testPacking({
-      // This readable stream gets recreated for both packRequest and packResponse
+      // This readable stream gets recreated for both packRequest and
+      // packResponse
       message: () =>
-        new ReadableStream({
+        new ReadableStream<Uint8Array>({
           start: (controller) => {
-            // FIXME: I think I may have found a bug with someone else's code?
-            // When using a string with this enqueue(), the code eventually
-            // checks the queued value for a byteLength, which doesn't exist on
-            // strings. Leads to a RangeError. My guess is that this is an
-            // unchecked edge case... or maybe I'm using ReadableStreams wrong?
-            // I don't think this affects the functionality, afaik it only
-            // affects this testing scenario
             controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
             controller.close();
           },
@@ -845,9 +834,10 @@ Deno.test("packing and unpacking", async (t) => {
 
   await t.step("ReadableStream w/content-type", () =>
     testPacking({
-      // This readable stream gets recreated for both packRequest and packResponse
+      // This readable stream gets recreated for both packRequest and
+      // packResponse
       message: () =>
-        new ReadableStream({
+        new ReadableStream<Uint8Array>({
           start: (controller) => {
             controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
             controller.close();
@@ -880,6 +870,40 @@ Deno.test("packing and unpacking", async (t) => {
     }));
 
   // Misc
+
+  await t.step("specified headers override auto headers", async () => {
+    const req = packRequest("http://localhost/test", {
+      message: { hello: "world" },
+      headers: { "content-type": "text/plain" },
+    });
+    assertEquals(await unpack(req), `{"hello":"world"}`);
+
+    const req2 = packRequest("http://localhost/test", {
+      message: new Blob(["foobar"], { type: "text/csv" }),
+      headers: { "content-type": "text/plain", "content-disposition": "" },
+    });
+    await assertEquals(
+      await unpack(req2),
+      // new Blob(["foobar"], { type: "text/plain" }),
+      "foobar",
+    );
+  });
+
+  await t.step("undefined message means GET request", async () => {
+    const req = packRequest("http://localhost/test");
+    assertEquals(req.method, "GET");
+    assertEquals(await unpack(req), undefined);
+  });
+
+  await t.step("null message means POST request with no body", async () => {
+    const req = packRequest("http://localhost/test", { message: null });
+    assertEquals(req.method, "POST");
+    assertEquals(await unpack(req), null);
+  });
+
+  await t.step("passing Response into packResponse", () => {
+    throw new Error("TODO");
+  });
 
   class Custom {}
   await t.step("custom serializers", () =>

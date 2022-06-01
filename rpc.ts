@@ -2,6 +2,8 @@
 
 import { http } from "./deps.ts";
 
+// TODO: If message: true then allow unknown bodies. Same as x => x
+
 export type Rpc<S> = S & http.Handler;
 
 export interface RpcSchema<
