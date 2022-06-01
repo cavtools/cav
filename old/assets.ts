@@ -2,7 +2,7 @@
 
 // TODO: Add option for source maps for prepared bundles
 
-import { path, fileServer, graph } from "./deps.ts";
+import { fileServer, graph, path } from "./deps.ts";
 import { HttpError } from "./serial.ts";
 
 /** Options controlling how assets are found and served. */
@@ -29,8 +29,9 @@ export interface ServeAssetOptions {
 // When a requested path without a trailing slash resolves to a directory and
 // that directory has an index file in it, relative links in the html need to be
 // rewritten to account for the lack of trailing slash. This regex is used to
-// rewrite them.  
-const htmlRelativeLinks = /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
+// rewrite them.
+const htmlRelativeLinks =
+  /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
 
 function parseCwd(cwd: string): string {
   // REVIEW: What about /https?:/// ?
@@ -73,7 +74,7 @@ export async function serveAsset(
       dir,
       path.join("/", filePath),
     );
-  
+
     let fileInfo: Deno.FileInfo | null = null;
     try {
       if (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) {
@@ -136,13 +137,19 @@ export async function serveAsset(
     content = content.replaceAll(htmlRelativeLinks, (match, group) => {
       const newGroup = group.replace(
         /^(?:src|href)=(?:"|')(\..*)(?:"|')$/g,
-        (m: string, g: string) => m.replace(g, (
-          // TODO: This isn't complete. Make a note in the docs about trailing
-          // slashes
-          g.startsWith("./") ? `./${basename}/${g.slice(2)}`
-          : g.startsWith("../") ? `./${g.slice(3)}`
-          : g
-        )),
+        (m: string, g: string) =>
+          m.replace(
+            g,
+            (
+              // TODO: This isn't complete. Make a note in the docs about trailing
+              // slashes
+              g.startsWith("./")
+                ? `./${basename}/${g.slice(2)}`
+                : g.startsWith("../")
+                ? `./${g.slice(3)}`
+                : g
+            ),
+          ),
       );
       return match.replace(group, newGroup);
     });
@@ -219,10 +226,12 @@ export async function prepareAssets(opt: {
     return;
   }
 
-  if ((await Deno.permissions.query({
-    name: "write",
-    path: assets,
-  })).state !== "granted") {
+  if (
+    (await Deno.permissions.query({
+      name: "write",
+      path: assets,
+    })).state !== "granted"
+  ) {
     return;
   }
 
@@ -236,10 +245,10 @@ export async function prepareAssets(opt: {
     for await (const entry of Deno.readDir(dir)) {
       if (
         entry.isFile &&
-        (
-          entry.name.endsWith("_bundle.ts") ||
-          entry.name.endsWith("_bundle.tsx")
-        ) ||
+          (
+            entry.name.endsWith("_bundle.ts") ||
+            entry.name.endsWith("_bundle.tsx")
+          ) ||
         (
           entry.name === "bundle.ts" ||
           entry.name === "bundle.tsx"
@@ -288,7 +297,7 @@ export async function prepareAssets(opt: {
     if (watching.has(input)) {
       return;
     }
-    
+
     if (!await isFile(input)) {
       watching.delete(input);
       return;
@@ -298,7 +307,7 @@ export async function prepareAssets(opt: {
     let inputGraph: graph.ModuleGraph;
     try {
       inputGraph = await graph.createGraph(
-        path.toFileUrl(input).href
+        path.toFileUrl(input).href,
       );
     } catch (e) {
       console.error("Failed to graph", input, "-", e);
@@ -307,9 +316,9 @@ export async function prepareAssets(opt: {
     }
 
     const deps = inputGraph.modules
-      .filter(m => m.specifier.startsWith("file://"))
-      .map(m => path.fromFileUrl(m.specifier));
-    
+      .filter((m) => m.specifier.startsWith("file://"))
+      .map((m) => path.fromFileUrl(m.specifier));
+
     try {
       await bundle(input);
     } catch (e) {

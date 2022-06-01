@@ -1,14 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { base64, http } from "./deps.ts";
-import { HttpError, serializeBody, deserializeBody } from "./serial.ts";
+import { deserializeBody, HttpError, serializeBody } from "./serial.ts";
 import { wrapWebSocket } from "./client.ts";
 import type { Serializers } from "./serial.ts";
-import type {
-  Socket,
-  SocketInit,
-  EndpointResponse,
-} from "./client.ts";
+import type { EndpointResponse, Socket, SocketInit } from "./client.ts";
 import type { Parser, ParserOutput } from "./parser.ts";
 
 /**
@@ -20,7 +16,7 @@ export interface RequestContext {
    * A ResponseInit applied to the Rpc response after resolving and packing the
    * value to send to the client. The Headers object is always available.
    */
-  res: ResponseInit & { headers: Headers; };
+  res: ResponseInit & { headers: Headers };
   /**
    * new URL(req.url)
    */
@@ -73,7 +69,7 @@ export function requestContext(request: Request): RequestContext {
   }
 
   const url = new URL(req.url);
-  const path = `/${url.pathname.split("/").filter(p => !!p).join("/")}`;
+  const path = `/${url.pathname.split("/").filter((p) => !!p).join("/")}`;
   let redirect: Response | null = null;
   if (path !== url.pathname) {
     url.pathname = path;
@@ -128,8 +124,7 @@ export async function requestBody(req: Request, opt?: {
   }
 
   const maxSize = (
-    typeof opt?.maxSize === "number" ? opt.maxSize
-    : 5 * 1024 * 1024 // 5mb
+    typeof opt?.maxSize === "number" ? opt.maxSize : 5 * 1024 * 1024 // 5mb
   );
 
   // TODO: With HTTP/2, it's possible to have a streamed body that has no
@@ -250,8 +245,8 @@ export async function bakeCookie(init: { // Using just "cookie" was annoying
   }
 
   const updates: (
-    | { op: "set", name: string, value: string, opt?: CookieSetOptions }
-    | { op: "delete", name: string, opt?: CookieDeleteOptions }
+    | { op: "set"; name: string; value: string; opt?: CookieSetOptions }
+    | { op: "delete"; name: string; opt?: CookieDeleteOptions }
   )[] = [];
 
   const cookie: Cookie = {
@@ -288,7 +283,7 @@ export async function bakeCookie(init: { // Using just "cookie" was annoying
       if (signed[name]) {
         updates.push({ op: "delete", name: `${name}.sig`, opt });
       }
-      
+
       // If the current request doesn't match the path and domain for the
       // deleted cookie, don't delete our cookie since the client's cookie for
       // this path and domain won't be deleted either
@@ -420,8 +415,8 @@ export function endpointResponse<T = unknown>(
   init?: EndpointResponseInit,
 ): EndpointResponse<
   T extends EndpointResponse<infer T2> ? T2
-  : T extends Response ? unknown
-  : T
+    : T extends Response ? unknown
+    : T
 > {
   const headers = new Headers(init?.headers);
 
@@ -466,19 +461,22 @@ export function upgradeWebSocket<
   req: Request,
   init?: SocketInit<Message>,
 ): {
-  socket: Socket<Send, (
-    Message extends Parser ? ParserOutput<Message> : unknown
-  )>;
+  socket: Socket<
+    Send,
+    (
+      Message extends Parser ? ParserOutput<Message> : unknown
+    )
+  >;
   response: Response;
 } {
   try {
     const { socket, response } = Deno.upgradeWebSocket(req, {
-      protocol: "json"
+      protocol: "json",
     });
     return {
       socket: wrapWebSocket(socket, init),
       response,
-    }
+    };
   } catch (e) {
     throw new HttpError("400 bad request", {
       status: 400,

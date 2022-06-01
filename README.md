@@ -28,14 +28,13 @@ Cav is a web framework for [Deno](https://deno.land).
   - [x] Dev-time bundling for TypeScript assets
   - [x] Works with JSX frameworks like [Preact](https://preactjs.com)
   - [x] Automatic de/serialization of most data types, including Maps, Sets,
-    etc.
+        etc.
 - "Hello world" should be as easy as `deno run`ning a tiny `main.ts`
   - [x] Zero config
   - [x] Zero CLI commands
 - The client API should use types imported from the server to catch I/O type
   errors at the IDE level
-  - [x] [End-to-end type
-    safety](https://colinhacks.com/essays/painless-typesafety)
+  - [x] [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
   - [x] Maximal TypeScript benefits, minimal TypeScript
 - Its syntax should be functional and declarative
@@ -57,4 +56,8 @@ Cav is a web framework for [Deno](https://deno.land).
 - [ ] Make everyone happy
 - [ ] Make **lotsa** money
 
-<!-- ## Stay up to date -->
+## Current limitations
+
+- Large file uploads: Currently, file uploads are completely loaded into memory
+  on the server. Be mindful when changing the `maxBodySize` option on an Rpc,
+  which defaults to 5mb. Automatic disk-backed file uploads are a WIP

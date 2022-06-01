@@ -3,19 +3,9 @@
 
 // This module is heavily inspired by https://github.com/blitz-js/superjson
 
-// TODO: IMPORTANT: Serialized values should be wrapped in a metadata object
-// that encodes the version of cav that serialized it (e.g. 0.1)  
-
-// TODO: serialize() should first scan the input's values recursively to see if
-// it needs serializing. If it doesn't, it should return the input without the
-// metadata wrapper
-
-// TODO: Automatically escape strings for XSS, see
-// https://github.com/yahoo/serialize-javascript ?  
-// TODO: Support for ArrayBuffer/View  
-// TODO: Support for functions?
-
-// HttpError is defined here so that serial.ts can be self-contained
+// REVIEW: Automatically escape strings for XSS, see
+// https://github.com/yahoo/serialize-javascript ?
+// REVIEW: Support for functions?
 
 /**
  * Init options for constructing HttpErrors, which can expose arbitrary data and
@@ -30,6 +20,7 @@ export interface HttpErrorInit {
   detail?: Record<string, unknown>;
 }
 
+// HttpError is defined here so that serial.ts can be self-contained
 /** Error class for describing exceptions during HTTP processing. */
 export class HttpError extends Error {
   /** An HTTP status code describing what kind of error this is. */
@@ -63,11 +54,11 @@ export interface Serializer<I = unknown, O = unknown> {
    */
   serialize(value: I): O;
   /**
-   * Transforms serialized values into their original input. Nested serialized
-   * values will still be serialized when this function is called; use the
-   * `whenDone` registration function to finish setting up the resulting output
-   * only when each of the nested values is finished deserializing. (i.e.
-   * "ready")
+   * Transforms serialized values into their original input. Any nested
+   * serialized values will still be serialized when this function is called
+   * initially. Use the `whenDone` registration function to finish setting up
+   * the resulting output only when each of the nested values is finished
+   * deserializing, i.e. "ready".
    */
   deserialize(
     raw: unknown,
@@ -106,7 +97,7 @@ export type Serializers = Record<string, AnySerializer | null>;
  * https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution
  * for more information on prototype poisoning.
  */
- export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
+export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
   return (
     !!obj &&
     typeof obj === "object" &&
@@ -153,8 +144,10 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
         case "SyntaxError":
         case "TypeError":
         case "URIError":
-        case "AggregateError": return { type: v.name, message: v.message };
-        default: return v.message;
+        case "AggregateError":
+          return { type: v.name, message: v.message };
+        default:
+          return v.message;
       }
     },
     // deno-lint-ignore no-explicit-any
@@ -170,18 +163,26 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
           });
           // deno-lint-ignore no-explicit-any
           whenDone((ready: any) => {
-            err.expose = ready.expose
+            err.expose = ready.expose;
           });
           return err;
         }
-        case "EvalError": return new EvalError(raw.message);
-        case "RangeError": return new RangeError(raw.message);
-        case "ReferenceError": return new ReferenceError(raw.message);
-        case "SyntaxError": return new SyntaxError(raw.message);
-        case "TypeError": return new TypeError(raw.message);
-        case "URIError": return new URIError(raw.message);
-        case "AggregateError": return new AggregateError(raw.message);
-        default: return new Error(raw.message);
+        case "EvalError":
+          return new EvalError(raw.message);
+        case "RangeError":
+          return new RangeError(raw.message);
+        case "ReferenceError":
+          return new ReferenceError(raw.message);
+        case "SyntaxError":
+          return new SyntaxError(raw.message);
+        case "TypeError":
+          return new TypeError(raw.message);
+        case "URIError":
+          return new URIError(raw.message);
+        case "AggregateError":
+          return new AggregateError(raw.message);
+        default:
+          return new Error(raw.message);
       }
     },
   }),
@@ -200,8 +201,8 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
     deserialize: (_, whenDone) => {
       const map = new Map();
-      whenDone(entries => {
-        entries.forEach(v => map.set(v[0], v[1]));
+      whenDone((entries) => {
+        entries.forEach((v) => map.set(v[0], v[1]));
       });
       return map;
     },
@@ -211,8 +212,8 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     serialize: (v: Set<unknown>) => Array.from(v.values()),
     deserialize: (_, whenDone) => {
       const set = new Set();
-      whenDone(values => {
-        values.forEach(v => set.add(v));
+      whenDone((values) => {
+        values.forEach((v) => set.add(v));
       });
       return set;
     },
@@ -231,23 +232,30 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     },
   }),
   number: serializer({
-    check: (v) => typeof v === "number" && (
-      isNaN(v) ||
-      v === Number.POSITIVE_INFINITY ||
-      v === Number.NEGATIVE_INFINITY ||
-      Object.is(v, -0)
-    ),
+    check: (v) =>
+      typeof v === "number" && (
+        isNaN(v) ||
+        v === Number.POSITIVE_INFINITY ||
+        v === Number.NEGATIVE_INFINITY ||
+        Object.is(v, -0)
+      ),
     serialize: (v: number) => (
-      Object.is(v, -0) ? "-zero"
-      : v === Number.POSITIVE_INFINITY ? "+infinity"
-      : v === Number.NEGATIVE_INFINITY ? "-infinity"
-      : "nan"
+      Object.is(v, -0)
+        ? "-zero"
+        : v === Number.POSITIVE_INFINITY
+        ? "+infinity"
+        : v === Number.NEGATIVE_INFINITY
+        ? "-infinity"
+        : "nan"
     ),
     deserialize: (raw: string) => (
-      raw === "-zero" ? -0
-      : raw === "+infinity" ? Number.POSITIVE_INFINITY
-      : raw === "-infinity" ? Number.NEGATIVE_INFINITY
-      : NaN
+      raw === "-zero"
+        ? -0
+        : raw === "+infinity"
+        ? Number.POSITIVE_INFINITY
+        : raw === "-infinity"
+        ? Number.NEGATIVE_INFINITY
+        : NaN
     ),
   }),
   conflict: serializer({
@@ -261,19 +269,19 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     serialize: (v: Record<string, string>) => Object.entries(v)[0],
     deserialize: (_, whenDone) => {
       const result: Record<string, unknown> = {};
-      whenDone(entry => {
+      whenDone((entry) => {
         result[entry[0]] = entry[1];
       });
       return result;
     },
   }),
   buffer: serializer({
-    check: v => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
+    check: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
     // TODO: This could be faster - https://jsben.ch/wnaZC
     serialize: (v: ArrayBufferView | ArrayBuffer) => {
       let base64 = "";
       const data = new Uint8Array(
-        v instanceof ArrayBuffer ? v : v.buffer
+        v instanceof ArrayBuffer ? v : v.buffer,
       );
       for (let i = 0; i < data.length; i++) {
         base64 += String.fromCharCode(data[i]);
@@ -283,7 +291,7 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
         data: self.btoa(base64),
       };
     },
-    deserialize: (raw: { type: string, data: string }) => {
+    deserialize: (raw: { type: string; data: string }) => {
       const data = self.atob(raw.data);
       const buf = new Uint8Array(data.length);
       for (let i = 0; i < data.length; i++) {
@@ -291,23 +299,37 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       }
 
       switch (raw.type) {
-        case "ArrayBuffer": return buf.buffer;
-        case "Int8Array": return new Int8Array(buf.buffer);
-        case "Uint8Array": return new Uint8Array(buf.buffer);
-        case "Uint8ClampedArray": return new Uint8ClampedArray(buf.buffer);
-        case "Int16Array": return new Int16Array(buf.buffer);
-        case "Uint16Array": return new Uint16Array(buf.buffer);
-        case "Int32Array": return new Int32Array(buf.buffer);
-        case "Uint32Array": return new Uint32Array(buf.buffer);
-        case "Float32Array": return new Float32Array(buf.buffer);
-        case "Float64Array": return new Float64Array(buf.buffer);
-        case "BigInt64Array": return new BigInt64Array(buf.buffer);
-        case "BigUint64Array": return new BigUint64Array(buf.buffer);
-        case "DataView": return new DataView(buf.buffer);
-        default: return buf; // Uint8Array is the fallback
+        case "ArrayBuffer":
+          return buf.buffer;
+        case "Int8Array":
+          return new Int8Array(buf.buffer);
+        case "Uint8Array":
+          return new Uint8Array(buf.buffer);
+        case "Uint8ClampedArray":
+          return new Uint8ClampedArray(buf.buffer);
+        case "Int16Array":
+          return new Int16Array(buf.buffer);
+        case "Uint16Array":
+          return new Uint16Array(buf.buffer);
+        case "Int32Array":
+          return new Int32Array(buf.buffer);
+        case "Uint32Array":
+          return new Uint32Array(buf.buffer);
+        case "Float32Array":
+          return new Float32Array(buf.buffer);
+        case "Float64Array":
+          return new Float64Array(buf.buffer);
+        case "BigInt64Array":
+          return new BigInt64Array(buf.buffer);
+        case "BigUint64Array":
+          return new BigUint64Array(buf.buffer);
+        case "DataView":
+          return new DataView(buf.buffer);
+        default: // Uint8Array is the fallback
+          return buf;
       }
     },
-  })
+  }),
 }));
 
 function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
@@ -350,9 +372,9 @@ export function serialize(
   const paths = new Map<unknown, string[]>();
 
   const pathString = (p: string[]) => (
-    p.map(v => v.replace(/\./g, "\\.")).join(".")
+    p.map((v) => v.replace(/\./g, "\\.")).join(".")
   );
-  
+
   const recur = (
     val: unknown,
     path: string[],
@@ -474,10 +496,12 @@ export function deserialize<T = unknown>(
       const result = serializer.deserialize(raw, (fn) => {
         whenDones.push(() => fn(serialized));
       });
-      if (result && (
-        typeof result === "object" ||
-        typeof result === "symbol"
-      )) {
+      if (
+        result && (
+          typeof result === "object" ||
+          typeof result === "symbol"
+        )
+      ) {
         objects.set(path, result);
       }
       serialized = recur(raw, `${path}.${tag}`);
@@ -491,7 +515,7 @@ export function deserialize<T = unknown>(
     }
     return copy;
   };
-  
+
   const result = recur(value, "");
   let fn = whenDones.pop();
   while (fn) {
@@ -516,25 +540,19 @@ function packBody(
   if (
     body instanceof ReadableStream ||
     body instanceof ArrayBuffer ||
-    ArrayBuffer.isView(body)
+    ArrayBuffer.isView(body) ||
+    typeof body === "string" ||
+    body instanceof URLSearchParams ||
+    body instanceof FormData
   ) {
-    return {
-      body,
-      headers: { "content-type": "application/octet-stream" },
-    };
+    return { body };
   }
   if (typeof body === "string") {
-    return {
-      body,
-      headers: { "content-type": "text/plain" },
-    };
+    return { body };
   }
   if (body instanceof URLSearchParams) {
     // No need to specify the type since its inferred because it's a form
-    return {
-      body,
-      // headers: { "content-type": "application/x-www-form-urlencoded" },
-    };
+    return { body };
   }
   if (body instanceof FormData) {
     // No need to specify the type since its inferred because it's a form
@@ -543,22 +561,16 @@ function packBody(
   if (body instanceof File) {
     return {
       body,
-      headers: {
-        "content-type": body.type,
-        "content-disposition": `attachment; filename="${body.name}"`,
-      },
-    }
+      headers: { "content-disposition": `attachment; filename="${body.name}"` },
+    };
   }
   if (body instanceof Blob) {
     return {
       body,
-      headers: {
-        "content-type": body.type,
-        "content-disposition": "attachment",
-      },
+      headers: { "content-disposition": "attachment" },
     };
   }
-  
+
   const form = new FormData();
   const fileKeys = new Map<Blob, string>();
   const shape = JSON.stringify(serialize(body, {
@@ -587,12 +599,23 @@ function packBody(
     };
   }
 
-  form.set("__shape", new File([shape], "__shape.json", {
-    type: "application/json",
-  }));
+  form.set(
+    "__shape",
+    new File([shape], "__shape.json", {
+      type: "application/json",
+    }),
+  );
 
-  // No need to specify the type since its inferred because it's a form
   return { body: form };
+}
+
+function mergeHeaders(a?: HeadersInit, b?: HeadersInit) {
+  const ah = new Headers(a);
+  const bh = new Headers(b);
+  for (const [k, v] of bh.entries()) {
+    ah.append(k, v);
+  }
+  return ah;
 }
 
 export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
@@ -600,23 +623,25 @@ export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
   message?: unknown;
 }
 
-export function packRequest(url: string, init: PackRequestInit): Request {
-  const packed = (
-    typeof init.message === "undefined" ? undefined
-    : packBody(init.message, init.serializers)
-  );
-
-  const headers = new Headers(packed?.headers);
-  const initHeaders = new Headers(init.headers);
-  for (const [k, v] of initHeaders.entries()) {
-    headers.append(k, v);
-  }
-
+export function packRequest(url: string, init?: PackRequestInit): Request {
+  const packed = packBody(init?.message, init?.serializers);
   return new Request(url, {
     method: packed ? "POST" : "GET",
     ...init,
-    headers,
+    headers: mergeHeaders(packed.headers, init?.headers),
     body: packed?.body,
+  });
+}
+
+export interface PackResponseInit extends ResponseInit {
+  serializers?: Serializers;
+}
+
+export function packResponse(body: unknown, init?: PackResponseInit): Response {
+  const packed = packBody(body, init?.serializers);
+  return new Response(packed.body, {
+    ...init,
+    headers: mergeHeaders(packed.headers, init?.headers),
   });
 }
 
@@ -626,25 +651,28 @@ const mimeParams = /^application\/x-www-form-urlencoded;?/;
 const mimeJson = /^application\/json;?/;
 const mimeForm = /^multipart\/form-data;?/;
 
-async function unpackBody(
-  from: Request | Response,
+// TODO: Add an option for controlling the way forms/blobs/files are processed.
+// (For large file uploads that are disk backed)
+export async function unpack(
+  packed: Request | Response,
   serializers?: Serializers,
 ): Promise<unknown> {
-  if (!from.body) {
+  if (!packed.body) {
     return null;
   }
 
-  // Files and Blobs are sent with a "content-disposition: attachment" header
-  const type = from.headers.get("content-type") || "";
-  const disposition = from.headers.get("content-disposition");
+  // Files and Blobs sent with a "content-disposition: attachment" header skip
+  // the regular unpacking process
+  const type = packed.headers.get("content-type") || "";
+  const disposition = packed.headers.get("content-disposition");
   if (disposition) {
     const match = disposition.match(/^attachment; filename="(.+)"/);
     if (match) {
       const filename = match[1];
-      return new File([await from.blob()], filename, { type });
+      return new File([await packed.blob()], filename, { type });
     }
     if (disposition.match(/^attachment;?/)) {
-      return from.blob();
+      return packed.blob();
     }
   }
 
@@ -656,7 +684,7 @@ async function unpackBody(
         old.push(v);
       } else if (typeof old === "undefined") {
         result[k] = v;
-      } else  {
+      } else {
         result[k] = [old, v];
       }
     }
@@ -664,16 +692,16 @@ async function unpackBody(
   };
 
   if (type.match(mimeString)) {
-    return await from.text();
+    return await packed.text();
   }
   if (type.match(mimeParams)) {
-    return parseForm(await from.formData());
+    return parseForm(await packed.formData());
   }
   if (type.match(mimeJson)) {
-    return deserialize(await from.json(), serializers);
+    return deserialize(await packed.json(), serializers);
   }
   if (type.match(mimeForm)) {
-    const form = await from.formData();
+    const form = await packed.formData();
     const shape = form.get("__shape");
     if (
       !shape ||
@@ -692,29 +720,5 @@ async function unpackBody(
     });
   }
 
-  // Fallback is to return the body as a blob. You can force this behavior by
-  // specifying a "content-type: attachment" header
-  return await from.blob();
+  return await packed.blob();
 }
-
-export async function unpackRequest(
-  req: Request,
-  serializers?: Serializers,
-): Promise<unknown> {
-  return await unpackBody(req, serializers);
-}
-
-// export interface PackResponseInit extends ResponseInit {
-//   serializers?: Serializers;
-// }
-
-// export function packResponse(body: unknown, init?: PackResponseInit): Response {
-  
-// }
-
-// export async function unpackResponse(
-//   res: Response,
-//   serializers?: Serializers,
-// ): Promise<unknown> {
-
-// }

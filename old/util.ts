@@ -4,7 +4,7 @@ import { rpc } from "./rpc.ts";
 import { prepareAssets } from "./assets.ts";
 import type { ServeAssetOptions } from "./assets.ts";
 
-// TODO: Add RpcInit options 
+// TODO: Add RpcInit options
 /** Initializer options for the assets() utility function. */
 export type AssetsInit = Omit<ServeAssetOptions, "path">;
 
@@ -23,10 +23,11 @@ export function assets(init?: AssetsInit) {
 
   return rpc({
     path: "*",
-    resolve: x => x.asset({
-      ...init,
-      path: x.path,
-    }),
+    resolve: (x) =>
+      x.asset({
+        ...init,
+        path: x.path,
+      }),
   });
 }
 
@@ -42,7 +43,7 @@ export function assets(init?: AssetsInit) {
 export function redirect(to: string, status?: number) {
   return rpc({
     path: "*",
-    resolve: x => {
+    resolve: (x) => {
       return x.redirect(to, status || 302);
     },
   });

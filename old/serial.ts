@@ -4,10 +4,10 @@
 // This module is heavily inspired by https://github.com/blitz-js/superjson
 
 // TODO: Having $undefined be an object (which isn't falsy) is awkward. I see
-// why superjson did it the way they did it...  
+// why superjson did it the way they did it...
 // TODO: Automatically escape strings for XSS, see
-// https://github.com/yahoo/serialize-javascript ?  
-// TODO: Support for ArrayBuffer/View  
+// https://github.com/yahoo/serialize-javascript ?
+// TODO: Support for ArrayBuffer/View
 // TODO: Support for functions?
 
 // HttpError is defined here so that serial.ts can be self-contained, and
@@ -61,7 +61,7 @@ export interface Serializer<I = unknown, O = unknown> {
   /**
    * Transforms the value into its output on the resulting json-compatible
    * object. The value returned by this function will be reserialized; the
-   * output does not need to be JSON-compatible. 
+   * output does not need to be JSON-compatible.
    */
   serialize(value: I): O;
   /**
@@ -125,9 +125,9 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
       message: v.message,
       expose: v.expose || null,
     }),
-    deserialize: (raw: { status: number, message: string }, whenDone) => {
+    deserialize: (raw: { status: number; message: string }, whenDone) => {
       const err = new HttpError(raw.message, { status: raw.status });
-      whenDone(ready => {
+      whenDone((ready) => {
         err.expose = ready.expose;
       });
       return err;
@@ -158,8 +158,8 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
     deserialize: (_, whenDone) => {
       const map = new Map();
-      whenDone(entries => {
-        entries.forEach(v => map.set(v[0], v[1]));
+      whenDone((entries) => {
+        entries.forEach((v) => map.set(v[0], v[1]));
       });
       return map;
     },
@@ -169,8 +169,8 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     serialize: (v: Set<unknown>) => Array.from(v.values()),
     deserialize: (_, whenDone) => {
       const set = new Set();
-      whenDone(values => {
-        values.forEach(v => set.add(v));
+      whenDone((values) => {
+        values.forEach((v) => set.add(v));
       });
       return set;
     },
@@ -189,23 +189,30 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     },
   }),
   number: serializer({
-    check: (v) => typeof v === "number" && (
-      isNaN(v) ||
-      v === Number.POSITIVE_INFINITY ||
-      v === Number.NEGATIVE_INFINITY ||
-      Object.is(v, -0)
-    ),
+    check: (v) =>
+      typeof v === "number" && (
+        isNaN(v) ||
+        v === Number.POSITIVE_INFINITY ||
+        v === Number.NEGATIVE_INFINITY ||
+        Object.is(v, -0)
+      ),
     serialize: (v: number) => (
-      Object.is(v, -0) ? "-zero"
-      : v === Number.POSITIVE_INFINITY ? "+infinity"
-      : v === Number.NEGATIVE_INFINITY ? "-infinity"
-      : "nan"
+      Object.is(v, -0)
+        ? "-zero"
+        : v === Number.POSITIVE_INFINITY
+        ? "+infinity"
+        : v === Number.NEGATIVE_INFINITY
+        ? "-infinity"
+        : "nan"
     ),
     deserialize: (raw: string) => (
-      raw === "-zero" ? -0
-      : raw === "+infinity" ? Number.POSITIVE_INFINITY
-      : raw === "-infinity" ? Number.NEGATIVE_INFINITY
-      : NaN
+      raw === "-zero"
+        ? -0
+        : raw === "+infinity"
+        ? Number.POSITIVE_INFINITY
+        : raw === "-infinity"
+        ? Number.NEGATIVE_INFINITY
+        : NaN
     ),
   }),
   conflict: serializer({
@@ -219,7 +226,7 @@ const defaults = new Map<string, AnySerializer>(Object.entries({
     serialize: (v: Record<string, string>) => Object.entries(v)[0],
     deserialize: (_, whenDone) => {
       const result: Record<string, unknown> = {};
-      whenDone(entry => {
+      whenDone((entry) => {
         result[entry[0]] = entry[1];
       });
       return result;
@@ -268,9 +275,9 @@ export function serialize(
   const paths = new Map<unknown, string[]>();
 
   const pathString = (p: string[]) => (
-    p.map(v => v.replace(/\./g, "\\.")).join(".")
+    p.map((v) => v.replace(/\./g, "\\.")).join(".")
   );
-  
+
   const recur = (
     val: unknown,
     path: string[],
@@ -392,10 +399,12 @@ export function deserialize<T = unknown>(
       const result = serializer.deserialize(raw, (fn) => {
         whenDones.push(() => fn(serialized));
       });
-      if (result && (
-        typeof result === "object" ||
-        typeof result === "symbol"
-      )) {
+      if (
+        result && (
+          typeof result === "object" ||
+          typeof result === "symbol"
+        )
+      ) {
         objects.set(path, result);
       }
       serialized = recur(raw, `${path}.${tag}`);
@@ -409,7 +418,7 @@ export function deserialize<T = unknown>(
     }
     return copy;
   };
-  
+
   const result = recur(value, "");
   let fn = whenDones.pop();
   while (fn) {
@@ -430,7 +439,7 @@ export function deserialize<T = unknown>(
  * encodes the shape of the input as well as the blobs that were encountered.
  * Otherwise, a regular JSON string will be returned. Blobs and Files can be
  * placed anywhere on the input value, even if they are nested, inside a Map or
- * Set, etc. 
+ * Set, etc.
  */
 export function serializeBody(value: unknown, serializers?: Serializers): {
   body: BodyInit;
@@ -464,7 +473,7 @@ export function serializeBody(value: unknown, serializers?: Serializers): {
       mime: value.type,
     };
   }
-  
+
   const form = new FormData();
   const fileKeys = new Map<Blob, string>();
   const shape = JSON.stringify(serialize(value, {
@@ -492,9 +501,12 @@ export function serializeBody(value: unknown, serializers?: Serializers): {
       mime: "application/json",
     };
   }
-  form.set("__shape", new Blob([shape], {
-    type: "application/json",
-  }));
+  form.set(
+    "__shape",
+    new Blob([shape], {
+      type: "application/json",
+    }),
+  );
   return {
     body: form,
     mime: "multipart/form-data",

@@ -42,13 +42,13 @@ export interface ParserObject<I = unknown, O = unknown> {
 /** Extracts the input type of a given Parser. */
 export type ParserInput<T> = (
   T extends { _input: infer I } ? I // zod
-  : T extends Parser<infer I> ? I
-  : never
+    : T extends Parser<infer I> ? I
+    : never
 );
 
 /** Extracts the output type of a given Parser. */
 export type ParserOutput<T> = (
   T extends { _output: infer O } ? O // zod
-  : T extends Parser<unknown, infer O> ? O
-  : never
+    : T extends Parser<unknown, infer O> ? O
+    : never
 );

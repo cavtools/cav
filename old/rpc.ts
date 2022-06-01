@@ -2,37 +2,28 @@
 
 // TODO: html, css, js template tag utilities
 
-// TODO: What happens when you try to upgrade for an assets request?  
-// TODO: accept multiple strings for the path schema option  
+// TODO: What happens when you try to upgrade for an assets request?
+// TODO: accept multiple strings for the path schema option
 // TODO: files and blobs that flush to disk when a certain memory threshold is
 // reached. Using them works the same as regular files and blobs. They get
-// deleted at the end of the request  
-// TODO: Incorporate the standard library's multipart reader    
-// TODO: CORS  
-// TODO: RpcLimits  
+// deleted at the end of the request
+// TODO: Incorporate the standard library's multipart reader
+// TODO: CORS
+// TODO: RpcLimits
 
 import { http, path as stdPath } from "./deps.ts";
 import {
-  requestContext,
-  requestBody,
-  endpointResponse,
   bakeCookie,
+  endpointResponse,
+  requestBody,
+  requestContext,
   upgradeWebSocket,
 } from "./http.ts";
 import { serveAsset } from "./assets.ts";
 import { HttpError } from "./serial.ts";
-import type {
-  Socket,
-  EndpointRequest,
-  EndpointResponse,
-} from "./client.ts";
+import type { EndpointRequest, EndpointResponse, Socket } from "./client.ts";
 import type { Cookie } from "./http.ts";
-import type {
-  Parser,
-  AnyParser,
-  ParserOutput,
-  ParserInput,
-} from "./parser.ts";
+import type { AnyParser, Parser, ParserInput, ParserOutput } from "./parser.ts";
 import type { Serializers } from "./serial.ts";
 import type { ServeAssetOptions } from "./assets.ts";
 
@@ -49,12 +40,14 @@ export interface Rpc<S extends AnyRpcSchema = AnyRpcSchema> {
       S["upgrade"] extends true ? true : false
     >,
     conn: http.ConnInfo,
-  ): Promise<EndpointResponse<
-    // deno-lint-ignore no-explicit-any
-    S["resolve"] extends (...a: any[]) => Promise<infer R> | infer R ? R
-    : "resolve" extends keyof S ? never
-    : undefined
-  >>;
+  ): Promise<
+    EndpointResponse<
+      // deno-lint-ignore no-explicit-any
+      S["resolve"] extends (...a: any[]) => Promise<infer R> | infer R ? R
+        : "resolve" extends keyof S ? never
+        : undefined
+    >
+  >;
   /** The RpcSchema options used to construct this Rpc. */
   readonly schema: S;
 }
@@ -65,8 +58,8 @@ export interface AnyRpc {
     // deno-lint-ignore no-explicit-any
     req: EndpointRequest<any, any, any>,
     conn: http.ConnInfo,
-  // deno-lint-ignore no-explicit-any
-  ): Promise<EndpointResponse<any>>,
+    // deno-lint-ignore no-explicit-any
+  ): Promise<EndpointResponse<any>>;
   readonly schema: AnyRpcSchema;
 }
 
@@ -78,7 +71,7 @@ export interface RpcSchema<
   Query extends AnyParser | null = Parser,
   Message extends AnyParser | null = Parser,
   Upgrade extends boolean | null = null,
->{
+> {
   /**
    * If the path of the request doesn't match this URLPattern string, a 404
    * Response will be returned before resolution starts. If this string starts
@@ -149,14 +142,16 @@ export interface RpcSchema<
    * serialize and send back to the client. If nothing is provided, the response
    * will be a 204 no content.
    */
-  resolve?: Resolve<
-    Resp,
-    Groups,
-    Context,
-    Query,
-    Message,
-    Upgrade
-  > | null;
+  resolve?:
+    | Resolve<
+      Resp,
+      Groups,
+      Context,
+      Query,
+      Message,
+      Upgrade
+    >
+    | null;
   /**
    * When an error is thrown during processing, this function can handle the
    * error. The return value will be serialized into a Response to send back to
@@ -223,7 +218,7 @@ export interface CtxArg {
    * resolved value is a Response object already, the status and statusText will
    * be ignored but the headers will still be applied.
    */
-  res: ResponseInit & { headers: Headers; };
+  res: ResponseInit & { headers: Headers };
   /** The WHATWG URL for the current Request. */
   url: URL;
   /** The Deno-provided ConnInfo associated with the request. */
@@ -264,13 +259,15 @@ export interface Resolve<
   Message extends AnyParser | null,
   Upgrade extends boolean | null,
 > {
-  (x: ResolveArg<
-    Groups,
-    Context,
-    Query,
-    Message,
-    Upgrade
-  >): Promise<Resp> | Resp;
+  (
+    x: ResolveArg<
+      Groups,
+      Context,
+      Query,
+      Message,
+      Upgrade
+    >,
+  ): Promise<Resp> | Resp;
 }
 
 /** Arguments available to a Resolver function. */
@@ -289,7 +286,7 @@ export interface ResolveArg<
    * resolved value is a Response object already, the status and statusText will
    * be ignored but the headers will still be applied.
    */
-  res: ResponseInit & { headers: Headers; };
+  res: ResponseInit & { headers: Headers };
   /** The WHATWG URL for this request. */
   url: URL;
   /** Connection information provided by Deno. */
@@ -301,7 +298,7 @@ export interface ResolveArg<
   /** The parsed path groups object captured while routing the request. */
   groups: (
     Groups extends AnyParser ? ParserOutput<Groups>
-    : Record<string, string>
+      : Record<string, string>
   );
   /** The context created by this Rpc's Ctx function. */
   ctx: Context extends Ctx<infer C> ? C : undefined;
@@ -328,9 +325,13 @@ export interface ResolveArg<
    * `upgrade` schema option is `true`. The Response returned by this function
    * should be returned by the Rpc's resolve function.
    */
-  upgrade: Upgrade extends true ? <Send = unknown>() => Socket<Send, (
-    Message extends AnyParser ? ParserOutput<Message> : unknown
-  )> : undefined;
+  upgrade: Upgrade extends true ? <Send = unknown>() => Socket<
+    Send,
+    (
+      Message extends AnyParser ? ParserOutput<Message> : unknown
+    )
+  >
+    : undefined;
 }
 
 /**
@@ -339,7 +340,7 @@ export interface ResolveArg<
  * serialization process and utilties available in the resolve function. If an
  * error is re-thrown, that error will be serialized as the response.
  */
- export interface ResolveError {
+export interface ResolveError {
   (x: ResolveErrorArg): unknown;
 }
 
@@ -353,7 +354,7 @@ export interface ResolveErrorArg {
    * resolved value is a Response object already, the status and statusText will
    * be ignored but the headers will still be applied.
    */
-  res: ResponseInit & { headers: Headers; };
+  res: ResponseInit & { headers: Headers };
   /** The WHATWG URL for the current Request. */
   url: URL;
   /** The Deno-provided ConnInfo associated with the request. */
@@ -385,14 +386,16 @@ export function rpc<
   Message extends AnyParser | null = null,
   Upgrade extends boolean | null = null,
 >(
-  schema: S & RpcSchema<
-    Resp,
-    Groups,
-    Context,
-    Query,
-    Message,
-    Upgrade
-  >,
+  schema:
+    & S
+    & RpcSchema<
+      Resp,
+      Groups,
+      Context,
+      Query,
+      Message,
+      Upgrade
+    >,
 ): Rpc<S> {
   const checkMethod = methodChecker({
     message: schema.message,
@@ -445,7 +448,12 @@ export function rpc<
       let ctx: unknown = undefined;
       if (schema.ctx) {
         ctx = await schema.ctx({
-          req, res, url, conn, cookie, path,
+          req,
+          res,
+          url,
+          conn,
+          cookie,
+          path,
           query: reqCtx.query,
           groups: unparsedGroups,
           cleanup: (task: () => Promise<void> | void) => {
@@ -462,8 +470,12 @@ export function rpc<
       let socket: Socket | null = null;
       let socketResponse: Response | null = null;
       output = !schema.resolve ? undefined : await schema.resolve({
-        req, res, url,
-        conn, cookie, path,
+        req,
+        res,
+        url,
+        conn,
+        cookie,
+        path,
         // deno-lint-ignore no-explicit-any
         groups: groups as any,
         // deno-lint-ignore no-explicit-any
@@ -481,8 +493,7 @@ export function rpc<
           return Response.redirect(u.href, status || 302);
         },
         upgrade: (
-          !schema.upgrade ? undefined
-          : () => {
+          !schema.upgrade ? undefined : () => {
             if (socket) {
               throw new Error(
                 "upgrade() should only be called once per request",
@@ -494,7 +505,7 @@ export function rpc<
             socketResponse = u.response;
             return socket;
           }
-        // deno-lint-ignore no-explicit-any
+          // deno-lint-ignore no-explicit-any
         ) as any,
       });
 
@@ -515,8 +526,11 @@ export function rpc<
       if (schema.resolveError) {
         try {
           output = await schema.resolveError({
-            req, res, url,
-            conn, error,
+            req,
+            res,
+            url,
+            conn,
+            error,
             path: reqCtx.path,
             query: reqCtx.query,
             groups: reqCtx.groups,
@@ -586,9 +600,11 @@ function methodChecker(opt: {
   upgrade?: boolean | null;
 }): (req: Request) => Promise<Response | null> {
   const parseMessage = (
-    typeof opt.message === "function" ? opt.message
-    : opt.message ? opt.message.parse
-    : null
+    typeof opt.message === "function"
+      ? opt.message
+      : opt.message
+      ? opt.message.parse
+      : null
   );
   let allowed: Set<string> | null = null;
   return async (req: Request) => {
@@ -607,7 +623,7 @@ function methodChecker(opt: {
             postRequired = true;
           }
         }
-    
+
         if (postRequired) {
           allowed.add("POST");
         } else {
@@ -625,12 +641,13 @@ function methodChecker(opt: {
     }
 
     return (
-      req.method === "OPTIONS" ? new Response(null, {
-        headers: {
-          allow: Array.from(allowed.values()).join(", "),
-        },
-      })
-      : null
+      req.method === "OPTIONS"
+        ? new Response(null, {
+          headers: {
+            allow: Array.from(allowed.values()).join(", "),
+          },
+        })
+        : null
     );
   };
 }
@@ -650,7 +667,7 @@ function methodChecker(opt: {
  * parser, if any. The path and parsed groups will be returned on success, a 404
  * HttpError will be thrown on failure.
  */
-function pathMatcher(opt: { 
+function pathMatcher(opt: {
   path?: string | null;
   groups?: AnyParser | null;
 }): (req: Request) => Promise<{
@@ -664,9 +681,11 @@ function pathMatcher(opt: {
     "http://_._",
   );
   const parseGroups = (
-    typeof opt.groups === "function" ? opt.groups
-    : opt.groups ? opt.groups.parse
-    : null
+    typeof opt.groups === "function"
+      ? opt.groups
+      : opt.groups
+      ? opt.groups.parse
+      : null
   );
 
   return async (req: Request) => {
@@ -714,14 +733,18 @@ function inputParser(opt: {
   message: unknown;
 }> {
   const parseQuery = (
-    typeof opt.query === "function" ? opt.query
-    : opt.query ? opt.query.parse
-    : null
+    typeof opt.query === "function"
+      ? opt.query
+      : opt.query
+      ? opt.query.parse
+      : null
   );
   const parseMessage = (
-    typeof opt.message === "function" ? opt.message
-    : opt.message ? opt.message.parse
-    : null
+    typeof opt.message === "function"
+      ? opt.message
+      : opt.message
+      ? opt.message.parse
+      : null
   );
 
   return async (req) => {
@@ -782,9 +805,11 @@ function socketUpgrader(opt: {
   socket: Socket<unknown, unknown>;
 } {
   const parseMessage = (
-    typeof opt.message === "function" ? opt.message
-    : opt.message ? opt.message.parse
-    : null
+    typeof opt.message === "function"
+      ? opt.message
+      : opt.message
+      ? opt.message.parse
+      : null
   );
 
   return (req) => {
@@ -797,10 +822,12 @@ function socketUpgrader(opt: {
         try {
           return await parseMessage(m);
         } catch (err) {
-          socket.send(new HttpError("400 bad request", {
-            status: 400,
-            expose: err,
-          }));
+          socket.send(
+            new HttpError("400 bad request", {
+              status: 400,
+              expose: err,
+            }),
+          );
         }
       },
     });

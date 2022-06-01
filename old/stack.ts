@@ -1,13 +1,13 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-// TODO: Add support for arrays of handlers  
+// TODO: Add support for arrays of handlers
 // TODO: Don't throw errors when using advanced URLPattern syntax (just use the
-// unknown type on the client when they use it instead)  
+// unknown type on the client when they use it instead)
 
 import { http } from "./deps.ts";
 import { requestContext } from "./http.ts";
 
-import type { RouterRequest, RouterShape, Handler } from "./client.ts";
+import type { Handler, RouterRequest, RouterShape } from "./client.ts";
 
 /** A valid routes object for initializing a Stack. */
 export type StackRoutes = RouterShape;
@@ -35,10 +35,10 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
   // Stack routes can only use some of the features of URLPattern. If attempts
   // are made to use features that aren't supported, throw an error
   for (const [k, _] of Object.entries(routes)) {
-    const split = k.split("/").filter(v => !!v);
+    const split = k.split("/").filter((v) => !!v);
 
     // Trailing wildcard needs to be let through
-    if (split[split.length-1] === "*") {
+    if (split[split.length - 1] === "*") {
       split.pop();
     }
 
@@ -76,7 +76,7 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     if (a === b) {
       return 0;
     }
-    
+
     // #1
     if (a === "*" || a === "/*") {
       return 1;
@@ -92,8 +92,8 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     if (b.endsWith("/*")) {
       b = b.slice(0, b.length - 2);
     }
-    const la = a.split("/").filter(v => !!v).length;
-    const lb = b.split("/").filter(v => !!v).length;
+    const la = a.split("/").filter((v) => !!v).length;
+    const lb = b.split("/").filter((v) => !!v).length;
     if (la !== lb) {
       return lb - la;
     }
@@ -104,7 +104,7 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
 
   const patterns = new Map<URLPattern, Handler | Handler[]>();
   for (const op of sortedPaths) {
-    let p = "/" + op.split("/").filter(v => !!v).join("/");
+    let p = "/" + op.split("/").filter((v) => !!v).join("/");
 
     // Sometimes the path might already end in a wildcard. If it does, remove it
     // before adding the path capture wildcard

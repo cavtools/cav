@@ -6,18 +6,17 @@ import {
   assertStrictEquals,
   assertThrows,
 } from "./deps_test.ts";
-import {
-  HttpError,
-  serialize,
-  deserialize,
-  serializer,
-} from "../serial.ts";
-import type { Serializers, Serializer } from "../serial.ts";
+import { deserialize, HttpError, serialize, serializer } from "../serial.ts";
+import type { Serializer, Serializers } from "../serial.ts";
 
-Deno.test("de/serialize(): bad inputs", async t => {
+Deno.test("de/serialize(): bad inputs", async (t) => {
   await t.step("serialize(): no matching serializer", () => {
     assertThrows(() => {
-      serialize(new (class { constructor(){} }));
+      serialize(
+        new (class {
+          constructor() {}
+        })(),
+      );
     });
   });
 
@@ -40,12 +39,20 @@ Deno.test("de/serialize(): bad inputs", async t => {
   });
 });
 
-Deno.test("de/serialize() reserved serializer names", async t => {
+Deno.test("de/serialize() reserved serializer names", async (t) => {
   const reserved = [
-    "httpError", "error", "date",
-    "undefined", "symbol", "map",
-    "set", "bigint", "regexp",
-    "number", "conflict", "ref", // Note that ref isn't a serializer
+    "httpError",
+    "error",
+    "date",
+    "undefined",
+    "symbol",
+    "map",
+    "set",
+    "bigint",
+    "regexp",
+    "number",
+    "conflict",
+    "ref", // Note that ref isn't a serializer
   ];
 
   for (const name of reserved) {
@@ -63,29 +70,32 @@ Deno.test("de/serialize() reserved serializer names", async t => {
 // Many of the following tests are modeled after superjson's tests as of March
 // 28, 2022: https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
 
-Deno.test("de/serialize(): basic IO", async t => {
+Deno.test("de/serialize(): basic IO", async (t) => {
   const data: Record<string, {
     input: unknown;
     output: unknown;
     custom?: (x: {
       // deno-lint-ignore no-explicit-any
-      input: any; output: any; serialized: any; deserialized: any;
+      input: any;
+      output: any;
+      serialized: any;
+      deserialized: any;
     }) => void;
     serializers?: Serializers | null;
   }> = {
     "class with toJSON method": {
       input: {
         a: new (class {
-          constructor(){}
+          constructor() {}
           toJSON(key: string) {
             return { key };
           }
-        }),
+        })(),
       },
       output: {
         a: { key: "a" },
       },
-      custom: x => {
+      custom: (x) => {
         assertEquals(x.serialized, x.output);
         assertEquals(x.deserialized, x.output);
       },
@@ -123,7 +133,7 @@ Deno.test("de/serialize(): basic IO", async t => {
           },
         },
       },
-      custom: x => {
+      custom: (x) => {
         assertEquals(x.serialized, x.output);
         assert(x.deserialized.a instanceof HttpError);
         assert(x.deserialized.b instanceof HttpError);
@@ -139,11 +149,11 @@ Deno.test("de/serialize(): basic IO", async t => {
     },
     "objects": {
       input: {
-        a: { 1: 5, 2: { 3: 'c' } },
+        a: { 1: 5, 2: { 3: "c" } },
         b: null,
       },
       output: {
-        a: { 1: 5, 2: { 3: 'c' } },
+        a: { 1: 5, 2: { 3: "c" } },
         b: null,
       },
       // This block is for covering the case where one of the serializers is
@@ -357,21 +367,25 @@ Deno.test("de/serialize(): basic IO", async t => {
             role: "child",
           }],
         });
-        assertStrictEquals(x.deserialized, x.deserialized.children[0].parents[0]);
+        assertStrictEquals(
+          x.deserialized,
+          x.deserialized.children[0].parents[0],
+        );
       },
     },
-    "Maps with two keys that serialize to the same string but have a different reference": {
-      input: new Map([
-        [/a/g, "cav"],
-        [/a/g, "bar"],
-      ]),
-      output: {
-        $map: [
-          [{ $regexp: "/a/g" }, "cav"],
-          [{ $regexp: "/a/g" }, "bar"],
-        ],
+    "Maps with two keys that serialize to the same string but have a different reference":
+      {
+        input: new Map([
+          [/a/g, "cav"],
+          [/a/g, "bar"],
+        ]),
+        output: {
+          $map: [
+            [{ $regexp: "/a/g" }, "cav"],
+            [{ $regexp: "/a/g" }, "bar"],
+          ],
+        },
       },
-    },
     "Maps with a key that's referentially equal to another field": {
       input: () => {
         const robbyBubble = { id: 5 };
@@ -506,7 +520,7 @@ Deno.test("de/serialize(): basic IO", async t => {
           "yee2",
           "foo1",
           "z",
-        ])
+        ]);
 
         const io = x.input.q[1];
         const uo = x.deserialized.q[1];
@@ -545,4 +559,3 @@ Deno.test("de/serialize(): basic IO", async t => {
     });
   }
 });
-

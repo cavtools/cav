@@ -5,18 +5,14 @@
 // TODO: The ability to specify custom headers
 
 import {
+  deserialize,
+  deserializeBody,
   HttpError,
   serialize,
   serializeBody,
-  deserialize,
-  deserializeBody,
 } from "./serial.ts";
 import type { Serializers } from "./serial.ts";
-import type {
-  Parser,
-  ParserFunction,
-  ParserOutput,
-} from "./parser.ts";
+import type { Parser, ParserFunction, ParserOutput } from "./parser.ts";
 
 /**
  * Cav's WebSocket wrapper interface.
@@ -85,13 +81,15 @@ export type AnySocket = Socket<any, any>;
 export type SocketListener<
   Type extends "open" | "close" | "message" | "error",
   Message = unknown,
-> = (ev: (
-  Type extends "open" ? Event
-  : Type extends "close" ? CloseEvent
-  : Type extends "message" ? MessageEvent & { message: Message }
-  : Type extends "error" ? Event | ErrorEvent
-  : never
-)) => void | Promise<void>;
+> = (
+  ev: (
+    Type extends "open" ? Event
+      : Type extends "close" ? CloseEvent
+      : Type extends "message" ? MessageEvent & { message: Message }
+      : Type extends "error" ? Event | ErrorEvent
+      : never
+  ),
+) => void | Promise<void>;
 
 /**
  * Initializer options to use when upgrading a request into a web socket using
@@ -129,7 +127,7 @@ export function wrapWebSocket<
 
   return {
     raw,
-    send: data => {
+    send: (data) => {
       raw.send(JSON.stringify(serialize(data, init?.serializers)));
     },
     close: (code, reason) => {
@@ -154,18 +152,24 @@ export function wrapWebSocket<
         ) {
           throw new Error(`Invalid data received: ${data}`);
         }
-  
+
         // deno-lint-ignore no-explicit-any
-        let message: any = deserialize(JSON.parse(
-          typeof data === "string" ? data
-          : ArrayBuffer.isView(data) ? decoder.decode(data)
-          : await data.text() // Blob
-        ), init?.serializers);
-  
+        let message: any = deserialize(
+          JSON.parse(
+            typeof data === "string"
+              ? data
+              : ArrayBuffer.isView(data)
+              ? decoder.decode(data)
+              : await data.text(), // Blob
+          ),
+          init?.serializers,
+        );
+
         if (init?.message) {
           const parse: ParserFunction = (
-            typeof init.message === "function" ? init.message
-            : init.message.parse
+            typeof init.message === "function"
+              ? init.message
+              : init.message.parse
           );
           message = await parse(message);
         }
@@ -198,16 +202,20 @@ export function wrapWebSocket<
       }
 
       if (!type) {
-        throw new Error("If a callback is specified, the event type must also be specified");
+        throw new Error(
+          "If a callback is specified, the event type must also be specified",
+        );
       }
 
       // Otherwise, only turn off the listener if it was registered with this
       // interface. Don't forget to remove it from the listeners, and that
       // message listeners are stored in a map instead of a set
       const listener = (
-        type === "message" ? listeners[type].get(cb) as (ev: Event) => unknown
-        : listeners[type].has(cb) ? cb
-        : undefined
+        type === "message"
+          ? listeners[type].get(cb) as (ev: Event) => unknown
+          : listeners[type].has(cb)
+          ? cb
+          : undefined
       );
       if (listener) {
         listeners[type].delete(cb);
@@ -242,10 +250,10 @@ export interface EndpointRequest<
     endpointRequest: {
       query: Query;
       message: Message;
-      upgrade: Upgrade; 
-    }
+      upgrade: Upgrade;
+    };
     routerRequest?: never;
-  }
+  };
 }
 
 /**
@@ -304,33 +312,35 @@ export type Client<
 > = (
   // Handler[]
   T extends Handler[] ? Client<T[number]>
-  // Stack
-  : T extends (
-    req: RouterRequest<infer S>,
+    : // Stack
+    T extends (
+      req: RouterRequest<infer S>,
+      // deno-lint-ignore no-explicit-any
+      ...a: any[]
+    ) => Response | Promise<Response> ? Client<S>
+    : // Rpc
+    T extends (
+      req: EndpointRequest<infer Q, infer M, infer U>,
+      // deno-lint-ignore no-explicit-any
+      ...a: any[]
+    ) => EndpointResponse<infer R> | Promise<EndpointResponse<infer R>> ? (
+      x: ClientArg<Q, M, U>,
+    ) => Promise<R extends Socket<infer S, infer M2> ? Socket<M2, S> : R>
+    : // Handler
+    /// deno-lint-ignore no-explicit-any
+    // : T extends (req: Request, ...a: any[]) => Response | Promise<Response> ? (
+    //   (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
+    // )
+    // When a router's type is specified, the router's shape is passed into the
+    // client and gets handled here
+    T extends RouterShape ? UnionToIntersection<
+      {
+        [K in keyof T]: ExpandPath<K, Client<T[K]>>;
+      }[keyof T]
+    >
+    : // Any other type results in an unknown response
     // deno-lint-ignore no-explicit-any
-    ...a: any[]
-  ) => Response | Promise<Response> ? Client<S>
-  // Rpc
-  : T extends (
-    req: EndpointRequest<infer Q, infer M, infer U>,
-    // deno-lint-ignore no-explicit-any
-    ...a: any[]
-  ) => EndpointResponse<infer R> | Promise<EndpointResponse<infer R>> ? (
-    x: ClientArg<Q, M, U>,
-  ) => Promise<R extends Socket<infer S, infer M2> ? Socket<M2, S> : R>
-  // Handler
-  /// deno-lint-ignore no-explicit-any
-  // : T extends (req: Request, ...a: any[]) => Response | Promise<Response> ? (
-  //   (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
-  // )
-  // When a router's type is specified, the router's shape is passed into the
-  // client and gets handled here
-  : T extends RouterShape ? UnionToIntersection<{
-    [K in keyof T]: ExpandPath<K, Client<T[K]>>;
-  }[keyof T]>
-  // Any other type results in an unknown response
-  // deno-lint-ignore no-explicit-any
-  : (x: ClientArg<any, any, any>) => Promise<unknown>
+    (x: ClientArg<any, any, any>) => Promise<unknown>
 );
 
 /**
@@ -451,18 +461,18 @@ export function client<T extends Handler | RouterShape | null = null>(
         }
       }
     }
-  
+
     if (x.upgrade) {
       if (url.protocol === "http:") {
         url.protocol = "ws:";
       } else {
         url.protocol = "wss:";
       }
-  
+
       const raw = new WebSocket(url.href, "json");
       return wrapWebSocket(raw, { serializers: x.serializers });
     }
-  
+
     return (async () => {
       let body: BodyInit | null = null;
       let mime = "";
@@ -471,19 +481,19 @@ export function client<T extends Handler | RouterShape | null = null>(
         body = pb.body;
         mime = pb.mime;
       }
-    
+
       const method = body === null ? "GET" : "POST";
       const res = await fetch(url.href, {
         method,
         headers: mime ? { "content-type": mime } : {},
         body,
       });
-    
+
       let resBody: unknown = undefined;
       if (res.body) {
         resBody = await deserializeBody(res, x.serializers);
       }
-    
+
       if (!res.ok) {
         const detail = { body: resBody };
         let message: string;
@@ -504,27 +514,28 @@ export function client<T extends Handler | RouterShape | null = null>(
         }
         throw new HttpError(message, { status, expose, detail });
       }
-    
+
       return resBody;
     })();
   };
 
   const proxy = (path: string, serializers?: Serializers): unknown => {
-    return new Proxy((x: CustomFetchArg) => customFetch(path, {
-      ...x,
-      serializers: { ...serializers, ...x.serializers },
-    }), {
+    return new Proxy((x: CustomFetchArg) =>
+      customFetch(path, {
+        ...x,
+        serializers: { ...serializers, ...x.serializers },
+      }), {
       get(_, property) {
         if (typeof property !== "string") {
           throw new TypeError("Symbol segments can't be used on the client");
         }
-  
-        const append = property.split("/").filter(p => !!p).join("/");
+
+        const append = property.split("/").filter((p) => !!p).join("/");
         return proxy(
           path.endsWith("/") ? path + append : path + "/" + append,
           serializers,
         );
-      }
+      },
     });
   };
 
@@ -539,28 +550,33 @@ export function client<T extends Handler | RouterShape | null = null>(
  */
 type ExpandPath<K, T> = (
   K extends `*` | `:${string}` ? { [x: string]: T }
-  : K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
-  : K extends `/${infer P}` | `${infer P}/` | `${infer P}/*` ? ExpandPath<P, T>
-  : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
-  : K extends string ? { [x in K]: T }
-  : never
+    : K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
+    : K extends `/${infer P}` | `${infer P}/` | `${infer P}/*`
+      ? ExpandPath<P, T>
+    : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
+    : K extends string ? { [x in K]: T }
+    : never
 );
 
 type Clean<
   T,
   Required = {
-    [K in keyof T as (
-      T[K] extends never ? never
-      : undefined extends T[K] ? never
-      : K
-    )]: T[K];
+    [
+      K in keyof T as (
+        T[K] extends never ? never
+          : undefined extends T[K] ? never
+          : K
+      )
+    ]: T[K];
   },
   Optional = {
-    [K in keyof T as (
-      K extends keyof Required ? never
-      : T[K] extends never ? never
-      : K
-    )]?: T[K];
+    [
+      K in keyof T as (
+        K extends keyof Required ? never
+          : T[K] extends never ? never
+          : K
+      )
+    ]?: T[K];
   },
 > = Required & Optional;
 
@@ -569,4 +585,4 @@ type Clean<
  */
 type UnionToIntersection<U> = (
   U extends unknown ? (k: U) => void : never
-) extends ((k: infer I) => void) ? { [K in keyof I]: I[K] } : never
+) extends ((k: infer I) => void) ? { [K in keyof I]: I[K] } : never;

@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { base64 as b64, http } from "./deps.ts";
-import { encodeJwt, decodeJwt } from "./jwt.ts";
+import { decodeJwt, encodeJwt } from "./jwt.ts";
 
 /**
  * Signed cookies are HS256 JWTs with the header omitted to keep the cookies
@@ -85,8 +85,8 @@ export async function cookieJar(
   const signed = new Map<string, string>();
 
   const updates: (
-    | { op: "set", name: string, value: string, opt?: CookieSetOptions }
-    | { op: "delete", name: string, opt?: CookieDeleteOptions }
+    | { op: "set"; name: string; value: string; opt?: CookieSetOptions }
+    | { op: "delete"; name: string; opt?: CookieDeleteOptions }
   )[] = [];
 
   for (const [k, v] of unsigned.entries()) {
@@ -187,8 +187,9 @@ export async function cookieJar(
 
         if (u.opt?.signed) {
           const val = (
-            u.opt?.expires ? [u.name, u.value, u.opt.expires.getTime()]
-            : [u.name, u.value]
+            u.opt?.expires
+              ? [u.name, u.value, u.opt.expires.getTime()]
+              : [u.name, u.value]
           );
 
           // Chop off the jwt header to save space

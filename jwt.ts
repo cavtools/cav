@@ -2,12 +2,12 @@
 
 import { base64 } from "./deps.ts";
 
-// TODO: Allow changing the header (but not alg yet)  
+// TODO: Allow changing the header (but not alg yet)
 // TODO: This is a very minimal API that doesn't do expiration checks or
-// anything like that. Should it?  
+// anything like that. Should it?
 // TODO: Make this browser compatible by removing the base64 dependency and
 // writing your own version with the help of
-// https://developer.mozilla.org.cach3.com/Web/API/WindowBase64/Base64_encoding_and_decoding  
+// https://developer.mozilla.org.cach3.com/Web/API/WindowBase64/Base64_encoding_and_decoding
 // TODO: Support keygrip?
 
 const header = base64.encode(JSON.stringify({ alg: "HS256" }));
@@ -124,7 +124,7 @@ export async function decodeJwt(
   }
 
   keys = Array.isArray(keys) ? keys : [keys];
-  if (! await verify(`${parts[0]}.${parts[1]}`, parts[2], keys)) {
+  if (!await verify(`${parts[0]}.${parts[1]}`, parts[2], keys)) {
     throw new Error("Invalid JWT - bad signature");
   }
 

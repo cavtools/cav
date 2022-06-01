@@ -1,6 +1,6 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { encodeJwt, decodeJwt } from "../jwt.ts";
+import { decodeJwt, encodeJwt } from "../jwt.ts";
 import { assertEquals, assertRejects } from "./deps_test.ts";
 
 // TODO: Read up on how to test Cav's use of cryptography for security holes
@@ -14,7 +14,8 @@ import { assertEquals, assertRejects } from "./deps_test.ts";
 Deno.test("Encoding / decoding a string", async () => {
   const payload = "some-payload";
   const key = "super-secret-test-key";
-  const correct = "eyJhbGciOiJIUzI1NiJ9.InNvbWUtcGF5bG9hZCI.2t9E7iM0NUwK4rbtPV9WylaOsM5H4aG-4vhV8vdR1Pc";
+  const correct =
+    "eyJhbGciOiJIUzI1NiJ9.InNvbWUtcGF5bG9hZCI.2t9E7iM0NUwK4rbtPV9WylaOsM5H4aG-4vhV8vdR1Pc";
 
   const encoded = await encodeJwt(payload, key);
   const decoded = await decodeJwt(encoded, key);
@@ -25,7 +26,8 @@ Deno.test("Encoding / decoding a string", async () => {
 Deno.test("Encoding / decoding an object", async () => {
   const payload = { exp: "2000-01-01T00:00:00.000Z" };
   const key = "different-secret-key";
-  const correct = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOiIyMDAwLTAxLTAxVDAwOjAwOjAwLjAwMFoifQ.5MB6o_6lgMHl8w_08KvuhDtu0KR6Kae7dcvg3Gpqjms";
+  const correct =
+    "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOiIyMDAwLTAxLTAxVDAwOjAwOjAwLjAwMFoifQ.5MB6o_6lgMHl8w_08KvuhDtu0KR6Kae7dcvg3Gpqjms";
 
   const encoded = await encodeJwt(payload, [key]);
   const decoded = await decodeJwt(encoded, [key]);
@@ -34,7 +36,7 @@ Deno.test("Encoding / decoding an object", async () => {
 });
 
 Deno.test("Encoding / decoding with the fallback key", async () => {
-  const payload = { hello: "world" }
+  const payload = { hello: "world" };
   const encoded = await encodeJwt(payload);
   const decoded = await decodeJwt(encoded);
   assertEquals(await encodeJwt(payload), encoded);
@@ -74,8 +76,9 @@ Deno.test("Decoding with a tampered header throws", async () => {
 });
 
 Deno.test("Decoding with an unknown algorithm / type throws", async () => {
-  const key = "hello"
-  const hs384 = "eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJoZWxsbyI6IndvcmxkIn0.0CZlyh-v9s4LyF3ozAif1piY6pBKUwzl6sjtE79BbsGdQq52cY8MnsYXL3YEsIX4";
+  const key = "hello";
+  const hs384 =
+    "eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJoZWxsbyI6IndvcmxkIn0.0CZlyh-v9s4LyF3ozAif1piY6pBKUwzl6sjtE79BbsGdQq52cY8MnsYXL3YEsIX4";
   await assertRejects(
     () => decodeJwt(hs384, key),
     Error,
@@ -90,7 +93,7 @@ Deno.test("Decoding with a tampered payload throws", async () => {
     .map((v, i) => i === 1 ? v.slice(1) : v)
     .join(".");
   await assertRejects(
-    () => decodeJwt(encoded, "hello"), 
+    () => decodeJwt(encoded, "hello"),
     Error,
     "bad signature",
   );
@@ -107,7 +110,8 @@ Deno.test("Decoding with a tampered signature throws", async () => {
 
 Deno.test("Decoding a non-json payload throws", async () => {
   // The invalid payload is the following string without quotes: "hello world"
-  const test = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aGVsbG8gd29ybGQ.fHbXBJ2034_dPy7WdMYka0PG0bpoBsDGcfsefxYTbFw";
+  const test =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aGVsbG8gd29ybGQ.fHbXBJ2034_dPy7WdMYka0PG0bpoBsDGcfsefxYTbFw";
   const key = "hello";
   await assertRejects(
     () => decodeJwt(test, key),

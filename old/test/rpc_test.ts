@@ -20,8 +20,8 @@ const conn = {
 };
 
 interface ResponseSchema {
-  status?: number,
-  body?: string | null,
+  status?: number;
+  body?: string | null;
   headers?: Record<string, string>;
 }
 
@@ -33,7 +33,7 @@ async function checkResponse(check: Response, schema: ResponseSchema) {
   if (typeof schema.body !== "undefined") {
     assertEquals(check.body && await check.text(), schema.body);
   }
-  
+
   if (!schema.headers) {
     return;
   }
@@ -72,12 +72,12 @@ Deno.test("Non-canonical redirects", async () => {
   }
 });
 
-Deno.test("Path option", async t => {
+Deno.test("Path option", async (t) => {
   const cases = {
     default: {
       req: new Request("http://localhost/default"),
       handler: rpc({
-        resolve: x => x.path,
+        resolve: (x) => x.path,
       }),
       status: 200,
       body: "/",
@@ -86,7 +86,7 @@ Deno.test("Path option", async t => {
       req: new Request("http://localhost/basic/foo/bar"),
       handler: rpc({
         path: "/foo/bar",
-        resolve: x => x.path,
+        resolve: (x) => x.path,
       }),
       status: 200,
       body: "/foo/bar",
@@ -95,7 +95,7 @@ Deno.test("Path option", async t => {
       req: new Request("http://localhost/basicFull/foo/bar"),
       handler: rpc({
         path: "^/basicFull/foo/bar",
-        resolve: x => x.path,
+        resolve: (x) => x.path,
       }),
       status: 200,
       body: "/basicFull/foo/bar",
@@ -104,7 +104,7 @@ Deno.test("Path option", async t => {
       req: new Request("http://localhost/anyPath/hello/world"),
       handler: rpc({
         path: "*",
-        resolve: x => x.path,
+        resolve: (x) => x.path,
       }),
       status: 200,
       body: "/hello/world",
@@ -113,7 +113,7 @@ Deno.test("Path option", async t => {
       req: new Request("http://localhost/anyPathFull/hello/world"),
       handler: rpc({
         path: "^*",
-        resolve: x => x.path,
+        resolve: (x) => x.path,
       }),
       status: 200,
       body: "/anyPathFull/hello/world",
@@ -122,7 +122,7 @@ Deno.test("Path option", async t => {
       req: new Request("http://localhost/pathGroups/1234/test"),
       handler: rpc({
         path: "/:numbers/test",
-        resolve: x => x.groups["numbers"],
+        resolve: (x) => x.groups["numbers"],
       }),
       status: 200,
       body: "1234",
@@ -132,7 +132,7 @@ Deno.test("Path option", async t => {
       handler: stack({
         ":numbers": rpc({
           path: "/:numbers",
-          resolve: x => x.groups["numbers"],
+          resolve: (x) => x.groups["numbers"],
         }),
       }),
       status: 200,
@@ -144,7 +144,7 @@ Deno.test("Path option", async t => {
   for (const [k, v] of Object.entries(cases)) {
     routes[k] = v.handler;
   }
-  
+
   const testStack = stack(routes);
   for (const [k, v] of Object.entries(cases)) {
     await t.step(k, async () => {
@@ -154,7 +154,7 @@ Deno.test("Path option", async t => {
   }
 });
 
-Deno.test("Bare rpc({})", async t => {
+Deno.test("Bare rpc({})", async (t) => {
   const testRpc = rpc({});
 
   await t.step("Returns 204 with GET /", async () => {
@@ -165,7 +165,7 @@ Deno.test("Bare rpc({})", async t => {
       headers: {},
     });
   });
-  
+
   await t.step("Returns 404 when request path isn't /", async () => {
     const res = await testRpc(new Request("http://localhost/404"), conn);
     await checkResponse(res, {
@@ -183,7 +183,7 @@ Deno.test("Bare rpc({})", async t => {
       conn,
     );
     await checkResponse(res, {
-      status: 405, 
+      status: 405,
       body: "405 method not allowed",
       headers: {
         "content-type": "text/plain",

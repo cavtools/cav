@@ -8,7 +8,7 @@ import type {
   RouterRequest,
 } from "../client.ts";
 
-Deno.test("client fetch", async t => {
+Deno.test("client fetch", async (t) => {
   // Setup
   const oldFetch = self.fetch; // Put it back when you're done?
   const lastFetch = {
@@ -19,7 +19,7 @@ Deno.test("client fetch", async t => {
   self.fetch = (url, init) => {
     lastFetch.url = url as string;
     lastFetch.init = init;
-    return new Promise(resolve => resolve(returnResponse));
+    return new Promise((resolve) => resolve(returnResponse));
   };
 
   await t.step("A: bare endpoint", async () => {
@@ -64,10 +64,12 @@ Deno.test("client fetch", async t => {
   });
 
   await t.step("C: endpoint with query and message", async () => {
-    type Endpoint = (req: EndpointRequest<
-      { query: "c" },
-      { message: Date }
-    >) => EndpointResponse<undefined>;
+    type Endpoint = (
+      req: EndpointRequest<
+        { query: "c" },
+        { message: Date }
+      >,
+    ) => EndpointResponse<undefined>;
 
     const date = new Date();
     returnResponse = new Response(null);
@@ -87,15 +89,21 @@ Deno.test("client fetch", async t => {
   });
 
   await t.step("D: router with two endpoints, one is nested", async () => {
-    type Router = (req: RouterRequest<{
-      one: (req: EndpointRequest) => EndpointResponse<"yes">;
-      two: (req: RouterRequest<{
-        three: (req: EndpointRequest<
-          { four: "five" },
-          { six: "seven" }
-        >) =>  EndpointResponse<"no">;
-      }>) => Response;
-    }>) => Response;
+    type Router = (
+      req: RouterRequest<{
+        one: (req: EndpointRequest) => EndpointResponse<"yes">;
+        two: (
+          req: RouterRequest<{
+            three: (
+              req: EndpointRequest<
+                { four: "five" },
+                { six: "seven" }
+              >,
+            ) => EndpointResponse<"no">;
+          }>,
+        ) => Response;
+      }>,
+    ) => Response;
 
     returnResponse = new Response("yes");
     const response1 = await client<Router>("http://localhost/base").one({});
@@ -108,7 +116,7 @@ Deno.test("client fetch", async t => {
       },
     });
     assertEquals(response1, "yes");
-    
+
     returnResponse = new Response("no");
     const response2 = await client<Router>("http://localhost/base")
       .two.three({

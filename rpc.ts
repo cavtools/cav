@@ -36,7 +36,7 @@ export function rpc<
   schema?: S & RpcSchema<R>,
 ): Rpc<S> {
   const handler = async (_req: Request, _conn: http.ConnInfo) => {
-    return await new Promise<Response>(res => res(new Response("")));
+    return await new Promise<Response>((res) => res(new Response("")));
   };
 
   return Object.assign(handler, schema);
