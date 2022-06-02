@@ -695,6 +695,14 @@ async function assertEqualsBlob(a: File | Blob, b: File | Blob) {
 Deno.test("packing and unpacking", async (t) => {
   // Symmetric
 
+  await t.step("undefined", () => testPacking({
+    message: undefined,
+  }));
+
+  await t.step("null", () => testPacking({
+    message: null,
+  }));
+
   await t.step("string", () =>
     testPacking({
       message: "foo-bar",
@@ -869,6 +877,11 @@ Deno.test("packing and unpacking", async (t) => {
 
   // Misc
 
+  await t.step("specified status overrides auto status", async () => {
+    const res = packResponse(undefined, { status: 200 });
+    assertEquals(await unpack(res), null); // Would've been undefined w/o 200
+  });
+
   await t.step("specified headers override auto headers", async () => {
     const req = packRequest("http://localhost/test", {
       message: { hello: "world" },
@@ -882,7 +895,6 @@ Deno.test("packing and unpacking", async (t) => {
     });
     assertEquals(
       await unpack(req2),
-      // new Blob(["foobar"], { type: "text/plain" }),
       "foobar",
     );
   });
@@ -891,16 +903,6 @@ Deno.test("packing and unpacking", async (t) => {
     const req = packRequest("http://localhost/test");
     assertEquals(req.method, "GET");
     assertEquals(await unpack(req), undefined);
-  });
-
-  await t.step("null message means POST request with no body", async () => {
-    const req = packRequest("http://localhost/test", { message: null });
-    assertEquals(req.method, "POST");
-    assertEquals(await unpack(req), null);
-  });
-
-  await t.step("passing Response into packResponse", () => {
-    throw new Error("TODO");
   });
 
   class Custom {}

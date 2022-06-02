@@ -6,8 +6,8 @@ import {
   assertRejects,
   assertStrictEquals,
 } from "./test_deps.ts";
-import { webSocket } from "../socket.ts";
-import type { SocketMessageListener } from "../socket.ts";
+import { webSocket } from "../ws.ts";
+import type { WSMessageListener } from "../ws.ts";
 
 // Echo: ws://localhost:8080
 const echoServer = new http.Server({
@@ -162,8 +162,8 @@ Deno.test("turning off a specific listener", async () => {
     const socket = webSocket("ws://localhost:8080");
 
     let result: unknown = null;
-    const msg1: SocketMessageListener = () => { result = 1; }
-    const msg2: SocketMessageListener = () => { result = 2; }
+    const msg1: WSMessageListener = () => { result = 1; }
+    const msg2: WSMessageListener = () => { result = 2; }
     socket.on("message", msg1);
     socket.on("message", msg2);
 

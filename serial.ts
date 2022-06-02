@@ -538,7 +538,7 @@ function packBody(
   serializers?: Serializers,
 ): PackedBody {
   if (
-    body === null ||
+    // body === null || // null gets serialized as JSON
     typeof body === "undefined" ||
     body instanceof ReadableStream ||
     body instanceof ArrayBuffer ||
@@ -622,87 +622,32 @@ export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
 /**
  * Serializes a new Request, which can then be deserialized using `unpack()`.
  * Only GET and POST requests are supported; the method used is automatically
- * determined based on the presence of the `message` init option. If the message
- * is `undefined`, the method is GET. Otherwise, it's POST, even for `null`
- * messages. Any headers specified on the init options will override the headers
- * determined during serialization.
+ * determined based on the presence of the `message` init option. Any headers
+ * specified on the init options will override the headers determined during
+ * serialization. The serializable input types can be extended with the
+ * serializers option.
  *
- * If the init `message` extends BodyInit, it'll be passed through to the
- * Request constructor as the `body` RequestInit option. During `unpack()`,
- * it'll be deserialized according to the content-type set on the request
- * headers.
+ * If the message is `undefined`, the method is GET. If the message is `null`,
+ * the method is POST with no body. Any defined message (including null) results
+ * in a POST request.
  *
- * If the init `message` is a File or Blob, it'll also be sent with a
+ * If the message extends BodyInit, it'll be passed through to the Request
+ * constructor unmodified. During `unpack()`, it'll be deserialized according to
+ * the content-type set on the request headers, which can sometimes result in
+ * asymmetric deserialization.
+ *
+ * If the message is a File or Blob, it'll also be sent with a
  * "content-disposition: attachment" header. During `unpack()`, it will be
  * deserialized back into a regular Blob or File, along with the file name if
- * there is one.
+ * there is one, regardless of the content-type.
  *
- * If the init `message` is any other type, it'll first be serialized as JSON
- * using `serialize()`. The default serializers are extended to include Files
- * and Blobs; if a File or Blob exists on the serialized value, the request will
- * be sent as a specially formatted FormData instead of JSON. During `unpack()`,
+ * If the message is any other type, it'll first be serialized as JSON using
+ * `serialize()`. The default serializers are extended to include Files and
+ * Blobs; if a File or Blob exists on the serialized value, the request will be
+ * sent as a specially formatted FormData instead of JSON. During `unpack()`,
  * it'll be deserialized back into the original `message` with all the Files and
  * Blobs back in the right place. Referential equality for Files and Blobs will
  * be preserved, so that duplicate Blobs only have 1 copy uploaded.
- * 
- * Examples:
- *
- * ```ts
- * // Regular GET request, undefined message
- * const getReq = packRequest("http://localhost/test");
- * console.log(await unpack(getReq))
- * // undefined
- *
- * // POST request with no body
- * const postReq = packRequest("http://localhost/test", { message: null });
- * console.log(await unpack(postReq));
- * // null
- *
- * // String message (passthrough)
- * const strReq = packRequest("http://localhost/test", {
- *   message: "hello world",
- * });
- * const str: string = await unpack(strReq);
- * console.log(str);
- * // hello world
- *
- * // FormData message (passthrough)
- * const formData = new FormData();
- * formData.append("test", "a");
- * formData.append("test", "b");
- * const formReq = packRequest("http://localhost/test", {
- *   message: formData,
- * });
- * const form = await unpack(formReq);
- * console.log(form);
- * // { test: [ "a", "b" ] }
- *
- * // File message (passthrough + disposition header)
- * const fileReq = packRequest("http://localhost/test", {
- *   message: new File(["fileReq"], "1.txt", { type: "text/plain" });
- * });
- * const file = await unpack(req1);
- * console.log(file.constructor.name, res1.name, res1.type, await res1.text());
- * // File 1.txt text/plain fileReq
- *
- * // Object message (serialized as JSON)
- * const objReq = packRequest("http://localhost/test", {
- *   message: { hello: "world" },
- * });
- * const obj = await unpack(objReq);
- * console.log(obj);
- * // { hello: "world" }
- *
- * // Map<File, string> message (serialized as multipart)
- * const mapReq = packRequest("http://localhost/test", {
- *   message: new Map([
- *     [new File(["foo"], "bar"), "baz"],
- *   ]),
- * });
- * const map = await unpack(mapReq);
- * console.log(Array.from(map.entries()));
- * // [ [ File { size: 3, type: "application/octet-stream" }, "baz" ] ]
- * ```
  */
 export function packRequest(url: string, init?: PackRequestInit): Request {
   const packed = packBody(init?.message, init?.serializers);
@@ -718,15 +663,46 @@ export interface PackResponseInit extends ResponseInit {
   serializers?: Serializers;
 }
 
-export function packResponse(body: unknown, init?: PackResponseInit): Response {
+/**
+ * Serializes a new Response, which can then be deserialized back into the input
+ * body using `unpack()`. Any headers specified on the init options will
+ * override the headers determined during serialization. The same applies for
+ * status and statusText. The serializable input types can be extended with the
+ * serializers option.
+ *
+ * If the body is `undefined`, a 204 Response is created. If the body is `null`,
+ * a 200 response is created with a zero-length body.
+ *
+ * If the body extends BodyInit, it'll be passed through to the Response
+ * constructor unmodified. During `unpack()`, it'll be deserialized according to
+ * the content-type set on the response headers, which can sometimes result in
+ * asymmetric deserialization.
+ *
+ * If the message is a File or Blob, it'll also be sent with a
+ * "content-disposition: attachment" header. During `unpack()`, it will be
+ * deserialized back into a regular Blob or File, along with the file name if
+ * there is one, regardless of the content-type.
+ *
+ * If the message is any other type, it'll first be serialized as JSON using
+ * `serialize()`. The default serializers are extended to include Files and
+ * Blobs; if a File or Blob exists on the serialized value, the response will be
+ * sent as a specially formatted FormData instead of JSON. During `unpack()`,
+ * it'll be deserialized back into the original `message` with all the Files and
+ * Blobs back in the right place. Referential equality for Files and Blobs will
+ * be preserved, so that duplicate Blobs only have 1 copy uploaded.
+ */
+export function packResponse(
+  body?: unknown,
+  init?: PackResponseInit,
+): Response {
   const packed = packBody(body, init?.serializers);
   return new Response(packed.body, {
+    status: typeof packed.body === "undefined" ? 204 : 200,
     ...init,
     headers: mergeHeaders(packed.headers, init?.headers),
   });
 }
 
-// const mimeStream = /^application\/octet-stream;?/;
 const mimeString = /^text\/plain;?/;
 const mimeParams = /^application\/x-www-form-urlencoded;?/;
 const mimeJson = /^application\/json;?/;
@@ -734,14 +710,21 @@ const mimeForm = /^multipart\/form-data;?/;
 
 // TODO: Add an option for controlling the way forms/blobs/files are processed.
 // (For large file uploads that are disk backed)
+/**
+ * Deserializes a Request or Response generated with `packRequest()` or
+ * `packResponse()` back into the original request message or response body. Any
+ * serializers specified during packing need to be specified here as well.
+ */
 export async function unpack(
   packed: Request | Response,
   serializers?: Serializers,
 ): Promise<unknown> {
-  // GET requests always return undefined, which is the message needed to use
-  // GET instead of POST. POST requests and Responses return null if there's no
-  // body
-  if (packed instanceof Request && packed.method === "GET") {
+  // GET requests and 204 responses return undefined. Any other Request or
+  // Response without a body returns null
+  if (
+    (packed instanceof Request && packed.method === "GET") ||
+    (packed instanceof Response && packed.status === 204)
+  ) {
     return undefined;
   }
   if (!packed.body) {
