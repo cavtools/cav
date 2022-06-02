@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { decodeJwt, encodeJwt } from "../jwt.ts";
-import { assertEquals, assertRejects } from "./deps_test.ts";
+import { assertEquals, assertRejects } from "./test_deps.ts";
 
 // TODO: Read up on how to test Cav's use of cryptography for security holes
 

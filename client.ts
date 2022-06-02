@@ -1,1 +1,2 @@
-// TODO: If the handler returns undefined, return null instead
+// Copyright 2022 Connor Logan. All rights reserved. MIT License.
+// This module is browser-compatible.

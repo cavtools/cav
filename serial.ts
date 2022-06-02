@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-// This module is heavily inspired by https://github.com/blitz-js/superjson
+// Heavily inspired by https://github.com/blitz-js/superjson
 
 // REVIEW: Automatically escape strings for XSS, see
 // https://github.com/yahoo/serialize-javascript ?
@@ -66,6 +66,9 @@ export interface Serializer<I = unknown, O = unknown> {
   ): I;
 }
 
+// REVIEW: I don't think this function is really necessary. Probably fine to
+// make all the serializer types unknowns and not provide this typing function
+// at all
 /**
  * Constructs a Serializer. This simply returns the first argument, it's only
  * used for type annotations.

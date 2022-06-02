@@ -5,7 +5,7 @@ import {
   assertEquals,
   assertStrictEquals,
   assertThrows,
-} from "./deps_test.ts";
+} from "./test_deps.ts";
 import {
   deserialize,
   HttpError,
@@ -652,34 +652,32 @@ async function testPacking(
     }) => Promise<void> | void;
   },
 ) {
-  let message = opt.message;
-
-  if (typeof opt.message === "function") {
+  const run = async (which: string) => {
     // Because ReadableStreams can only be read 1 time, useful to be able to
     // recreate them when testing packResponse()
-    message = opt.message();
-  }
-  const req = packRequest("http://localhost/test", {
-    ...opt,
-    message,
-  });
-  let unpacked = await unpack(req, opt.serializers);
-  if (opt.check) {
-    await opt.check({ opt, unpacked });
-  } else {
-    assertEquals(unpacked, message);
-  }
+    let message = opt.message;
+    if (typeof opt.message === "function") {
+      message = opt.message();
+    }
 
-  if (typeof opt.message === "function") {
-    message = opt.message();
-  }
-  const res = packResponse(message, opt);
-  unpacked = await unpack(res, opt.serializers);
-  if (opt.check) {
-    await opt.check({ opt, unpacked });
-  } else {
-    assertEquals(unpacked, message);
-  }
+    const r = (
+      which === "packRequest" ? packRequest("http://localhost/test", {
+        ...opt,
+        message,
+      })
+      : packResponse(message, opt)
+    );
+
+    const unpacked = await unpack(r, opt.serializers);
+    if (opt.check) {
+      await opt.check({ opt, unpacked });
+    } else {
+      assertEquals(unpacked, message);
+    }
+  };
+  
+  await run("packRequest");
+  await run("packResponse");
 }
 
 async function assertEqualsBlob(a: File | Blob, b: File | Blob) {
@@ -882,7 +880,7 @@ Deno.test("packing and unpacking", async (t) => {
       message: new Blob(["foobar"], { type: "text/csv" }),
       headers: { "content-type": "text/plain", "content-disposition": "" },
     });
-    await assertEquals(
+    assertEquals(
       await unpack(req2),
       // new Blob(["foobar"], { type: "text/plain" }),
       "foobar",

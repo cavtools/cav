@@ -15,7 +15,7 @@ import type { Serializers } from "./serial.ts";
 import type { Parser, ParserFunction, ParserOutput } from "./parser.ts";
 
 /**
- * Cav's WebSocket wrapper interface.
+ * Cav's WebSocket interface.
  */
 export interface Socket<Send = unknown, Message = unknown> {
   /**
@@ -95,12 +95,12 @@ export type SocketListener<
  * Initializer options to use when upgrading a request into a web socket using
  * the `upgradeWebSocket` function.
  */
-export interface SocketInit<Message extends Parser | null = null> {
+export interface SocketInit<Message = unknown> {
   /**
    * Message parser, for parsing incoming messages. If this is ommitted,
    * messages won't be parsed and will be typed as "unknown".
    */
-  message?: Message;
+  message?: Parser<unknown, Message>;
   /**
    * Additional serializers to use when serializing and deserializing message
    * data.
@@ -113,7 +113,7 @@ export interface SocketInit<Message extends Parser | null = null> {
  */
 export function wrapWebSocket<
   Send = unknown,
-  Message extends Parser | null = null,
+  Message = unknown,
 >(
   raw: WebSocket,
   init?: SocketInit<Message>,
@@ -136,7 +136,7 @@ export function wrapWebSocket<
     on: (type, cb) => {
       const decoder = new TextDecoder();
 
-      // Only message gets a special process
+      // Only message gets a special process, the rest are added as-is
       if (type !== "message") {
         listeners[type].add(cb as (ev: Event) => unknown);
         raw.addEventListener(type, cb as (ev: Event) => unknown);

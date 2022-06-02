@@ -5,15 +5,7 @@
  * An object or function responsible for parsing data or throwing errors if the
  * data isn't shaped as expected. These can either be functions with a single
  * data argument that return the parsed data or an object with a `parse(data):
- * unknown` function property that does the same. Cav is specifically tuned to
- * be compatible with (but not dependent on) Zod, a schema-based data parsing
- * library. However, any parsing library can be used, as long as its parsers
- * satisfy this Parser interface. (Let me know if more shapes should be
- * supported in a github issue.) You can also write strongly-typed parsing
- * functions and objects by hand if you don't want to use a third-party parsing
- * library.
- *
- * To read more about Zod, visit https://github.com/colinhacks/zod.
+ * unknown` function that does the same. Parsers can be asynchronous.
  */
 export type Parser<I = unknown, O = unknown> = (
   | ParserFunction<I, O>
