@@ -15,217 +15,6 @@ import type { Serializers } from "./serial.ts";
 import type { Parser, ParserFunction, ParserOutput } from "./parser.ts";
 
 /**
- * Cav's WebSocket interface.
- */
-export interface Socket<Send = unknown, Message = unknown> {
-  /**
-   * The raw WebSocket instance.
-   */
-  raw: WebSocket;
-  /**
-   * Send data to the connected party. The data provided is serialized using the
-   * top-level `serialize()` function.
-   */
-  send: (data: Send) => void;
-  /**
-   * Closes the web socket connection. An optional code and reason may be
-   * provided, and will be available to all "close" event listeners.
-   */
-  close: (code?: number, reason?: string) => void;
-  /**
-   * Register an event listener for the "open" event, which is fired when the web
-   * socket connection is established. The socket must be opened before any data
-   * can be sent.
-   */
-  on(type: "open", cb: SocketListener<"open">): void;
-  /**
-   * Register an event listener for the "close" event, which is fired when the
-   * web socket connection is ended.
-   */
-  on(type: "close", cb: SocketListener<"close">): void;
-  /**
-   * Register an event listener for the "message" event, which is fired every
-   * time a message is received from the connected party. The message received
-   * is deserialized and made available on the "message" property assigned to
-   * the event.
-   */
-  on(type: "message", cb: SocketListener<"message", Message>): void;
-  /**
-   * Register an event listener for the "error" event, which is fired when the
-   * connection has been closed due to an error.
-   */
-  on(type: "error", cb: SocketListener<"error">): void;
-  /**
-   * Unregister an event listener for a particular event type. If no listener is
-   * provided, all listeners for that event type will be unregistered. If the
-   * event type is also omitted, all listeners for the web socket will be
-   * unregistered.
-   */
-  off(
-    type?: "open" | "close" | "message" | "error",
-    cb?: (ev: Event) => void | Promise<void>,
-  ): void;
-}
-
-/**
- * Type that matches any socket. Useful for type constraints.
- */
-// deno-lint-ignore no-explicit-any
-export type AnySocket = Socket<any, any>;
-
-/**
- * Type for a web socket event listener. The shape of the listener depends on
- * the event type. For the "message" event, the message type may be provided as
- * the second type parameter.
- */
-export type SocketListener<
-  Type extends "open" | "close" | "message" | "error",
-  Message = unknown,
-> = (
-  ev: (
-    Type extends "open" ? Event
-      : Type extends "close" ? CloseEvent
-      : Type extends "message" ? MessageEvent & { message: Message }
-      : Type extends "error" ? Event | ErrorEvent
-      : never
-  ),
-) => void | Promise<void>;
-
-/**
- * Initializer options to use when upgrading a request into a web socket using
- * the `upgradeWebSocket` function.
- */
-export interface SocketInit<Message = unknown> {
-  /**
-   * Message parser, for parsing incoming messages. If this is ommitted,
-   * messages won't be parsed and will be typed as "unknown".
-   */
-  message?: Parser<unknown, Message>;
-  /**
-   * Additional serializers to use when serializing and deserializing message
-   * data.
-   */
-  serializers?: Serializers | null;
-}
-
-/**
- * Wraps a regular WebSocket with serializer functionality and type support.
- */
-export function wrapWebSocket<
-  Send = unknown,
-  Message = unknown,
->(
-  raw: WebSocket,
-  init?: SocketInit<Message>,
-): Socket<Send, Message extends Parser ? ParserOutput<Message> : unknown> {
-  const listeners = {
-    open: new Set<(ev: Event) => unknown>(),
-    close: new Set<(ev: CloseEvent) => unknown>(),
-    message: new Map<unknown, (ev: MessageEvent) => unknown>(),
-    error: new Set<(ev: Event | ErrorEvent) => unknown>(),
-  };
-
-  return {
-    raw,
-    send: (data) => {
-      raw.send(JSON.stringify(serialize(data, init?.serializers)));
-    },
-    close: (code, reason) => {
-      raw.close(code, reason);
-    },
-    on: (type, cb) => {
-      const decoder = new TextDecoder();
-
-      // Only message gets a special process, the rest are added as-is
-      if (type !== "message") {
-        listeners[type].add(cb as (ev: Event) => unknown);
-        raw.addEventListener(type, cb as (ev: Event) => unknown);
-        return;
-      }
-
-      const messageListener = async (ev: MessageEvent) => {
-        const data = ev.data;
-        if (
-          typeof data !== "string" &&
-          !ArrayBuffer.isView(data) &&
-          !(data instanceof Blob)
-        ) {
-          throw new Error(`Invalid data received: ${data}`);
-        }
-
-        // deno-lint-ignore no-explicit-any
-        let message: any = deserialize(
-          JSON.parse(
-            typeof data === "string"
-              ? data
-              : ArrayBuffer.isView(data)
-              ? decoder.decode(data)
-              : await data.text(), // Blob
-          ),
-          init?.serializers,
-        );
-
-        if (init?.message) {
-          const parse: ParserFunction = (
-            typeof init.message === "function"
-              ? init.message
-              : init.message.parse
-          );
-          message = await parse(message);
-        }
-
-        Object.assign(ev, { message });
-        (cb as (ev: Event) => void)(ev);
-      };
-
-      listeners.message.set(cb, messageListener);
-      raw.addEventListener(type, messageListener);
-    },
-    off: (type, cb) => {
-      // If the callback isn't defined, turn off everything for the given type.
-      // If the given type also isn't defined, turn off everything
-      if (!cb) {
-        const turnOff = (t: Exclude<typeof type, undefined>) => {
-          for (const listener of listeners[t].values()) {
-            raw.removeEventListener(t, listener as (ev: Event) => unknown);
-          }
-          listeners[t].clear();
-        };
-        if (!type) {
-          for (const k of Object.keys(listeners)) {
-            turnOff(k as keyof typeof listeners);
-          }
-          return;
-        }
-        turnOff(type);
-        return;
-      }
-
-      if (!type) {
-        throw new Error(
-          "If a callback is specified, the event type must also be specified",
-        );
-      }
-
-      // Otherwise, only turn off the listener if it was registered with this
-      // interface. Don't forget to remove it from the listeners, and that
-      // message listeners are stored in a map instead of a set
-      const listener = (
-        type === "message"
-          ? listeners[type].get(cb) as (ev: Event) => unknown
-          : listeners[type].has(cb)
-          ? cb
-          : undefined
-      );
-      if (listener) {
-        listeners[type].delete(cb);
-        raw.removeEventListener(type, listener);
-      }
-    },
-  };
-}
-
-/**
  * Generic handler type for server-defined Request handlers.
  */
 export type Handler = (
@@ -234,12 +23,9 @@ export type Handler = (
   ...a: any[]
 ) => Promise<Response> | Response;
 
-// TODO: Add an Endpoint interface
-// TODO: Add a Router interface
-
 /**
- * An endpoint handler can use this Request type to ferry type information to
- * the client from the server about what client arguments are acceptable.
+ * A server endpoint handler can use this Request type to ferry type information
+ * to the client about what argument types are acceptable.
  */
 export interface EndpointRequest<
   Query = never,
@@ -268,9 +54,10 @@ export interface EndpointResponse<T = unknown> extends Response {
 }
 
 /**
- * A router handler on the server can use this Request type to ferry type
- * information about valid routes to the client. The client uses the provided
- * RouterShape to infer which property accesses are valid.
+ * A server router handler can use this Request type to ferry type information
+ * to the client about valid routes. The client uses the RouterShape to infer
+ * which property accesses are valid and what their response type will be when
+ * called.
  */
 export interface RouterRequest<
   Shape extends RouterShape = Record<never, never>,
@@ -294,6 +81,51 @@ export interface RouterShape {
     | null
   );
 }
+
+/**
+ * Expands a route path from a RouterRequest into an object representing the
+ * client property accesses required to trigger a request for that route. (Sorry
+ * for the mouthful.) Example: `ExpandPath<"hello/world", true>` becomes `{
+ * hello: { world: true } }`
+ */
+ type ExpandPath<K, T> = (
+  K extends `*` | `:${string}` ? { [x: string]: T }
+    : K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
+    : K extends `/${infer P}` | `${infer P}/` | `${infer P}/*`
+      ? ExpandPath<P, T>
+    : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
+    : K extends string ? { [x in K]: T }
+    : never
+);
+
+type Clean<
+  T,
+  Required = {
+    [
+      K in keyof T as (
+        T[K] extends never ? never
+          : undefined extends T[K] ? never
+          : K
+      )
+    ]: T[K];
+  },
+  Optional = {
+    [
+      K in keyof T as (
+        K extends keyof Required ? never
+          : T[K] extends never ? never
+          : K
+      )
+    ]?: T[K];
+  },
+> = Required & Optional;
+
+/**
+ * https://fettblog.eu/typescript-union-to-intersection/
+ */
+type UnionToIntersection<U> = (
+  U extends unknown ? (k: U) => void : never
+) extends ((k: infer I) => void) ? { [K in keyof I]: I[K] } : never;
 
 /**
  * A function that wraps `fetch()` with a tailored process for making requests
@@ -387,60 +219,18 @@ interface CustomFetchArg {
 }
 
 /**
- * Constructs a new Client tied to a given base URL. The provided set of packers
- * will be used everywhere that data is packed/unpacked when using this client,
- * including web sockets.
+ * Constructs a new Client tied to a given base URL. The provided set of
+ * serializers will be used everywhere that data is de/serialized when using
+ * this client, including any created web sockets.
  *
- * If the type parameter provided is a Stack or an Rpc, the returned client
- * function's type will be tailored to match the inputs and outputs expected on
- * the Stack/Rpc. In the case of Stacks, the returned client function is wrapped
- * in a Proxy that will translate property accesses into path segments to append
- * to the internal URL of the request. Once the client function is called (as
- * opposed to keyed into), the fetch process uses that internal URL. The generic
- * types are imaginary; they're used only to keep the server setup and the
- * client-side api accesses in sync with each other. When they get out of sync,
- * there will be a typescript error in the IDE but the bundleScript() process
- * will ignore the error.
+ * If the type parameter provided is a Router, Endpoint, or SocketEndpoint the
+ * returned client function's type will be tailored to match the inputs and
+ * outputs expected by that handler.
  *
- * For example:
- *
- * ```ts
- * // On the server... (server.ts)
- * import { cav as c, zod as z } from "./deps.ts";
- *
- * export type MyRpc = typeof myRpc;
- *
- * const myRpc = c.rpc({
- *   query: z.object({
- *     hi: z.string(),
- *   }),
- *   resolve: x => {
- *     return `Hello, ${x.query.hi}!`;
- *   },
- * });
- *
- * export type MyStack = typeof myStack;
- *
- * export const myStack = c.stack({
- *   // There's multiple ways to divide up stack routes. Here's two of those
- *   // ways:
- *   path: {
- *     "to/rpc": myRpc,
- *   },
- * });
- *
- * // On the client... (browser/app.tsx)
- * import type { MyStack, MyRpc } from "../server.ts"; // Discarded upon build
- *
- * // Each of these equates to the same request. The a/b/c variables below are
- * // all of type `Promise<string>`, which is automatically determined by the
- * // passed in type parameter. The final request will be: `GET
- * // /path/to/rpc?hi=world`. When the promises resolve, the strings will be
- * // "Hello, world!"
- * const a = client<MyStack>("/").path.to.rpc({ query: { hi: "world" } });
- * const b = client<MyStack>("/")["path/to/rpc"]({ query: { hi: "world" } });
- * const c = client<MyRpc>("/path/to/rpc")({ query: { hi: "world" } });
- * ```
+ * The returned client function is wrapped in a Proxy that will translate
+ * property accesses into path segments appended to the internal URL of the
+ * request. Once the client function is called, the fetch uses that internal
+ * URL.
  */
 export function client<T extends Handler | RouterShape | null = null>(
   base = "",
@@ -541,48 +331,3 @@ export function client<T extends Handler | RouterShape | null = null>(
 
   return proxy(base, serializers) as Client<T>;
 }
-
-/**
- * Expands the route path from a Stack into an object representing the client
- * property accesses required to make a successful request for the given route.
- * Example: `ExpandPath<"hello/world", true>` becomes `{ hello: { world: true }
- * }`
- */
-type ExpandPath<K, T> = (
-  K extends `*` | `:${string}` ? { [x: string]: T }
-    : K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
-    : K extends `/${infer P}` | `${infer P}/` | `${infer P}/*`
-      ? ExpandPath<P, T>
-    : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
-    : K extends string ? { [x in K]: T }
-    : never
-);
-
-type Clean<
-  T,
-  Required = {
-    [
-      K in keyof T as (
-        T[K] extends never ? never
-          : undefined extends T[K] ? never
-          : K
-      )
-    ]: T[K];
-  },
-  Optional = {
-    [
-      K in keyof T as (
-        K extends keyof Required ? never
-          : T[K] extends never ? never
-          : K
-      )
-    ]?: T[K];
-  },
-> = Required & Optional;
-
-/**
- * https://fettblog.eu/typescript-union-to-intersection/
- */
-type UnionToIntersection<U> = (
-  U extends unknown ? (k: U) => void : never
-) extends ((k: infer I) => void) ? { [K in keyof I]: I[K] } : never;

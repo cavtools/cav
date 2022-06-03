@@ -15,8 +15,8 @@ const echoServer = new http.Server({
   handler: (req) => {
     const { socket, response } = Deno.upgradeWebSocket(req);
     socket.onmessage = (ev) => {
-      // REVIEW: Sockets need to be closed on the server or async processes will
-      // leak for some reason?  
+      // Sockets need to be closed on the server or async processes will leak.
+      // The socket will be closed when a "close" string is sent as a message.
       // The extra quotes are needed because the data is sent as JSON
       if (ev.data === "\"close\"") {
         socket.close();
@@ -162,8 +162,8 @@ Deno.test("turning off a specific listener", async () => {
     const socket = webSocket("ws://localhost:8080");
 
     let result: unknown = null;
-    const msg1: WSMessageListener = () => { result = 1; }
-    const msg2: WSMessageListener = () => { result = 2; }
+    const msg1: WSMessageListener = () => { result = 1 };
+    const msg2: WSMessageListener = () => { result = 2 };
     socket.on("message", msg1);
     socket.on("message", msg2);
 
@@ -185,8 +185,8 @@ Deno.test("turning off all listeners for an event", async () => {
     });
 
     // Messages are discarded without parsing if there's no message listener. We
-    // need the message parser to trigger the error listeners, so this listener
-    // is necessary
+    // need the message parser to trigger the error listener, so this no-op
+    // listener is necessary
     socket.on("message", () => {});
 
     socket.on("error", () => reject(null));
@@ -198,8 +198,10 @@ Deno.test("turning off all listeners for an event", async () => {
     });
   });
 
-  // Because the promise above might be resolved before the socket is closed,
-  // async operations might leak and fail the test. This line fixes that problem
+  // Because the promise above will probably be resolved before the socket is
+  // closed, async operations might leak and fail the test. This line fixes that
+  // problem. This only applies to this test case because I'm using the error
+  // listener to resolve the promise instead of the close listener
   await new Promise(r => setTimeout(r, 0));
 });
 

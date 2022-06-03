@@ -32,7 +32,8 @@ function matchesDomainPath(req: Request, domain?: string, path?: string) {
 
 /**
  * Interface for reading and updating the cookies for a Request. Supports cookie
- * signing.
+ * signing. Most operations are synchronous, with the exception of
+ * `.setCookies()`.
  */
 export interface CookieJar {
   /** Gets an up-to-date cookie value. */
@@ -49,7 +50,7 @@ export interface CookieJar {
   /** Removes a cookie by clearing and expiring any previous value. */
   delete: (name: string, opt?: CookieDeleteOptions) => void;
   /**
-   * Returns an array of all cookie [name, value] pairs. `[...signed,
+   * Returns an array of all cookie [name, value] pairs. Order: `[...signed,
    * ...unsigned]`
    */
   entries: () => [string, string][];
@@ -60,7 +61,7 @@ export interface CookieJar {
   /**
    * Calculates the set-cookie headers for all updates applied to this CookieJar
    * and appends them to the given Headers instance. Note that this operation is
-   * asynchronous while all other CookieJar operations are synchronous.
+   * asynchronous while the other CookieJar operations are synchronous.
    */
   setCookies: (headers: Headers) => Promise<void>;
 }

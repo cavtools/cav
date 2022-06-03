@@ -1,7 +1,6 @@
-// Copyright 2022 Connor Logan. All rights reserved. MIT License.
-// This module is browser-compatible.
-
-// Heavily inspired by https://github.com/blitz-js/superjson
+// Copyright 2022 Connor Logan. All rights reserved. MIT License.  
+// This module is browser-compatible.  
+// This module is heavily inspired by https://github.com/blitz-js/superjson.
 
 // REVIEW: Automatically escape strings for XSS, see
 // https://github.com/yahoo/serialize-javascript ?
@@ -111,241 +110,262 @@ export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
   );
 }
 
-const defaults = new Map<string, AnySerializer>(Object.entries({
-  symbol: serializer({
-    check: (v) => typeof v === "symbol",
-    serialize: (v: symbol) => {
-      const key = Symbol.keyFor(v);
-      if (typeof key === "string") {
-        return { for: key };
-      }
-      return { desc: v.description };
-    },
-    deserialize: (raw: { for: string } | { desc: string }) => {
-      if ("for" in raw && typeof raw.for === "string") {
-        return Symbol.for(raw.for);
-      }
-      return Symbol((raw as { desc: string }).desc);
-    },
-  }),
-  error: serializer({
-    check: (v) => v instanceof Error,
-    serialize: (v: Error) => {
-      if (v instanceof HttpError) {
-        return {
-          type: "HttpError",
-          message: v.message,
-          status: v.status,
-          expose: v.expose,
-        };
-      }
-      // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
-      switch (v.name) {
-        case "EvalError":
-        case "RangeError":
-        case "ReferenceError":
-        case "SyntaxError":
-        case "TypeError":
-        case "URIError":
-        case "AggregateError":
-          return { type: v.name, message: v.message };
-        default:
-          return v.message;
-      }
-    },
-    // deno-lint-ignore no-explicit-any
-    deserialize: (raw: any, whenDone) => {
-      if (typeof raw === "string") {
-        return new Error(raw);
-      }
+// Creating a constant object results in the default serializers being included
+// in bundles regardless of whether or not they get used. Wrapping them in a
+// function fixes this. Also, creating them on every call is unnecessary work,
+// so they get cached to the window with a symbol
+function defaults(): Map<string, AnySerializer> {
+  const sym = Symbol.for("defaults.serial.cav.bar");
+  const s = self as unknown as typeof self & {
+    [sym]?: Map<string, AnySerializer>;
+  };
 
-      switch (raw.type) {
-        case "HttpError": {
-          const err = new HttpError(raw.message, {
-            status: parseInt(raw.status, 10), // Should be parsed first
-          });
-          // deno-lint-ignore no-explicit-any
-          whenDone((ready: any) => {
-            err.expose = ready.expose;
-          });
-          return err;
-        }
-        case "EvalError":
-          return new EvalError(raw.message);
-        case "RangeError":
-          return new RangeError(raw.message);
-        case "ReferenceError":
-          return new ReferenceError(raw.message);
-        case "SyntaxError":
-          return new SyntaxError(raw.message);
-        case "TypeError":
-          return new TypeError(raw.message);
-        case "URIError":
-          return new URIError(raw.message);
-        case "AggregateError":
-          return new AggregateError(raw.message);
-        default:
-          return new Error(raw.message);
-      }
-    },
-  }),
-  date: serializer({
-    check: (v) => v instanceof Date,
-    serialize: (v: Date) => v.toJSON(),
-    deserialize: (raw) => new Date(raw as string),
-  }),
-  undefined: serializer({
-    check: (v) => typeof v === "undefined",
-    serialize: () => true,
-    deserialize: () => undefined,
-  }),
-  map: serializer({
-    check: (v) => v instanceof Map,
-    serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
-    deserialize: (_, whenDone) => {
-      const map = new Map();
-      whenDone((entries) => {
-        entries.forEach((v) => map.set(v[0], v[1]));
-      });
-      return map;
-    },
-  }),
-  set: serializer({
-    check: (val) => val instanceof Set,
-    serialize: (v: Set<unknown>) => Array.from(v.values()),
-    deserialize: (_, whenDone) => {
-      const set = new Set();
-      whenDone((values) => {
-        values.forEach((v) => set.add(v));
-      });
-      return set;
-    },
-  }),
-  bigint: serializer({
-    check: (v) => typeof v === "bigint",
-    serialize: (v: bigint) => v.toString(),
-    deserialize: (raw) => BigInt(raw as string),
-  }),
-  regexp: serializer({
-    check: (v) => v instanceof RegExp,
-    serialize: (v: RegExp) => v.toString(),
-    deserialize: (raw) => {
-      const r = (raw as string).slice(1).split("/");
-      return new RegExp(r[0], r[1]);
-    },
-  }),
-  number: serializer({
-    check: (v) =>
-      typeof v === "number" && (
-        isNaN(v) ||
-        v === Number.POSITIVE_INFINITY ||
-        v === Number.NEGATIVE_INFINITY ||
-        Object.is(v, -0)
-      ),
-    serialize: (v: number) => (
-      Object.is(v, -0)
-        ? "-zero"
-        : v === Number.POSITIVE_INFINITY
-        ? "+infinity"
-        : v === Number.NEGATIVE_INFINITY
-        ? "-infinity"
-        : "nan"
-    ),
-    deserialize: (raw: string) => (
-      raw === "-zero"
-        ? -0
-        : raw === "+infinity"
-        ? Number.POSITIVE_INFINITY
-        : raw === "-infinity"
-        ? Number.NEGATIVE_INFINITY
-        : NaN
-    ),
-  }),
-  conflict: serializer({
-    check: (v) => {
-      if (!isPojo(v)) {
-        return false;
-      }
-      const keys = Object.keys(v);
-      return keys.length === 1 && keys[0].startsWith("$");
-    },
-    serialize: (v: Record<string, string>) => Object.entries(v)[0],
-    deserialize: (_, whenDone) => {
-      const result: Record<string, unknown> = {};
-      whenDone((entry) => {
-        result[entry[0]] = entry[1];
-      });
-      return result;
-    },
-  }),
-  buffer: serializer({
-    check: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
-    // TODO: This could be faster - https://jsben.ch/wnaZC
-    serialize: (v: ArrayBufferView | ArrayBuffer) => {
-      let base64 = "";
-      const data = new Uint8Array(
-        v instanceof ArrayBuffer ? v : v.buffer,
-      );
-      for (let i = 0; i < data.length; i++) {
-        base64 += String.fromCharCode(data[i]);
-      }
-      return {
-        type: v.constructor.name,
-        data: self.btoa(base64),
-      };
-    },
-    deserialize: (raw: { type: string; data: string }) => {
-      const data = self.atob(raw.data);
-      const buf = new Uint8Array(data.length);
-      for (let i = 0; i < data.length; i++) {
-        buf[i] = data.charCodeAt(i);
-      }
+  const cached = s[sym];
+  if (cached) {
+    return cached;
+  }
 
-      switch (raw.type) {
-        case "ArrayBuffer":
-          return buf.buffer;
-        case "Int8Array":
-          return new Int8Array(buf.buffer);
-        case "Uint8Array":
-          return new Uint8Array(buf.buffer);
-        case "Uint8ClampedArray":
-          return new Uint8ClampedArray(buf.buffer);
-        case "Int16Array":
-          return new Int16Array(buf.buffer);
-        case "Uint16Array":
-          return new Uint16Array(buf.buffer);
-        case "Int32Array":
-          return new Int32Array(buf.buffer);
-        case "Uint32Array":
-          return new Uint32Array(buf.buffer);
-        case "Float32Array":
-          return new Float32Array(buf.buffer);
-        case "Float64Array":
-          return new Float64Array(buf.buffer);
-        case "BigInt64Array":
-          return new BigInt64Array(buf.buffer);
-        case "BigUint64Array":
-          return new BigUint64Array(buf.buffer);
-        case "DataView":
-          return new DataView(buf.buffer);
-        default: // Uint8Array is the fallback
-          return buf;
-      }
-    },
-  }),
-}));
+  Object.assign(self, {
+    [sym]: new Map<string, AnySerializer>(Object.entries({
+      symbol: serializer({
+        check: (v) => typeof v === "symbol",
+        serialize: (v: symbol) => {
+          const key = Symbol.keyFor(v);
+          if (typeof key === "string") {
+            return { for: key };
+          }
+          return { desc: v.description };
+        },
+        deserialize: (raw: { for: string } | { desc: string }) => {
+          if ("for" in raw && typeof raw.for === "string") {
+            return Symbol.for(raw.for);
+          }
+          return Symbol((raw as { desc: string }).desc);
+        },
+      }),
+      error: serializer({
+        check: (v) => v instanceof Error,
+        serialize: (v: Error) => {
+          if (v instanceof HttpError) {
+            return {
+              type: "HttpError",
+              message: v.message,
+              status: v.status,
+              expose: v.expose,
+            };
+          }
+          // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
+          switch (v.name) {
+            case "EvalError":
+            case "RangeError":
+            case "ReferenceError":
+            case "SyntaxError":
+            case "TypeError":
+            case "URIError":
+            case "AggregateError":
+              return { type: v.name, message: v.message };
+            default:
+              return v.message;
+          }
+        },
+        // deno-lint-ignore no-explicit-any
+        deserialize: (raw: any, whenDone) => {
+          if (typeof raw === "string") {
+            return new Error(raw);
+          }
+    
+          switch (raw.type) {
+            case "HttpError": {
+              const err = new HttpError(raw.message, {
+                status: parseInt(raw.status, 10), // Should be parsed first
+              });
+              // deno-lint-ignore no-explicit-any
+              whenDone((ready: any) => {
+                err.expose = ready.expose;
+              });
+              return err;
+            }
+            case "EvalError":
+              return new EvalError(raw.message);
+            case "RangeError":
+              return new RangeError(raw.message);
+            case "ReferenceError":
+              return new ReferenceError(raw.message);
+            case "SyntaxError":
+              return new SyntaxError(raw.message);
+            case "TypeError":
+              return new TypeError(raw.message);
+            case "URIError":
+              return new URIError(raw.message);
+            case "AggregateError":
+              return new AggregateError(raw.message);
+            default:
+              return new Error(raw.message);
+          }
+        },
+      }),
+      date: serializer({
+        check: (v) => v instanceof Date,
+        serialize: (v: Date) => v.toJSON(),
+        deserialize: (raw) => new Date(raw as string),
+      }),
+      undefined: serializer({
+        check: (v) => typeof v === "undefined",
+        serialize: () => true,
+        deserialize: () => undefined,
+      }),
+      map: serializer({
+        check: (v) => v instanceof Map,
+        serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
+        deserialize: (_, whenDone) => {
+          const map = new Map();
+          whenDone((entries) => {
+            entries.forEach((v) => map.set(v[0], v[1]));
+          });
+          return map;
+        },
+      }),
+      set: serializer({
+        check: (val) => val instanceof Set,
+        serialize: (v: Set<unknown>) => Array.from(v.values()),
+        deserialize: (_, whenDone) => {
+          const set = new Set();
+          whenDone((values) => {
+            values.forEach((v) => set.add(v));
+          });
+          return set;
+        },
+      }),
+      bigint: serializer({
+        check: (v) => typeof v === "bigint",
+        serialize: (v: bigint) => v.toString(),
+        deserialize: (raw) => BigInt(raw as string),
+      }),
+      regexp: serializer({
+        check: (v) => v instanceof RegExp,
+        serialize: (v: RegExp) => v.toString(),
+        deserialize: (raw) => {
+          const r = (raw as string).slice(1).split("/");
+          return new RegExp(r[0], r[1]);
+        },
+      }),
+      number: serializer({
+        check: (v) =>
+          typeof v === "number" && (
+            isNaN(v) ||
+            v === Number.POSITIVE_INFINITY ||
+            v === Number.NEGATIVE_INFINITY ||
+            Object.is(v, -0)
+          ),
+        serialize: (v: number) => (
+          Object.is(v, -0)
+            ? "-zero"
+            : v === Number.POSITIVE_INFINITY
+            ? "+infinity"
+            : v === Number.NEGATIVE_INFINITY
+            ? "-infinity"
+            : "nan"
+        ),
+        deserialize: (raw: string) => (
+          raw === "-zero"
+            ? -0
+            : raw === "+infinity"
+            ? Number.POSITIVE_INFINITY
+            : raw === "-infinity"
+            ? Number.NEGATIVE_INFINITY
+            : NaN
+        ),
+      }),
+      conflict: serializer({
+        check: (v) => {
+          if (!isPojo(v)) {
+            return false;
+          }
+          const keys = Object.keys(v);
+          return keys.length === 1 && keys[0].startsWith("$");
+        },
+        serialize: (v: Record<string, string>) => Object.entries(v)[0],
+        deserialize: (_, whenDone) => {
+          const result: Record<string, unknown> = {};
+          whenDone((entry) => {
+            result[entry[0]] = entry[1];
+          });
+          return result;
+        },
+      }),
+      buffer: serializer({
+        check: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
+        // TODO: This could be faster - https://jsben.ch/wnaZC
+        serialize: (v: ArrayBufferView | ArrayBuffer) => {
+          let base64 = "";
+          const data = new Uint8Array(
+            v instanceof ArrayBuffer ? v : v.buffer,
+          );
+          for (let i = 0; i < data.length; i++) {
+            base64 += String.fromCharCode(data[i]);
+          }
+          return {
+            type: v.constructor.name,
+            data: self.btoa(base64),
+          };
+        },
+        deserialize: (raw: { type: string; data: string }) => {
+          const data = self.atob(raw.data);
+          const buf = new Uint8Array(data.length);
+          for (let i = 0; i < data.length; i++) {
+            buf[i] = data.charCodeAt(i);
+          }
+    
+          switch (raw.type) {
+            case "ArrayBuffer":
+              return buf.buffer;
+            case "Int8Array":
+              return new Int8Array(buf.buffer);
+            case "Uint8Array":
+              return new Uint8Array(buf.buffer);
+            case "Uint8ClampedArray":
+              return new Uint8ClampedArray(buf.buffer);
+            case "Int16Array":
+              return new Int16Array(buf.buffer);
+            case "Uint16Array":
+              return new Uint16Array(buf.buffer);
+            case "Int32Array":
+              return new Int32Array(buf.buffer);
+            case "Uint32Array":
+              return new Uint32Array(buf.buffer);
+            case "Float32Array":
+              return new Float32Array(buf.buffer);
+            case "Float64Array":
+              return new Float64Array(buf.buffer);
+            case "BigInt64Array":
+              return new BigInt64Array(buf.buffer);
+            case "BigUint64Array":
+              return new BigUint64Array(buf.buffer);
+            case "DataView":
+              return new DataView(buf.buffer);
+            default: // Uint8Array is the fallback
+              return buf;
+          }
+        },
+      }),
+    })),
+  });
+
+  return s[sym]!;
+}
 
 function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
   if (!serializers) {
-    return defaults;
+    return defaults();
   }
 
+  const defs = defaults();
   const smap = new Map<string, AnySerializer>();
   for (const [k, v] of Object.entries(serializers)) {
     if (v === null) {
       continue;
     }
-    if (k === "ref" || defaults.has(k)) {
+    if (k === "ref" || defs.has(k)) {
       throw new Error(
         `Conflict: The serializer key "${k}" is reserved`,
       );
@@ -353,9 +373,9 @@ function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
     smap.set(k, v);
   }
   if (!smap.size) {
-    return defaults;
+    return defs;
   }
-  for (const [k, v] of defaults.entries()) {
+  for (const [k, v] of defs.entries()) {
     smap.set(k, v);
   }
   return smap;
@@ -538,7 +558,7 @@ function packBody(
   serializers?: Serializers,
 ): PackedBody {
   if (
-    // body === null || // null gets serialized as JSON
+    body === null ||
     typeof body === "undefined" ||
     body instanceof ReadableStream ||
     body instanceof ArrayBuffer ||
@@ -788,6 +808,6 @@ export async function unpack(
     });
   }
 
-  // The fallback behavior just returns a Blob
+  // The fallback behavior just returns a Blob (for now)
   return await packed.blob();
 }
