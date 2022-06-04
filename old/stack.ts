@@ -32,24 +32,32 @@ const nextPathGroupName = "__nextPath";
  * documentation about how Stack routing works
  */
 export function stack<R extends StackRoutes>(routes: R): Stack<R> {
-  // Stack routes can only use some of the features of URLPattern. If attempts
+  // TODO: clean the routes here, before moving ahead
+
+  // Stack routes can only use one of the features of URLPattern. If attempts
   // are made to use features that aren't supported, throw an error
   for (const [k, _] of Object.entries(routes)) {
-    const split = k.split("/").filter((v) => !!v);
 
-    // Trailing wildcard needs to be let through
-    if (split[split.length - 1] === "*") {
-      split.pop();
+    const split = k.split("/").filter((v) => !!v);
+    const joined = split.join("/");
+
+    // The solo wildcard is acceptable. Wildcards don't work anywhere else
+    // because they are greedy, which isn't compatible with this routing process
+    if (joined === "*") {
+      continue;
     }
 
-    // Make sure the stack route is simple
+    // Make sure the stack route is simple by banning complicated URLPattern
+    // syntax. Only path groups without regex are supported currently
     for (const s of split) {
       if (
+        // If it doesn't match the path capture regex
         !s.match(/^:[a-zA-Z_$]+[a-zA-Z_$0-9]*$/) &&
-        !s.match(/^[^:*?(){}]*$/) // TODO: I don't think this is fully correct
+        // And it has at least one unescaped URLPattern character
+        s.match(/[^\\][:*?(){}]/)
       ) {
         throw new SyntaxError(
-          `"${k}" isn't a valid stack route. Stack routes only support basic path segments and named path segments (groups). Non-trailing wildcards, RegExp, optionals, and other advanced URLPattern syntax is not supported`,
+          `"${k}" isn't a valid Router route. The Router only supports basic path segments and named path segments (groups). Wildcards, RegExp, optionals, and other advanced URLPattern syntax isn't supported, with the exception of the solo wildcard route "*"`,
         );
       }
     }
@@ -68,7 +76,6 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
   // Sort the handlers like this:
   //   1. Solo wildcards are always last
   //   2. By path depth. Paths with more path segments get tested sooner.
-  //      (Trailing wildcards don't affect path depth)
   //   3. For two paths that have the same depth, index order is used (lower
   //      index === higher priority)
   const paths = Object.keys(handlers);
@@ -78,18 +85,18 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
     }
 
     // #1
-    if (a === "*" || a === "/*") {
+    if (a === "*" || a === "/*") { // TODO: Remove the second condition
       return 1;
     }
-    if (b === "*" || b === "/*") {
+    if (b === "*" || b === "/*") { // TODO: Remove the second condition
       return -1;
     }
 
     // #2
-    if (a.endsWith("/*")) {
+    if (a.endsWith("/*")) { // TODO: Remove this block (not possible)
       a = a.slice(0, a.length - 2);
     }
-    if (b.endsWith("/*")) {
+    if (b.endsWith("/*")) { // TODO: Remove this block (not possible)
       b = b.slice(0, b.length - 2);
     }
     const la = a.split("/").filter((v) => !!v).length;
@@ -104,14 +111,13 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
 
   const patterns = new Map<URLPattern, Handler | Handler[]>();
   for (const op of sortedPaths) {
+    // TODO: Don't filter them here
     let p = "/" + op.split("/").filter((v) => !!v).join("/");
-
-    // Sometimes the path might already end in a wildcard. If it does, remove it
-    // before adding the path capture wildcard
-    if (p.endsWith("/*")) {
-      p = p.slice(0, p.length - 2);
+    if (p === "*") {
+      p = `/:${nextPathGroupName}*/*?`;
+    } else {
+      p = `${p}/:${nextPathGroupName}*/*?`;
     }
-    p = `${p}/:${nextPathGroupName}*/*?`;
     patterns.set(new URLPattern(p, "http://_._"), handlers[op]);
   }
 
@@ -179,10 +185,13 @@ export function stack<R extends StackRoutes>(routes: R): Stack<R> {
   return Object.assign(handler, { routes });
 }
 
+// REVIEW: Idk if this is specific enough to not piss someone off at some point.
+// Might need one more differentiator, like a Symbol assigned to the response or
+// something like that
 /**
  * Checks if a Response should be considered a "no match" response, indicating
  * to the stack if it should continue looking for matches or not. Currently, a
- * "no match" response is a 404 Reponse with a plaintext body.
+ * "no match" response is a 404 Response with a plaintext body. 
  */
 function didMatch(response: Response): boolean {
   if (response.status === 404) {

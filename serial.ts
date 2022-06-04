@@ -452,7 +452,8 @@ export function serialize(
     }
 
     throw new TypeError(
-      `No matching serializers for ${val}`,
+      // deno-lint-ignore no-explicit-any
+      `No matching serializers for instance of "${(val as any).constructor.name}"`,
     );
   };
 

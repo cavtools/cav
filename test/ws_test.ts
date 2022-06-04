@@ -3,21 +3,28 @@
 import {
   http,
   assertEquals,
-  assertRejects,
   assertStrictEquals,
 } from "./test_deps.ts";
 import { webSocket } from "../ws.ts";
 import type { WSMessageListener } from "../ws.ts";
 
-// Echo: ws://localhost:8080
 const echoServer = new http.Server({
   port: 8080,
   handler: (req) => {
     const { socket, response } = Deno.upgradeWebSocket(req);
+    // I need the URL to be sent back in one of the tests for client_test.ts
+    if (req.url.indexOf("send-back-url=true") !== -1) {
+      socket.onopen = () => {
+        // This is the raw socket, no serialization is done. Wrap the url in
+        // quotes so it gets deserialized as a string
+        socket.send('"' + req.url + '"');
+      };
+    }
     socket.onmessage = (ev) => {
-      // Sockets need to be closed on the server or async processes will leak.
-      // The socket will be closed when a "close" string is sent as a message.
-      // The extra quotes are needed because the data is sent as JSON
+      // Sockets need to be closed from the server or async processes will leak.
+      // The socket will be closed when a "close" string is sent as a message;
+      // that message isn't echoed. The extra quotes are needed because the data
+      // is sent as JSON
       if (ev.data === "\"close\"") {
         socket.close();
         return;
@@ -91,7 +98,8 @@ Deno.test("echo with send type and parser", async () => {
 });
 
 Deno.test("echo with parser that throws", async () => {
-  await assertRejects(() => new Promise((resolve, reject) => {
+  const message = await new Promise((resolve) => {
+    let message: unknown = null;
     const socket = webSocket("ws://localhost:8080", {
       message: (msg) => {
         if (typeof msg !== "number") {
@@ -102,13 +110,14 @@ Deno.test("echo with parser that throws", async () => {
     });
 
     socket.onopen = () => {
-      socket.send({ hey: 123 });
+      socket.send({ echo: "foo-bar" });
       socket.send("close");
     };
-    socket.onmessage = () => {}; // Needed or messages won't get parsed
-    socket.onclose = () => resolve(null);
-    socket.onerror = (err) => reject(err);
-  }), Error, "not a number");
+    socket.onmessage = (msg) => { message = msg };
+    socket.onclose = () => resolve(message);
+    socket.onerror = (err) => { message = err };
+  });
+  assertEquals(message, new Error("not a number"));
 });
 
 Deno.test("echo with complex data and custom serializers", async () => {
@@ -178,31 +187,21 @@ Deno.test("turning off a specific listener", async () => {
   assertEquals(result, 2);
 });
 
-Deno.test("turning off all listeners for an event", async () => {
-  await new Promise((resolve, reject) => {
-    const socket = webSocket("ws://localhost:8080", {
-      message: () => { throw new Error("always triggered") },
-    });
-
-    // Messages are discarded without parsing if there's no message listener. We
-    // need the message parser to trigger the error listener, so this no-op
-    // listener is necessary
-    socket.on("message", () => {});
-
-    socket.on("error", () => reject(null));
+Deno.test("turning off all listeners for one event", async () => {
+  const message = await new Promise((resolve, reject) => {
+    const socket = webSocket("ws://localhost:8080");
+    let m: unknown = null;
+    socket.on("close", () => reject(null));
+    socket.on("close", () => reject(null)); // Included on purpose
+    socket.on("message", (msg) => { m = msg });
     socket.on("open", () => {
-      socket.off("error");
-      socket.on("error", () => resolve(null));
+      socket.off("close");
+      socket.on("close", () => resolve(m));
       socket.send({});
       socket.send("close");
     });
   });
-
-  // Because the promise above will probably be resolved before the socket is
-  // closed, async operations might leak and fail the test. This line fixes that
-  // problem. This only applies to this test case because I'm using the error
-  // listener to resolve the promise instead of the close listener
-  await new Promise(r => setTimeout(r, 0));
+  assertEquals(message, {});
 });
 
 Deno.test("turning off all listeners for all events", async () => {

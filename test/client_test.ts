@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { assertEquals } from "./test_deps.ts";
-import { packResponse, unpack } from "../serial.ts";
+import { assert, assertEquals } from "./test_deps.ts";
+import { HttpError, packResponse, unpack } from "../serial.ts";
 import { client } from "../client.ts";
 import type {
   EndpointRequest,
@@ -9,16 +9,25 @@ import type {
   RouterRequest,
   ClientArg,
   Client,
-  GenericClientArg,
+  AnyClientArg,
 } from "../client.ts";
 import type { WS } from "../ws.ts";
+import type { PackResponseInit, Serializers } from "../serial.ts";
 
-let nextResponse: unknown = undefined;
-let lastRequest: unknown = undefined;
+// This import starts the web socket server that's defined in ws_test.ts. Using
+// it to test the client socket functionality.
+import "./ws_test.ts";
+
+const nextRes: {
+  body?: unknown;
+  init?: PackResponseInit;
+} = {};
+let lastReq: Request = new Request("http://null.void");
+
 Object.assign(self, {
   fetch: (req: Request) => {
-    lastRequest = req;
-    return packResponse(nextResponse);
+    lastReq = req;
+    return packResponse(nextRes.body, nextRes.init);
   },
 });
 
@@ -27,34 +36,173 @@ async function assertRequestEquals(a: Request, b: {
   method: string;
   headers: [string, string][];
   body: unknown;
+  serializers?: Serializers;
 }) {
   assertEquals(a.url, b.url);
   assertEquals(a.method, b.method);
   assertEquals(Array.from(a.headers.entries()), b.headers);
-  assertEquals(await unpack(a), b.body);
+  assertEquals(await unpack(a, b.serializers), b.body);
 }
 
-Deno.test("query only", async () => {
+function assertResponseEquals(a: Response, b: {
+  status: number;
+  headers: [string, string][];
+}) {
+  assertEquals(a.status, b.status);
+  assertEquals(Array.from(a.headers.entries()), b.headers);
+}
 
+Deno.test("GET request", async () => {
+  nextRes.body = new Map([[undefined, new Date(0)]]);
+  nextRes.init = {
+    status: 200,
+    headers: { "x-custom-output-header": "hey" },
+  };
+  const [body, res] = await client("http://localhost/base").ball({
+    path: "/extra/vagant?extra=ordinary",
+    socket: false,
+    headers: { "x-custom-input-header": "ho" },
+    query: {
+      hello: "world",
+      foo: ["bar", "baz"],
+    },
+    message: undefined,
+    serializers: undefined,
+  }) as [unknown, Response];
+
+  await assertRequestEquals(lastReq, {
+    url: "http://localhost/base/ball/extra/vagant?extra=ordinary&hello=world&foo=bar&foo=baz",
+    method: "GET",
+    headers: [
+      ["x-custom-input-header", "ho"],
+    ],
+    body: undefined,
+  });
+  assertEquals(body, nextRes.body);
+  assertResponseEquals(res, {
+    status: 200,
+    headers: [
+      ["content-type", "application/json"],
+      ["x-custom-output-header", "hey"],
+    ],
+  });
 });
 
-Deno.test("echo", async () => {
+class Custom1 {}
+class Custom2 {}
+const custom1 = {
+  check: (v: unknown) => v instanceof Custom1,
+  serialize: () => null,
+  deserialize: () => new Custom1(),
+};
+const custom2 = {
+  check: (v: unknown) => v instanceof Custom2,
+  serialize: () => null,
+  deserialize: () => new Custom2(),
+};
 
+Deno.test("POST request", async () => {
+  nextRes.body = { b: new Custom1(), a: new Custom2() };
+  nextRes.init = { serializers: { custom1, custom2 } };
+  const message = { a: new Custom1(), b: new Custom2() };
+
+  const [body, res] = await client(
+    "http://localhost///",
+    { custom1 },
+  )["/test //me"]({
+    query: { q: "yes" },
+    message,
+    serializers: { custom2 },
+  }) as [unknown, Response];
+
+  await assertRequestEquals(lastReq, {
+    url: "http://localhost/test%20/me?q=yes",
+    method: "POST",
+    headers: [
+      ["content-type", "application/json"],
+    ],
+    body: message,
+    serializers: { custom1, custom2 },
+  });
+  assertEquals(body, nextRes.body);
+  assertResponseEquals(res, {
+    status: 200,
+    headers: [
+      ["content-type", "application/json"],
+    ],
+  });
 });
 
-Deno.test("property accesses -> path segments", async () => {
+Deno.test("socket request", async () => {
+  const ws = await client(
+    "http://localhost:8080/does/not/matter",
+    { custom1 },
+    // The "send-back-url" part causes the web socket server to send the url
+    // back as a message when the socket is opened
+  )["/this either/%20?send-back-url=true"]({
+    socket: true,
+    query: { q: "hello" },
+    serializers: { custom2 },
+  }) as WS;
 
+  const message = { a: new Custom1(), b: new Custom2() }
+  let url = "";
+  let receive: unknown = undefined;
+  await new Promise((resolve, reject) => {
+    ws.onopen = () => {
+      ws.send(message);
+      ws.send("close"); // not sent back to us
+    };
+    ws.onmessage = (message) => {
+      // If a string comes back, it's the url requested
+      if (typeof message === "string") {
+        url = message;
+      } else {
+        receive = message;
+      }
+    };
+    ws.onclose = () => resolve(null);
+    ws.onerror = (err) => reject(err);
+  });
+
+  assertEquals(url, "http://localhost:8080/does/not/matter/this%20either/%20?send-back-url=true&q=hello");
+  assertEquals(receive, message);
 });
 
-Deno.test("base serializers + added serializers", () => {
+Deno.test("rejects whenever there's a non-2xx status code", async () => {
+  nextRes.body = new HttpError("500 internal server error", {
+    status: 500,
+    detail: { hidden: true },
+    expose: { visible: true },
+  });
+  nextRes.init = {
+    status: 400, // Note how the status differs
+    headers: { "x-custom-header": "swag" },
+  }; 
 
+  try {
+    const [_body, _res] = await client("http://localhost")({});
+    throw new Error("the request didn't throw");
+  } catch (err) {
+    assert(err instanceof HttpError, "err isn't http error");
+    assertEquals(err.message, "500 internal server error");
+    assertEquals(err.status, 400); // The HTTP status overrides the original
+
+    const { body, res } = err.detail;
+    assertEquals(body, new HttpError("500 internal server error", {
+      status: 500,
+      expose: { visible: true },
+    }));
+    assertEquals((res as Response).status, 400);
+    assertEquals((res as Response).headers.get("x-custom-header"), "swag");
+  }
 });
 
-// Compile-time tests
+// E2E tests (compile-time)
 
 // No parameter (null)
 client() as {
-  (x: GenericClientArg): Promise<unknown>;
+  (x: AnyClientArg<boolean>): unknown;
   [x: string]: Client;
 };
 
@@ -63,7 +211,7 @@ type TestRouter = (req: RouterRequest<{
 }>) => Response;
 client<TestRouter>() as {
   a: {
-    (x: GenericClientArg): Promise<unknown>;
+    (x: AnyClientArg<boolean>): unknown;
     [x: string]: Client
   };
 };
@@ -77,7 +225,7 @@ client<TestEndpoint>() as (x: ClientArg<
   { a: "b" },
   { c: "d" },
   never
->) => Promise<{ e: "f" }>;
+>) => Promise<[{ e: "f" }, Response]>;
 
 type TestSocketEndpoint = (req: SocketEndpointRequest<
   { a: "b" },
@@ -117,7 +265,7 @@ type TestIntegration = (req: RouterRequest<{
       f: TestSocketEndpoint;
     };
   };
-  "a/b": TestClientTypeArray;
+  "a/b": TestClientTypeArray; // tests route collisions
   g: TestRouterShape;
   h: TestRouter;
   i: null;
@@ -128,12 +276,12 @@ client<TestIntegration>() as {
       c: {
         [d: string]: {
           [e: string]: Client<TestEndpoint>;
-        };
+        } & Client;
       } & {
         f: Client<TestSocketEndpoint>;
-      };
+      } & Client;
     } & Client<TestClientTypeArray>;
-  };
+  } & Client;
   g: Client<TestRouterShape>;
   h: Client<TestRouter>;
   i: Client;

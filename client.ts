@@ -6,10 +6,10 @@ import { HttpError, packRequest, unpack } from "./serial.ts";
 import type { WS } from "./ws.ts";
 import type { Serializers } from "./serial.ts";
 
+// TODO: Constrain Query to Record<string, string | string[]>
 // TODO: Support most/all of the regexes supported by NextJS's fs-based router  
 // TODO: The ability to specify a Key parameter when constructing the client
 // that pre-keys into the given handler if its a Router  
-// TODO: Constrain Query to Record<string, string | string[]>
 
 /**
  * Generic handler type for server-defined Request handlers.
@@ -30,12 +30,16 @@ export interface EndpointRequest<
   Message = unknown,
   Resp = unknown,
 > extends Request {
-  // REVIEW: I wanted to use a Symbol() instead of "__cav" so that this property
-  // wouldn't show up in intellisense. However, doing that creates a rogue
-  // Symbol() call in the asset bundles any time this file is imported, even if
-  // nothing from it is used. I didn't really like that, so I switch it to this.
-  // Should I go back?
-  __cav?: { // imaginary
+  // REVIEW: I wanted to use a Symbol() instead of string key so that this
+  // property wouldn't show up in intellisense. However, doing that creates a
+  // rogue Symbol() call in the asset bundles anytime this file is imported,
+  // even if nothing from it is used. (Side-effect.) I didn't really like that,
+  // so I switch it to zzz_cav (no side-effect), named so that it would come
+  // last in the intellisense suggestions. Should I go back? Having something
+  // like `Symbol("cav")` in the bundles would be arrogant but not that terrible
+  // if it means this imaginary property never shows up
+  /** @internal organs */
+  zzz_cav?: { // imaginary
     socketEndpointRequest?: never;
     routerRequest?: never;
     endpointRequest: {
@@ -56,7 +60,8 @@ export interface SocketEndpointRequest<
   Send = unknown,
   Receive = unknown,
 > extends Request {
-  __cav?: { // imaginary
+  /** @internal organs */
+  zzz_cav?: { // imaginary
     endpointRequest?: never;
     routerRequest?: never;
     socketEndpointRequest?: {
@@ -76,11 +81,21 @@ export interface SocketEndpointRequest<
 export interface RouterRequest<
   Shape extends RouterShape = Record<never, never>,
 > extends Request {
-  __cav?: { // imaginary
+  /** @internal organs */
+  zzz_cav?: { // imaginary
     endpointRequest?: never;
     socketEndpointRequest?: never;
     routerRequest: Shape;
   };
+}
+
+/**
+ * Type constraint for the type parameter of a RouterRequest. The shape
+ * describes the client property accesses that would result in a valid endpoint
+ * call. The endpoints are specified by their handler definitions.
+ */
+ export interface RouterShape {
+  [x: string]: ClientType;
 }
 
 /** Type constraint for the Client's type parameter. */
@@ -91,26 +106,18 @@ export type ClientType = (
   | null
 );
 
-/**
- * Type constraint for the Shape parameter of a RouterRequest. The shape
- * describes the client property accesses that would result in a valid endpoint
- * call. The endpoints are specified by their handler definitions.
- */
-export interface RouterShape {
-  [x: string]: ClientType;
-}
-
-// REVIEW: I originally was going to try two methods to approach the e2e client
-// types problem. One that expanded router paths like I do below, and another
-// that flattened the router object into a 2D array of acceptable paths which
-// would eliminate the need for a Proxy around the client function. I ended up
-// going with the former because it seemed easier at the time and better aligns
-// with how routers get defined. But now I'm not so sure about using this method
-// since it's not very intuitive and requires the use of a Proxy to pull it off
-// with typescript. I may experiment with alternatives to this approach if the
-// current method gets hairy. In the meantime, please excuse all the
-// conditionals and submit bug reports if you come across unhandled edge cases
-// (there's a lot)
+// REVIEW: I came up with two methods when approaching the e2e type safety
+// problem re: how routers are handled on the client. One that expanded router
+// paths into objects that resembled the router shape, and another that
+// flattened the router shape into a 2D array of all acceptable paths. The
+// former requires using a Proxy, the latter doesn't. I ended up going with the
+// former because it seemed easier at the time given how typescript template
+// strings work and it better aligns with how routers get defined. But now I'm
+// not so sure since it isn't intuitive and requires Proxies to pull it off,
+// which is generally discouraged in the JS community. I may experiment with
+// alternatives to this approach if the current method gets hairy. In the
+// meantime, please excuse all the conditionals and be on the look out for bugs
+// and edge cases (there's a lot probably)
 
 /**
  * Expands a route path from a RouterRequest into an object representing the
@@ -156,38 +163,32 @@ type UnionToIntersection<U> = (
   U extends unknown ? (k: U) => void : never
 ) extends ((k: infer I) => void) ? I : never;
 
-// good luck understanding this type lol  
 // i'm sorry
 /**
- * A function that wraps `fetch()` with a tailored process for making requests
- * to a Cav server. Each property access on the function itself returns a new
- * Client that extends the URL of the original Client. The periods represent
- * path dividers and the accessed properties are path segments, like this:
- * `client("http://localhost/base").nested["pa.th"]()` will result in a request
- * to "http://localhost/base/nested/pa.th".
- *
- * The type parameter is the type of the handler this client points to, which
- * allows the client TypeScript to extract information about what property
- * accesses are allowed and what data the server expects to receive and respond
- * with.
+ * A (Proxied) function that wraps `fetch()` for making requests to a Cav
+ * handler.
  */
 export type Client<T extends ClientType = null> = {
-  (x: ClientArg): Promise<unknown>;
+  <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+    Socket extends true ? WS : Promise<[unknown, Response]>
+  );
   [x: string]: Client;
 } & (
   // Non-Cav handlers get the fallback treatment  
-  // This only works if T comes after the extends
+  // NOTE: This only works if T comes after the extends
   ((
-    req: Request & { __cav?: never },
+    req: Request & { zzz_cav?: never },
     // deno-lint-ignore no-explicit-any
     ...a: any[]
   ) => Promise<Response> | Response) extends T ? Client
+
   // Router
   : T extends (
     req: RouterRequest<infer S>,
     // deno-lint-ignore no-explicit-any
     ...a: any[]
   ) => Response | Promise<Response> ? Client<S>
+
   // Endpoint
   : T extends (
     req: EndpointRequest<infer Q, infer M, infer R>,
@@ -195,34 +196,43 @@ export type Client<T extends ClientType = null> = {
     ...a: any[]
   ) => Response | Promise<Response> ? (
     x: ClientArg<Q, M>,
-  ) => Promise<R>
+  ) => Promise<[R, Response]>
+
   // SocketEndpoint
   : T extends (
     req: SocketEndpointRequest<infer Q, infer S, infer R>,
   ) => Response | Promise<Response> ? (
     x: ClientArg<Q, never, true>
   ) => WS<R, S> // NOTE: Not wrapped in a Promise
+
   // RouterShape  
   // When a router's type is specified, the router's shape is passed back into
   // the client and gets handled here
   : T extends RouterShape ? UnionToIntersection<{
     [K in keyof T]: ExpandPath<K, Client<T[K]>>;
   }[keyof T]>
+
   // ClientType[]
   : T extends ClientType[] ? UnionToIntersection<Client<T[number]>>
-  // Any other type results in an unknown request / response shape
-  : Record<never, never>
+
+  // no-op for anything else (just generic client function)
+  : {
+    <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+      Socket extends true ? WS : Promise<[unknown, Response]>
+    );
+    [x: string]: Client;
+  }
 );
 
-// TODO: CORS
+// TODO: Any other fetch options that can be forwarded (example: CORS)
 /**
  * Arguments for the client function when its internal path points to an
  * endpoint.
  */
 export type ClientArg<
-  Query = unknown,
-  Message = unknown,
-  Socket = unknown,
+  Query = never,
+  Message = never,
+  Socket = never,
 > = Clean<{
   /**
    * Additional path segments to use when making a request to this endpoint.
@@ -254,16 +264,17 @@ export type ClientArg<
    */
   serializers?: Serializers;
   // June 2, 2022: I wanted to do this progress feature, but the Fetch API
-  // doesn't support request streams and the initial spec for that feature may
-  // be dropped altogether if Chrome decides to bow out. They've already
-  // declared that they won't try to tackle full-duplex streams or streams
-  // supporting HTTP/1.1. Often with stuff like this, if chrome doesn't want to
-  // do it there's a high probability it just won't get done. To follow along:
-  // https://github.com/whatwg/fetch/issues/1438
+  // doesn't support request streaming and the initial spec for that feature may
+  // be dropped altogether if chrome decides to bow out. They've already
+  // declared they won't attempt full-duplex Fetch streams or streams supporting
+  // HTTP/1.1. It often seem that with stuff like this, if chrome doesn't want
+  // to do it there's a high probability it just won't get done. To follow
+  // along: https://github.com/whatwg/fetch/issues/1438
   //
-  // A feature like this has been on the docket for a long time, since at least
-  // 2015 with https://github.com/whatwg/fetch/issues/65. We shouldn't expect
-  // any immediate remedies :(
+  // A feature for upload progress monitoring in fetch requests has been on the
+  // docket for a long time, since at least 2015 with
+  // https://github.com/whatwg/fetch/issues/65. Sadly, there's no reason to hope
+  // for any remedies in the near future :(
   /**
    * If provided, this function will be called whenever the request progress
    * changes. The argument is the progress as a fraction, i.e. 50% upload
@@ -276,9 +287,9 @@ export type ClientArg<
  * ClientArg but without any type information. These are the arguments when the
  * type for the client function isn't known.
  */
-export interface GenericClientArg {
+export interface AnyClientArg<Socket extends boolean = false> {
   path?: string;
-  socket?: boolean;
+  socket?: Socket;
   headers?: HeadersInit;
   query?: unknown;
   message?: unknown;
@@ -287,21 +298,93 @@ export interface GenericClientArg {
 }
 
 /**
- * Constructs a new Client tied to the base URL. The provided set of serializers
- * will be used everywhere that data is de/serialized when using this client,
- * including web sockets.
+ * Constructs a new Client function tied to the base URL. The provided set of
+ * serializers will be used everywhere that data is de/serialized when using
+ * this client, including web sockets.
  *
  * If the type parameter provided is a Router, Endpoint, or SocketEndpoint, the
- * returned client's type will be tailored to match the inputs and outputs
+ * returned Client's type will be tailored to match the inputs and outputs
  * expected by that handler.
+ *
+ * The Client is a function wrapped in a getter Proxy. Each property access will
+ * return a new Client, extending the URL of the original Client; the periods
+ * translate to path dividers and the property keys are path segments.
+ * 
+ * Extended example:
+ *
+ * ```ts
+ * // server.ts -------------------------------------------
+ *
+ * import {
+ *   router,
+ *   endpoint,
+ *   serve,
+ * } from "https://deno.land/x/cav/mod.ts";
+ *
+ * export type Main = typeof main;
+ *
+ * const main = router({
+ *   api: {
+ *     v1: {
+ *       // GET /api/v1/hello -> `123` (application/json)
+ *       hello: endpoint(() => 123),
+ *     },
+ *     v2: {
+ *       // GET /api/v2/hello?name=$name -> `$name` (text/plain)
+ *       hello: endpoint({
+ *         query: (q: { name: string }) => q,
+ *         resolve: (x) => x.query.name,
+ *       }),
+ *     },
+ *   },
+ * });
+ *
+ * serve(main, { port: 8080 });
+ *
+ * // client.ts ---------------------------------------------
+ *
+ * import { client } from "https://deno.land/x/cav/mod.ts";
+ * import type { Main } from "../server.ts";
+ *
+ * const main = client<Main>("http://localhost:8080");
+ *
+ * const v1 = main.api.v1.hello;
+ * // Type: (x: ClientArg) => Promise<number>
+ *
+ * const v2 = main.api.v2.hello;
+ * // Type: (x: ClientArg<{ name: string }>) => Promise<string>
+ *
+ * console.log(await v1());
+ * console.log(await main.api.v1.hello());
+ * // Output: [123, Response] (for both)
+ *
+ * console.log(await v2({ query: { name: "world" } }))
+ * // Output: ["world", Response]
+ *
+ * console.log(await v2({ query: {} }));
+ * // IDE error: Missing "name: string" on query
+ * // Output: [undefined, Response]
+ *
+ * await main.not.found();
+ * // Throws: HttpError("404 not found", { status: 404 })
+ * ```
  */
 export function client<T extends ClientType = null>(
   baseUrl = "",
   baseSerializers?: Serializers,
 ): Client<T> {
-  const clientFn = (path: string, x: GenericClientArg = {}) => {
-    // REVIEW: Check that there's no conflicting serializer names (should I
-    // allow overriding?)
+  // Remove duplicate/trailing slashes from the base url
+  let [proto, ...others] = baseUrl.split("://");
+  others = others.map(v => v.split("/").filter(v2 => !!v2).join("/"));
+  baseUrl = proto + "://" + others.join("/");
+
+  const clientFn = (path: string, x: AnyClientArg = {}) => {
+    // Calculate the final request path
+    let xp = x.path || "";
+    xp = xp.split("/").filter(v => !!v).join("/");
+    path = baseUrl + (path ? "/" + path : "") + (xp ? "/" + xp : "");
+
+    // Check that there's no conflicting serializer names
     if (x.serializers && baseSerializers) {
       for (const [k, v] of Object.entries(x.serializers)) {
         if (v && k in baseSerializers) {
@@ -336,11 +419,10 @@ export function client<T extends ClientType = null>(
         url.protocol = "wss:";
       }
 
-      // Client-side sockets don't parse incoming socket messages. Note that
-      // this is returned synchronously. It's pretty anti-pattern to sometimes
-      // return promises but not all the time. I'm doing this consciously; I
-      // don't want to have to async/await just to use web sockets, whose API is
-      // already asynchronous with event listeners
+      // Note that this is returned synchronously. It's anti-pattern to
+      // sometimes return promises but not all the time. I'm doing this
+      // consciously; I don't want to need async/await just to use web sockets,
+      // whose API is already asynchronous b/c event listeners
       return webSocket(url.href, { serializers });
     }
 
@@ -348,39 +430,35 @@ export function client<T extends ClientType = null>(
       const req = packRequest(url.href, {
         headers: x.headers,
         message: x.message,
-        serializers: x.serializers,
+        serializers,
       });
 
       const res = await fetch(req);
-      const resBody = await unpack(res);
+      const body = await unpack(res, serializers);
       if (!res.ok) {
         throw new HttpError((
-          resBody instanceof HttpError ? resBody.message
-          : typeof resBody === "string" ? resBody
+          body instanceof HttpError ? body.message
+          : typeof body === "string" ? body
           : res.statusText
         ), {
-          status: (
-            resBody instanceof HttpError ? resBody.status
-            : res.status
-          ),
-          detail: { body: resBody },
-          expose: resBody instanceof HttpError ? resBody.expose : null,
+          status: res.status, // Note that HTTP status is always used
+          detail: { body, res },
+          expose: body instanceof HttpError ? body.expose : null,
         });
       }
-
-      return resBody;
+      return [body, res];
     })();
   };
 
   const proxy = (path: string): unknown => {
-    return new Proxy((x: GenericClientArg) => clientFn(path, x), {
+    return new Proxy((x: AnyClientArg) => clientFn(path, x), {
       get(_, property) {
-        const prop = property as string;
-        const append = prop.split("/").filter((p) => !!p).join("/");
-        return proxy(path.endsWith("/") ? path + append : path + "/" + append);
+        const append = (property as string)
+          .split("/").filter(p => !!p).join("/");
+        return proxy(path && append ? path + "/" + append : path + append);
       },
     });
   };
 
-  return proxy(baseUrl) as Client<T>;
+  return proxy("") as Client<T>;
 }
