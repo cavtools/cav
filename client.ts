@@ -101,29 +101,31 @@ export interface RouterRequest<
 /** Type constraint for the Client's type parameter. */
 export type ClientType = (
   | Handler
-  | { [x: number]: ClientType }
+  | { [x: number]: ClientType } // same thing as ClientType[]
   | RouterShape
   | null
 );
 
-// REVIEW: I came up with two methods when approaching the e2e type safety
-// problem re: how routers are handled on the client. One that expanded router
-// paths into objects that resembled the router shape, and another that
-// flattened the router shape into a 2D array of all acceptable paths. The
-// former requires using a Proxy, the latter doesn't. I ended up going with the
-// former because it seemed easier at the time given how typescript template
-// strings work and it better aligns with how routers get defined. But now I'm
-// not so sure since it isn't intuitive and requires Proxies to pull it off,
-// which is generally discouraged in the JS community. I may experiment with
-// alternatives to this approach if the current method gets hairy. In the
-// meantime, please excuse all the conditionals and be on the look out for bugs
-// and edge cases (there's a lot probably)
+// REVIEW: I was going to try two implementation ideas when approaching the e2e
+// type safety problem re: how routers are handled on the client. One that
+// expanded router paths into objects that resembled the router shape, and
+// another that flattened the router shape into a 2D array of all acceptable
+// paths. The former requires using a Proxy, the latter doesn't. I ended up
+// going with the former because it seemed easier at the time given how
+// typescript template strings work, and it better aligns with how routers get
+// defined (like methods on objects). But now I'm not so sure since it isn't
+// super intuitive and requires Proxies to pull it off (magic), which is
+// generally discouraged in the community. I think time will tell me if I need
+// to change it to the other idea. I kinda like it rn tho... magic is fun
 
 /**
  * Expands a route path from a RouterRequest into an object representing the
- * client property accesses required to trigger a request for that route.
+ * Client property accesses required to trigger a request for that route.
  * Example: `ExpandPath<"hello/world", true>` becomes `{ hello: { world: true }
  * }`
+ *
+ * This is needed because routes are allowed to have slashes and/or path groups
+ * in them.
  */
 type ExpandPath<K, T> = (
   K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
@@ -134,8 +136,10 @@ type ExpandPath<K, T> = (
   : never
 );
 
-// Generates a type from the input with any strictly undefined/never properties
-// removed. Preserves optional properties.
+/**
+ * Generates a type from the input with any strictly undefined/never properties
+ * removed. Preserves optional properties.
+ */
 type Clean<
   T,
   Required = {
@@ -158,7 +162,7 @@ type Clean<
   },
 > = Required & Optional;
 
-// https://fettblog.eu/typescript-union-to-intersection/
+/** https://fettblog.eu/typescript-union-to-intersection/ */
 type UnionToIntersection<U> = (
   U extends unknown ? (k: U) => void : never
 ) extends ((k: infer I) => void) ? I : never;
@@ -215,13 +219,9 @@ export type Client<T extends ClientType = null> = {
   // ClientType[]
   : T extends ClientType[] ? UnionToIntersection<Client<T[number]>>
 
-  // no-op for anything else (just generic client function)
-  : {
-    <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
-      Socket extends true ? WS : Promise<[unknown, Response]>
-    );
-    [x: string]: Client;
-  }
+  // no-op for anything else (see up top)
+  // deno-lint-ignore ban-types
+  : {}
 );
 
 // TODO: Any other fetch options that can be forwarded (example: CORS)

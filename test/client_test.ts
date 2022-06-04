@@ -200,49 +200,57 @@ Deno.test("rejects whenever there's a non-2xx status code", async () => {
 
 // E2E tests (compile-time)
 
+// REVIEW: I'm sure there's a better ways to write these, I'm just too in the
+// zone to search for them rn
+
 // No parameter (null)
-client() as {
+const _null: (Client extends {
   (x: AnyClientArg<boolean>): unknown;
   [x: string]: Client;
-};
+} ? true : never) = true;
 
+// Router
 type TestRouter = (req: RouterRequest<{
   a: (req: Request) => Response;
 }>) => Response;
-client<TestRouter>() as {
+const _tr: (Client<TestRouter> extends {
   a: {
     (x: AnyClientArg<boolean>): unknown;
     [x: string]: Client
   };
-};
+} ? true : never) = true;
 
+// Endpoint
 type TestEndpoint = (req: EndpointRequest<
   { a: "b" },
   { c: "d" },
   { e: "f" }
 >) => Response;
-client<TestEndpoint>() as (x: ClientArg<
+const _te: (Client<TestEndpoint> extends (x: ClientArg<
   { a: "b" },
   { c: "d" },
   never
->) => Promise<[{ e: "f" }, Response]>;
+>) => Promise<[{ e: "f" }, Response]> ? true : never) = true;
 
+// SocketEndpoint
 type TestSocketEndpoint = (req: SocketEndpointRequest<
   { a: "b" },
   { c: "d" },
   { e: "f" }
 >) => Response;
-client<TestSocketEndpoint>() as (x: ClientArg<
+const _tse: (Client<TestSocketEndpoint> extends (x: ClientArg<
   { a: "b" },
   never,
   true
->) => WS<{ e: "f" }, { c: "d" }>;
+>) => WS<{ e: "f" }, { c: "d" }> ? true : never) = true;
 
+// RouterShape
 type TestRouterShape = { g: (req: Request) => Response };
-client<TestRouterShape>() as {
+const _trs: (Client<TestRouterShape> extends Client & {
   g: Client;
-};
+} ? true : never) = true;
 
+// ClientType[]
 type TestClientTypeArray = (
   | null
   | TestRouter
@@ -250,14 +258,15 @@ type TestClientTypeArray = (
   | TestSocketEndpoint
   | TestRouterShape
 )[];
-client<TestClientTypeArray>() as (
-  & Client<null>
+const _tcta: (Client<TestClientTypeArray> extends (
+  & Client
   & Client<TestRouter>
   & Client<TestEndpoint>
   & Client<TestSocketEndpoint>
   & Client<TestRouterShape>
-);
+) ? true : never) = true;
 
+// Everything
 type TestIntegration = (req: RouterRequest<{
   a: {
     "b/c": {
@@ -270,21 +279,19 @@ type TestIntegration = (req: RouterRequest<{
   h: TestRouter;
   i: null;
 }>) => Response;
-client<TestIntegration>() as {
-  a: {
-    b: {
-      c: {
-        [d: string]: {
+const _ti: (Client<TestIntegration> extends Client & {
+  a: Client & {
+    b: Client<TestClientTypeArray> & {
+      c: Client & {
+        [d: string]: Client & {
           [e: string]: Client<TestEndpoint>;
-        } & Client;
+        };
       } & {
         f: Client<TestSocketEndpoint>;
-      } & Client;
-    } & Client<TestClientTypeArray>;
-  } & Client;
+      };
+    };
+  };
   g: Client<TestRouterShape>;
   h: Client<TestRouter>;
   i: Client;
-} & {
-  [x: string]: Client;
-};
+} ? true : never) = true;

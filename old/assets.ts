@@ -174,21 +174,17 @@ const watchingAssets = new Set<string>();
  * - Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder (recursive)
  *   into an adjacent file with the same name plus a .js suffix
  * - Optionally uses a filesystem watcher to rebundle whenever a change is made
- *   to the typescript files or one of their local dependencies. (The default is
- *   to set watching to true)
+ *   to a bundle file or one of its local dependencies.
  *
  * When the watch option is `true`, any errors encountered during bundling will
- * be logged and suppressed, and the `prepareAssets()` call will start a
- * separate file system watching event loop that re-triggers asset preparation
- * whenever a file changes inside the assets directory. It will return
- * immediately after the initial prep.
+ * be logged and suppressed, and the `prepareAssets()` call will start a file
+ * system watching event loop that re-triggers asset preparation whenever a file
+ * changes inside the assets directory. It will return immediately after the
+ * initial prep.
  *
  * If the --unstable or --allow-write permissions are not available, this
  * function silently does nothing. i.e. In production, you can safely omit those
- * flags and this function will not throw errors if they are missing. This is
- * the intended use case, as this function acts as a kind of on-the-fly
- * code-configured bundler, merging the build step into the development process
- * so that no separate (and complex) build procedure is needed.
+ * flags and still call this function; no errors will be thrown.
  */
 export async function prepareAssets(opt: {
   /**
