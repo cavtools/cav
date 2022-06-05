@@ -55,7 +55,7 @@ export interface EndpointRequest<
  * to the client about valid the socket send/receive message types and
  * acceptable query string parameters for the initial request.
  */
-export interface SocketEndpointRequest<
+export interface SocketRequest<
   Query = unknown,
   Send = unknown,
   Receive = unknown,
@@ -167,11 +167,11 @@ type UnionToIntersection<U> = (
   U extends unknown ? (k: U) => void : never
 ) extends ((k: infer I) => void) ? I : never;
 
-// i'm sorry
 /**
- * A (Proxied) function that wraps `fetch()` for making requests to a Cav
- * handler.
+ * A (Proxied) client function that wraps a `fetch()` process tailored for
+ * making requests to a Cav handler.
  */
+// i'm sorry
 export type Client<T extends ClientType = null> = {
   <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
     Socket extends true ? WS : Promise<[unknown, Response]>
@@ -204,10 +204,10 @@ export type Client<T extends ClientType = null> = {
 
   // SocketEndpoint
   : T extends (
-    req: SocketEndpointRequest<infer Q, infer S, infer R>,
+    req: SocketRequest<infer Q, infer S, infer R>,
   ) => Response | Promise<Response> ? (
     x: ClientArg<Q, never, true>
-  ) => WS<R, S> // NOTE: Not wrapped in a Promise
+  ) => WS<R, S> // NOTE: Not a Promise
 
   // RouterShape  
   // When a router's type is specified, the router's shape is passed back into
@@ -265,11 +265,11 @@ export type ClientArg<
   serializers?: Serializers;
   // June 2, 2022: I wanted to do this progress feature, but the Fetch API
   // doesn't support request streaming and the initial spec for that feature may
-  // be dropped altogether if chrome decides to bow out. They've already
-  // declared they won't attempt full-duplex Fetch streams or streams supporting
-  // HTTP/1.1. It often seem that with stuff like this, if chrome doesn't want
-  // to do it there's a high probability it just won't get done. To follow
-  // along: https://github.com/whatwg/fetch/issues/1438
+  // be dropped altogether if chrome decides to bow out. They've declared they
+  // won't attempt full-duplex Fetch streams or streams supporting HTTP/1.1. It
+  // often seems that with stuff like this, if chrome doesn't want to do it
+  // there's a high probability it just won't get done. To follow along:
+  // https://github.com/whatwg/fetch/issues/1438
   //
   // A feature for upload progress monitoring in fetch requests has been on the
   // docket for a long time, since at least 2015 with
@@ -292,7 +292,7 @@ export interface AnyClientArg<Socket extends boolean = false> {
   socket?: Socket;
   headers?: HeadersInit;
   query?: unknown;
-  message?: unknown;
+  message?: Socket extends true ? null | undefined : unknown;
   serializers?: Serializers;
   // onProgress?: (progress: number) => void | Promise<void>; // :(
 }
@@ -385,16 +385,17 @@ export function client<T extends ClientType = null>(
     path = baseUrl + (path ? "/" + path : "") + (xp ? "/" + xp : "");
 
     // Check that there's no conflicting serializer names
-    if (x.serializers && baseSerializers) {
-      for (const [k, v] of Object.entries(x.serializers)) {
-        if (v && k in baseSerializers) {
-          throw new Error(
-            `Conflict: The serializer key "${k}" is already used by one of the client's base serializers`,
-          );
-        }
+    let serializers: Serializers = { ...(x.serializers || {}) };
+    for (const [k, v] of Object.entries(serializers)) {
+      if (v && baseSerializers && baseSerializers[k]) {
+        throw new Error(
+          `Conflict: The serializer key "${k}" is already used by one of the client's base serializers`,
+        );
+      } else if (!v) {
+        delete serializers[k];
       }
     }
-    const serializers = { ...baseSerializers, ...x.serializers };
+    serializers = { ...baseSerializers, ...serializers };
 
     // If there is an explicit origin in the path, it should override the second
     // argument. i.e. the second argument is just a fallback
@@ -434,7 +435,7 @@ export function client<T extends ClientType = null>(
       });
 
       const res = await fetch(req);
-      const body = await unpack(res, serializers);
+      const body = await unpack(res, { serializers });
       if (!res.ok) {
         throw new HttpError((
           body instanceof HttpError ? body.message

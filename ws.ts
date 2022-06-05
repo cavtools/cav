@@ -1,8 +1,9 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-import { serialize, deserialize } from "./serial.ts";
-import type { Parser, ParserFunction } from "./parser.ts";
+import { HttpError, serialize, deserialize } from "./serial.ts";
+import { normalizeParser } from "./parser.ts";
+import type { Parser } from "./parser.ts";
 import type { Serializers } from "./serial.ts";
 
 /**
@@ -65,7 +66,8 @@ import type { Serializers } from "./serial.ts";
   /**
    * Register an event listener for the "error" event, triggered when the
    * connection has been closed due to an error or when an error is thrown
-   * inside one of the event listeners.
+   * inside one of the event listeners. This is also the event triggered when
+   * the server sends back an HttpError due to invalid input.
    */
   on(type: "error", cb: WSErrorListener): void;
   /**
@@ -111,10 +113,11 @@ export type AnySocket = WS<any, any>;
 export interface WSInit<Receive = unknown> {
   /**
    * For parsing received messages before calling any registered message
-   * listeners. If this is ommitted, messages will be passed through to
-   * listeners without parsing, typed as `unknown`.
+   * listeners. If this is omitted, messages will be passed through to listeners
+   * without parsing, typed as `unknown`. If this parser returns undefined, no
+   * message event will be triggered.
    */
-  message?: Parser<unknown, Receive>;
+  message?: Parser<unknown, Receive> | null;
   /**
    * Additional serializers to use when serializing and deserializing
    * sent/received messages.
@@ -151,22 +154,10 @@ export function webSocket<
   // handler in the works for cases like this, maybe this isn't necessary?
   const trigger = (type: keyof typeof listeners, ...args: unknown[]) => {
     if (ws[`on${type}`]) {
-      (async () => {
-        try {
-          await (ws[`on${type}`] as AnyListener)(...args);
-        } catch (err) {
-          console.error(err);
-        }
-      })();
+      (ws[`on${type}`] as AnyListener)(...args);
     }
     for (const v of listeners[type].values()) {
-      (async () => {
-        try {
-          await (v as AnyListener)(...args);
-        } catch (err) {
-          console.error(err);
-        }
-      })();
+      (v as AnyListener)(...args);
     }
   };
   
@@ -232,15 +223,20 @@ export function webSocket<
       );
   
       if (init?.message) {
-        const parse: ParserFunction = (
-          typeof init.message === "function"
-            ? init.message
-            : init.message.parse
-        );
-        message = await parse(message) as Receive;
+        const parseMessage = normalizeParser(init.message);
+        message = await parseMessage(message) as Receive;
       }
     } catch (err) {
       trigger("error", err, null);
+      return;
+    }
+
+    if (message instanceof HttpError) {
+      trigger("error", message, null);
+      return;
+    }
+
+    if (typeof message === "undefined") {
       return;
     }
 

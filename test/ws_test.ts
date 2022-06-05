@@ -35,6 +35,7 @@ const echoServer = new http.Server({
   },
 });
 echoServer.listenAndServe();
+window.onunload = () => echoServer.close();
 
 Deno.test("echo", async () =>  {
   const message = await new Promise((resolve, reject) => {
@@ -154,18 +155,6 @@ Deno.test("echo with complex data and custom serializers", async () => {
   assertStrictEquals(refs[0], refs[1]);
 });
 
-Deno.test("errors inside listeners are logged and suppressed", async () => {
-  await new Promise((resolve, reject) => {
-    const socket = webSocket("ws://localhost:8080");
-    socket.onopen = () => {
-      socket.send("close");
-      throw new Error("this error is supposed to be logged");
-    };
-    socket.onclose = () => resolve(null);
-    socket.onerror = (err) => reject(err);
-  });
-});
-
 Deno.test("turning off a specific listener", async () => {
   const result = await new Promise((resolve, reject) => {
     const socket = webSocket("ws://localhost:8080");
@@ -217,5 +206,20 @@ Deno.test("turning off all listeners for all events", async () => {
     socket.on("message", () => reject(null)); // Included on purpose
     socket.on("error", () => reject(null));
     socket.on("close", () => reject(null));
+  });
+});
+
+Deno.test("no message event when parser returns undefined", async () => {
+  await new Promise((resolve, reject) => {
+    const ws = webSocket("ws://localhost:8080", {
+      message: () => undefined,
+    });
+    ws.on("message", () => reject(null));
+    ws.on("close", () => resolve(null));
+    ws.on("error", () => reject(null));
+    ws.on("open", () => {
+      ws.send({});
+      ws.send("close");
+    });
   });
 });

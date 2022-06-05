@@ -668,7 +668,7 @@ async function testPacking(
       : packResponse(message, opt)
     );
 
-    const unpacked = await unpack(r, opt.serializers);
+    const unpacked = await unpack(r, { serializers: opt.serializers });
     if (opt.check) {
       await opt.check({ opt, unpacked });
     } else {
@@ -703,179 +703,272 @@ Deno.test("packing and unpacking", async (t) => {
     message: null,
   }));
 
-  await t.step("string", () =>
-    testPacking({
-      message: "foo-bar",
-    }));
+  await t.step("string", () => testPacking({
+    message: "foo-bar",
+  }));
 
-  await t.step("object", () =>
-    testPacking({
-      message: {
-        a: new Set(["baz"]),
-        b: Symbol.for("poop"),
-      },
-    }));
+  await t.step("object", () => testPacking({
+    message: {
+      a: new Set(["baz"]),
+      b: Symbol.for("poop"),
+    },
+  }));
 
-  await t.step("File", () =>
-    testPacking({
-      message: new File(["blah"], "eh.txt", { type: "text/plain" }),
-      check: async (x) =>
-        await assertEqualsBlob(x.unpacked, x.opt.message as File),
-    }));
+  await t.step("File", () => testPacking({
+    message: new File(["blah"], "eh.txt", { type: "text/plain" }),
+    check: async (x) =>
+      await assertEqualsBlob(x.unpacked, x.opt.message as File),
+  }));
 
-  await t.step("Blob", () =>
-    testPacking({
-      message: new Blob(
-        ["you look lovely today, btw"],
-        { type: "text/plain" },
-      ),
-      check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as Blob),
-    }));
+  await t.step("Blob", () => testPacking({
+    message: new Blob(
+      ["you look lovely today, btw"],
+      { type: "text/plain" },
+    ),
+    check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as Blob),
+  }));
 
   await t.step(
     "File with quotes in filename (testing content-disposition)",
-    () =>
-      testPacking({
-        message: new File(["jk i can't see you"], 'thank "god".txt', {
-          type: "text/plain",
-        }),
-        check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as File),
+    () => testPacking({
+      message: new File(["jk i can't see you"], 'thank "god".txt', {
+        type: "text/plain",
       }),
+      check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as File),
+    }),
   );
 
-  await t.step("object w/Files", () =>
-    testPacking({
-      message: new Map([[
-        new File(["hello"], "dumb.csv", { type: "text/csv" }),
-        new File(["world"], "dumber.csv", { type: "text/csv" }),
-      ]]),
-      check: async (x) => {
-        const [[a, b]] = Array.from(x.unpacked.entries());
-        const [[oa, ob]] = Array.from(
-          (x.opt.message as Map<File, File>).entries(),
-        );
-        await assertEqualsBlob(a, oa);
-        await assertEqualsBlob(b, ob);
-      },
-    }));
+  await t.step("object w/Files", () => testPacking({
+    message: new Map([[
+      new File(["hello"], "dumb.csv", { type: "text/csv" }),
+      new File(["world"], "dumber.csv", { type: "text/csv" }),
+    ]]),
+    check: async (x) => {
+      const [[a, b]] = Array.from(x.unpacked.entries());
+      const [[oa, ob]] = Array.from(
+        (x.opt.message as Map<File, File>).entries(),
+      );
+      await assertEqualsBlob(a, oa);
+      await assertEqualsBlob(b, ob);
+    },
+  }));
 
-  await t.step("object w/Blobs", () =>
-    testPacking({
-      message: new Map([[
-        new Blob(["hello"], { type: "text/csv" }),
-        new Blob(["world"], { type: "text/csv" }),
-      ]]),
-      check: async (x) => {
-        const [[a, b]] = Array.from(x.unpacked.entries());
-        const [[oa, ob]] = Array.from(
-          (x.opt.message as Map<File, File>).entries(),
-        );
-        await assertEqualsBlob(a, oa);
-        await assertEqualsBlob(b, ob);
-      },
-    }));
+  await t.step("object w/Blobs", () => testPacking({
+    message: new Map([[
+      new Blob(["hello"], { type: "text/csv" }),
+      new Blob(["world"], { type: "text/csv" }),
+    ]]),
+    check: async (x) => {
+      const [[a, b]] = Array.from(x.unpacked.entries());
+      const [[oa, ob]] = Array.from(
+        (x.opt.message as Map<File, File>).entries(),
+      );
+      await assertEqualsBlob(a, oa);
+      await assertEqualsBlob(b, ob);
+    },
+  }));
 
   const refFile = new File(["red cards for everybody"], "soccer.txt", {
     type: "text/plain",
   });
   await t.step(
     "object w/ multiple ref. equal Files",
-    () =>
-      testPacking({
-        message: {
-          a: refFile,
-          b: refFile,
-        },
-        check: async (x) => {
-          assertStrictEquals(x.unpacked.a, x.unpacked.b);
-          await assertEqualsBlob(
-            x.unpacked.a,
-            (x.opt.message as Record<string, File>).a,
-          );
-        },
-      }),
+    () => testPacking({
+      message: {
+        a: refFile,
+        b: refFile,
+      },
+      check: async (x) => {
+        assertStrictEquals(x.unpacked.a, x.unpacked.b);
+        await assertEqualsBlob(
+          x.unpacked.a,
+          (x.opt.message as Record<string, File>).a,
+        );
+      },
+    }),
   );
 
   // Asymmetric
 
-  await t.step("ArrayBufferView w/o content-type", () =>
-    testPacking({
-      message: new Uint8Array([1, 2, 3]),
-      check: (x) =>
-        assertEqualsBlob(
-          x.unpacked,
-          new Blob([new Uint8Array([1, 2, 3])]),
-        ),
-    }));
+  await t.step("ArrayBufferView w/o content-type", () => testPacking({
+    message: new Uint8Array([1, 2, 3]),
+    check: (x) => assertEqualsBlob(
+      x.unpacked,
+      new Blob([new Uint8Array([1, 2, 3])]),
+    ),
+  }));
 
   await t.step(
     "ArrayBufferView w/content-type",
-    () =>
-      testPacking({
-        message: new Uint8Array([1, 2, 3]),
-        headers: { "content-type": "none-of-your/business" },
-        check: (x) =>
-          assertEqualsBlob(
-            x.unpacked,
-            new Blob([new Uint8Array([1, 2, 3])], {
-              type: "none-of-your/business",
-            }),
-          ),
-      }),
+    () => testPacking({
+      message: new Uint8Array([1, 2, 3]),
+      headers: { "content-type": "none-of-your/business" },
+      check: (x) =>
+        assertEqualsBlob(
+          x.unpacked,
+          new Blob([new Uint8Array([1, 2, 3])], {
+            type: "none-of-your/business",
+          }),
+        ),
+    }),
   );
 
-  await t.step("ReadableStream w/o content-type", () =>
-    testPacking({
-      // This readable stream gets recreated for both packRequest and
-      // packResponse
-      message: () =>
-        new ReadableStream<Uint8Array>({
-          start: (controller) => {
-            controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
-            controller.close();
-          },
-        }),
-      check: (x) => assertEqualsBlob(x.unpacked, new Blob(["-"])),
-    }));
+  await t.step("ReadableStream w/o content-type", () => testPacking({
+    // This readable stream gets recreated for both packRequest and
+    // packResponse
+    message: () =>
+      new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
+          controller.close();
+        },
+      }),
+    check: (x) => assertEqualsBlob(x.unpacked, new Blob(["-"])),
+  }));
 
-  await t.step("ReadableStream w/content-type", () =>
-    testPacking({
-      // This readable stream gets recreated for both packRequest and
-      // packResponse
-      message: () =>
-        new ReadableStream<Uint8Array>({
-          start: (controller) => {
-            controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
-            controller.close();
-          },
-        }),
-      headers: { "content-type": "text/plain" },
-      check: (x) => {
-        assertEquals(x.unpacked, "-");
-      },
-    }));
+  await t.step("ReadableStream w/content-type", () => testPacking({
+    // This readable stream gets recreated for both packRequest and
+    // packResponse
+    message: () =>
+      new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
+          controller.close();
+        },
+      }),
+    headers: { "content-type": "text/plain" },
+    check: (x) => {
+      assertEquals(x.unpacked, "-");
+    },
+  }));
 
-  await t.step("URLSearchParams", () =>
-    testPacking({
-      message: new URLSearchParams({ hello: "world" }),
-      check: (x) => assertEquals(x.unpacked, { hello: "world" }),
-    }));
+  await t.step("URLSearchParams", () => testPacking({
+    message: new URLSearchParams({ hello: "world" }),
+    check: (x) => assertEquals(x.unpacked, { hello: "world" }),
+  }));
 
   const form = new FormData();
   form.set("hello", "world");
   form.append("foo", "bar");
   form.append("foo", "baz");
-  await t.step("FormData", () =>
-    testPacking({
-      message: form,
-      check: (x) =>
-        assertEquals(x.unpacked, {
-          hello: "world",
-          foo: ["bar", "baz"],
-        }),
+  await t.step("FormData", () => testPacking({
+    message: form,
+    check: (x) =>
+      assertEquals(x.unpacked, {
+        hello: "world",
+        foo: ["bar", "baz"],
+      }),
+  }));
+
+  // Max body size
+
+  await t.step("default max body size w/ content-length header", async () => {
+    const decoder = new TextDecoder();
+    const resolves = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(1024 * 1024 + 1)),
+      headers: { "content-length": (1024 * 1024).toString() },
+    });
+    const rejects = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(1024 * 1024 + 1)),
+    });
+    await unpack(resolves);
+    try {
+      await unpack(rejects);
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("default max body size w/o content-length header", async () => {
+    const resolves = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(1024 * 1024));
+        controller.close();
+      },
     }));
+    const rejects = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(1024 * 1024 + 1));
+        controller.close();
+      },
+    }));
+    await unpack(resolves);
+    try {
+      await unpack(rejects);
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("max body size w/ content-length header", async () => {
+    const decoder = new TextDecoder();
+    const resolves = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(10)),
+    });
+    const rejects = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(11)),
+    });
+    await unpack(resolves, { maxBodySize: 10 });
+    try {
+      await unpack(rejects, { maxBodySize: 10 });
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("max body size w/o content-length header", async () => {
+    const resolves = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(10));
+        controller.close();
+      },
+    }));
+    const rejects = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(11));
+        controller.close();
+      },
+    }));
+    await unpack(resolves, { maxBodySize: 10 });
+    try {
+      await unpack(rejects, { maxBodySize: 10 });
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("max body size 0", async () => {
+    const resolves = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(1024 * 1024 + 1));
+        controller.close();
+      },
+    }));
+    await unpack(resolves, { maxBodySize: 0 });
+  });
 
   // Misc
+
+  await t.step("packResponse: Response forwarding", () => {
+    const res = new Response(null, {
+      status: 418,
+      headers: { "x-custom-1": "original" },
+    });
+    const packed = packResponse(res, {
+      headers: { "x-custom-2": "merged" },
+      status: 500, // ignored
+      statusText: "hello", // ignored
+    });
+    assertStrictEquals(packed, res);
+    assertEquals(packed.headers.get("x-custom-1"), "original");
+    assertEquals(packed.headers.get("x-custom-2"), "merged");
+    assertEquals(packed.status, 418);
+    assert(packed.statusText !== "hello", "didn't ignore status text");
+  });
 
   await t.step("specified status overrides auto status", async () => {
     const res = packResponse(undefined, { status: 200 });
@@ -906,15 +999,14 @@ Deno.test("packing and unpacking", async (t) => {
   });
 
   class Custom {}
-  await t.step("custom serializers", () =>
-    testPacking({
-      message: new Custom(),
-      serializers: {
-        custom: serializer({
-          check: (v) => v instanceof Custom,
-          serialize: () => null,
-          deserialize: () => new Custom(),
-        }),
-      },
-    }));
+  await t.step("custom serializers", () => testPacking({
+    message: new Custom(),
+    serializers: {
+      custom: serializer({
+        check: (v) => v instanceof Custom,
+        serialize: () => null,
+        deserialize: () => new Custom(),
+      }),
+    },
+  }));
 });

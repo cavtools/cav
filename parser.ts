@@ -44,3 +44,14 @@ export type ParserOutput<T> = (
     : T extends Parser<unknown, infer O> ? O
     : never
 );
+
+/** Normalizes a Parser into a ParserFunction. */
+export function normalizeParser<
+  I = unknown,
+  O = unknown,
+>(parser: Parser<I, O>): ParserFunction<I, O> {
+  return (
+    typeof parser === "function" ? parser
+    : parser.parse
+  );
+}

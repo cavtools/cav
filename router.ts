@@ -16,6 +16,8 @@ export interface RouterContext {
   url: URL;
   /** The current, unrouted portion of the requested path. */
   path: string;
+  /** The raw query string parameters, as an object. */
+  query: Record<string, string | string[]>;
   /** The path groups captured during the routing process so far. */
   groups: Record<string, string>;
   /**
@@ -52,19 +54,30 @@ export function routerContext(request: Request): RouterContext {
     redirect = Response.redirect(url.href, 302);
   }
 
+  const query: Record<string, string | string[]> = {};
+  for (const [k, v] of url.searchParams.entries()) {
+    const old = query[k];
+    if (typeof old === "string") {
+      query[k] = [old, v];
+    } else if (Array.isArray(old)) {
+      query[k] = [...old, v];
+    } else {
+      query[k] = v;
+    }
+  }
+
   const ctx: RouterContext = {
     url,
     path,
     groups: {},
+    query,
     redirect,
   };
   Object.assign(req, { [_routerContext]: ctx });
   return ctx;
 }
 
-/**
- * A Handler that routes Requests to Endpoints and other Routers.
- */
+/** Cav Router handlers, for routing requests. */
 // deno-lint-ignore ban-types
 export type Router<S extends RouterShape = {}>  = S & ((
   req: RouterRequest<S>,
@@ -72,7 +85,8 @@ export type Router<S extends RouterShape = {}>  = S & ((
 ) => Promise<Response>);
 
 /**
- * Constructs a new Router handler using the provided routes.
+ * Constructs a new Router handler using the provided routes. The route
+ * properties are also available on the returned Router function.
  */
 export function router<S extends RouterShape>(routes: S): Router<S> {
   const shape: RouterShape = {};
@@ -97,7 +111,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
         s.match(/[^\\][:*?(){}]/)
       ) {
         throw new SyntaxError(
-          `"${k}" isn't a valid Router route. The Router only supports basic path segments and named path segments (groups). Wildcards, RegExp, optionals, and other advanced URLPattern syntax isn't supported, with the exception of the solo wildcard route "*"`,
+          `"${k}" isn't a valid Router route. The Router only supports basic path segments and named path segments (groups). Wildcards, RegExp, optionals, and other advanced URLPattern syntax isn't supported, with the exception of the solo wildcard "*"`,
         );
       }
     }
@@ -159,6 +173,8 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       return ctx.redirect;
     }
 
+    let lastNoMatch: Response | null = null;
+
     for (const [pattern, handler] of patterns.entries()) {
       const match = pattern.exec(ctx.path, "http://_._");
       if (!match) {
@@ -183,12 +199,16 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
             const response = await h(req, conn);
             if (didMatch(response)) {
               return response;
+            } else {
+              lastNoMatch = response;
             }
           }
         } else {
           const response = await handler(req, conn);
           if (didMatch(response)) {
             return response;
+          } else {
+            lastNoMatch = response;
           }
         }
       } finally {
@@ -199,23 +219,30 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     }
 
     // When nothing matches, return the last 404
-    return Object.assign(new Response("404 not found", { status: 404 }), { [noMatch]: true });
+    if (lastNoMatch) {
+      return lastNoMatch;
+    }
+    return noMatch(new Response("404 not found", { status: 404 }));
   };
 
   return Object.assign(handler, { ...routes });
 }
 
+const _noMatch = Symbol("_noMatch");
+
 /**
- * A symbol assigned to Responses to indicate a "no match", i.e. the containing
- * Router should continue looking for matching handlers and disregard this
- * Response.
+ * Adds a Symbol to the Response to indicate to any containing Routers that the
+ * handler didn't match with the Request. The Router will continue looking for
+ * matches.
  */
-export const noMatch = Symbol("noMatch");
+export function noMatch(res: Response): Response {
+  return Object.assign(res, { [_noMatch]: true });
+}
 
 /**
  * Checks if the Response is a "did match" Response, i.e. the handler it came
  * from wants this Response to be returned to the client.
  */
 export function didMatch(res: Response): boolean {
-  return !(res as Response & Record<symbol, boolean>)[noMatch];
+  return !(res as Response & Record<symbol, boolean>)[_noMatch];
 }

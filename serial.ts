@@ -716,6 +716,16 @@ export function packResponse(
   body?: unknown,
   init?: PackResponseInit,
 ): Response {
+  // If it's already a Response, just append the headers and forward it. Ignore
+  // the init status and statusText
+  if (body instanceof Response) {
+    const mergeHeaders = new Headers(init?.headers);
+    for (const [k, v] of mergeHeaders.entries()) {
+      body.headers.append(k, v);
+    }
+    return body;
+  }
+
   const packed = packBody(body, init?.serializers);
   return new Response(packed.body, {
     status: typeof packed.body === "undefined" ? 204 : 200,
@@ -729,6 +739,18 @@ const mimeParams = /^application\/x-www-form-urlencoded;?/;
 const mimeJson = /^application\/json;?/;
 const mimeForm = /^multipart\/form-data;?/;
 
+/** Options for the `unpack()` function. */
+export interface UnpackOptions {
+  /** Serializers to use when unpacking the Request or Response body. */
+  serializers?: Serializers;
+  /**
+   * If the Request or Response body exceeds this size, a 413 HttpError will be
+   * thrown. If not specified, the default is 1 megabyte. If the number is 0,
+   * there will be no limit on body size.
+   */
+  maxBodySize?: number;
+}
+
 // TODO: Add an option for controlling the way forms/blobs/files are processed.
 // (For large file uploads that are disk backed)
 /**
@@ -738,7 +760,7 @@ const mimeForm = /^multipart\/form-data;?/;
  */
 export async function unpack(
   packed: Request | Response,
-  serializers?: Serializers,
+  opt?: UnpackOptions,
 ): Promise<unknown> {
   // GET requests and 204 responses return undefined. Any other Request or
   // Response without a body returns null
@@ -752,6 +774,40 @@ export async function unpack(
     return null;
   }
 
+  const maxBodySize = (
+    typeof opt?.maxBodySize === "number" ? opt.maxBodySize
+    : 1024 * 1024 // 1 megabyte
+  );
+  const contentLength = parseInt(packed.headers.get("content-length")!, 10);
+  if (isNaN(contentLength) && maxBodySize !== 0) {
+    // If there's no content-length specified but there's a body stream, we need
+    // to use ReadableStreams to track the size of the body. If the size ever
+    // exceeds the maxBodySize, throw a 413
+    const reader = packed.body.getReader();
+    const op = packed;
+    let size = 0;
+    packed = new Response(new ReadableStream({
+      start: controller => {
+        const pump = async (): Promise<void> => {
+          const chunk = await reader.read();
+          if (chunk.done) {
+            controller.close();
+            return;
+          }
+          if (chunk.value) {
+            size += chunk.value.length;
+            if (size > maxBodySize) {
+              throw new HttpError("413 payload too large", { status: 413 });
+            }
+          }
+          controller.enqueue(chunk.value);
+          return pump();
+        };
+        return pump();
+      },
+    }), { headers: op.headers });
+  }
+
   const type = packed.headers.get("content-type") || "";
   const disposition = packed.headers.get("content-disposition");
   if (disposition) {
@@ -761,7 +817,7 @@ export async function unpack(
       return new File([await packed.blob()], filename, { type }); // REVIEW
     }
     if (disposition.match(/^attachment;?/)) {
-      return packed.blob();
+      return await packed.blob();
     }
   }
 
@@ -787,7 +843,7 @@ export async function unpack(
     return parseForm(await packed.formData());
   }
   if (type.match(mimeJson)) {
-    return deserialize(await packed.json(), serializers);
+    return deserialize(await packed.json(), opt?.serializers);
   }
   if (type.match(mimeForm)) {
     const form = await packed.formData();
@@ -800,7 +856,7 @@ export async function unpack(
       return parseForm(form);
     }
     return deserialize(JSON.parse(await shape.text()), {
-      ...serializers,
+      ...opt?.serializers,
       __blob: serializer({
         check: () => false, // Not needed here
         serialize: () => null, // Not needed here

@@ -1,11 +1,11 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { assert, assertEquals } from "./test_deps.ts";
-import { HttpError, packResponse, unpack } from "../serial.ts";
+import { HttpError, packResponse, unpack, serializer } from "../serial.ts";
 import { client } from "../client.ts";
 import type {
   EndpointRequest,
-  SocketEndpointRequest,
+  SocketRequest,
   RouterRequest,
   ClientArg,
   Client,
@@ -41,7 +41,7 @@ async function assertRequestEquals(a: Request, b: {
   assertEquals(a.url, b.url);
   assertEquals(a.method, b.method);
   assertEquals(Array.from(a.headers.entries()), b.headers);
-  assertEquals(await unpack(a, b.serializers), b.body);
+  assertEquals(await unpack(a, { serializers: b.serializers }), b.body);
 }
 
 function assertResponseEquals(a: Response, b: {
@@ -90,16 +90,20 @@ Deno.test("GET request", async () => {
 
 class Custom1 {}
 class Custom2 {}
-const custom1 = {
-  check: (v: unknown) => v instanceof Custom1,
+const custom1 = serializer({
+  check: (v: unknown) => {
+    return v instanceof Custom1;
+  },
   serialize: () => null,
   deserialize: () => new Custom1(),
-};
-const custom2 = {
-  check: (v: unknown) => v instanceof Custom2,
+});
+const custom2 = serializer({
+  check: (v: unknown) => {
+    return v instanceof Custom2;
+  },
   serialize: () => null,
   deserialize: () => new Custom2(),
-};
+});
 
 Deno.test("POST request", async () => {
   nextRes.body = { b: new Custom1(), a: new Custom2() };
@@ -134,7 +138,7 @@ Deno.test("POST request", async () => {
 });
 
 Deno.test("socket request", async () => {
-  const ws = await client(
+  const ws = client(
     "http://localhost:8080/does/not/matter",
     { custom1 },
     // The "send-back-url" part causes the web socket server to send the url
@@ -198,10 +202,24 @@ Deno.test("rejects whenever there's a non-2xx status code", async () => {
   }
 });
 
-// E2E tests (compile-time)
+Deno.test("null value for a base serializer key at call site", async () => {
+  nextRes.body = { a: new Custom1(), b: new Custom2() };
+  nextRes.init = { serializers: { custom1, custom2 }}
+  const [body] = await client("http://localhost", { custom1 })({
+    // Doesn't turn off custom1, that's now how they work. Allowing it to be
+    // null means you can spread a different set of serializers in here while
+    // being able to omit specific keys from that spread. Both custom1 and
+    // custom2 should be enabled
+    serializers: { custom2, custom1: null } as Serializers,
+  });
+  assertEquals(body, nextRes.body);
+});
+
+// Compile-time tests
 
 // REVIEW: I'm sure there's a better ways to write these, I'm just too in the
-// zone to search for them rn
+// zone to search for them rn. When I wrote them by casting them to the correct
+// type, they didn't catch everything, so do this without writing "as".
 
 // No parameter (null)
 const _null: (Client extends {
@@ -233,7 +251,7 @@ const _te: (Client<TestEndpoint> extends (x: ClientArg<
 >) => Promise<[{ e: "f" }, Response]> ? true : never) = true;
 
 // SocketEndpoint
-type TestSocketEndpoint = (req: SocketEndpointRequest<
+type TestSocketEndpoint = (req: SocketRequest<
   { a: "b" },
   { c: "d" },
   { e: "f" }

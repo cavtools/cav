@@ -4,20 +4,21 @@
 
 import { fileServer, graph, path } from "./deps.ts";
 import { HttpError } from "./serial.ts";
+import { noMatch } from "./router.ts";
 
 /** Options controlling how assets are found and served. */
 export interface ServeAssetOptions {
   /**
-   * Sets the current working directory when looking for assets. If a file://
-   * path is provided, the parent folder of the path is used. This is useful if
-   * you want to serve assets relative to the current file using
+   * Sets the current working directory when looking for the asset directory. If
+   * a file:// path is provided, the parent folder of the path is used. This is
+   * useful if you want to serve assets relative to the current file using
    * `import.meta.url`. Default: `"."`
    */
   cwd?: string;
   /**
    * The directory to serve assets from inside the cwd. This pattern encourages
-   * keeping public asset files separated from application source code, so that
-   * code isn't served by mistake. Default: `"assets"`
+   * keeping public asset files separated from source code, so that code isn't
+   * served by mistake. Default: `"assets"`
    */
   dir?: string;
   /**
@@ -62,6 +63,8 @@ export async function serveAsset(
   const dir = opt.dir || "assets";
   const filePath = opt.path;
 
+  // NOTE: This is a no-op in production, and calling it multiple times with the
+  // watch option should be safe. Slight overhead
   prepareAssets({
     cwd,
     dir,
@@ -157,16 +160,13 @@ export async function serveAsset(
     originalResponse.headers.delete("content-length");
     return new Response(content, { headers: originalResponse.headers });
   } catch (e1) {
-    if (e1.message === "404 not found") {
-      throw new HttpError("404 not found", { status: 404 });
+    if (e1 instanceof HttpError && e1.status === 404) {
+      return noMatch(new Response("404 not found", { status: 404 }));
     }
     throw e1;
   }
 }
 
-// TODO: Also check for the allow-write permission
-// @ts-ignore: Bypass error when --unstable isn't specified
-const canEmit = typeof Deno.emit === "undefined";
 const watchingAssets = new Set<string>();
 
 /**
@@ -189,16 +189,16 @@ const watchingAssets = new Set<string>();
  */
 export async function prepareAssets(opt: {
   /**
-   * Sets the current working directory when looking for assets. If a file://
-   * path is provided, the parent folder of the path is used. This is useful if
-   * you want to serve assets relative to the current file using
+   * Sets the current working directory when looking for the assets folder. If a
+   * file:// path is provided, the parent folder of the path is used. This is
+   * useful if you want to serve assets relative to the current file using
    * `import.meta.url`. Default: `"."`
    */
   cwd?: string;
   /**
-   * The directory to serve assets from inside the cwd. This pattern encourages
-   * keeping public asset files separated from application source code, so that
-   * code isn't served by mistake. Default: `"assets"`
+   * The path of the assets directory relative to the cwd. This pattern
+   * encourages keeping public asset files separated from application source
+   * code, so that code isn't processed by mistake. Default: `"assets"`
    */
   dir?: string;
   /**
@@ -208,7 +208,8 @@ export async function prepareAssets(opt: {
    * be set up to re-prepare the assets directory any time its contents are
    * modified. The `prepareAssets()` function will return immediately after the
    * initial loop, and the watcher will continue running in a disjoint event
-   * loop.
+   * loop. It's safe to `prepareAssets({ watch: true })` multiple times for the
+   * same assets directory; subsequent calls will be no-ops.
    */
   watch?: boolean;
 }) {
@@ -217,13 +218,9 @@ export async function prepareAssets(opt: {
   const assets = path.join(cwd, dir);
 
   if (
-    !canEmit ||
-    (opt.watch && watchingAssets.has(assets))
-  ) {
-    return;
-  }
-
-  if (
+    // @ts-ignore: emit won't compile without "--unstable"
+    typeof Deno.emit === "undefined" ||
+    (opt.watch && watchingAssets.has(assets)) ||
     (await Deno.permissions.query({
       name: "write",
       path: assets,
@@ -343,7 +340,7 @@ export async function prepareAssets(opt: {
     if (!opt.watch) {
       await bundle(m);
     } else {
-      watch(m);
+      watch(m); // Don't await
     }
   }
 
@@ -351,7 +348,7 @@ export async function prepareAssets(opt: {
     return;
   }
 
-  // The disjoint fsevent loop. Wrap this in an IIFE to prevent it from blocking
+  // The disjoint fsevent loop. Wrapped in an IIFE so it doesn't block
   (async () => {
     for await (const event of Deno.watchFs(dir)) {
       if (event.kind === "create" || event.kind === "modify") {
