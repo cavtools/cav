@@ -2,7 +2,7 @@
 
 Cav is a web framework for [Deno](https://deno.land).
 
-**Status:** New, active, and not (quite) ready for production.
+**Status:** New, active, and not yet ready for production.
 
 ## Goals
 
