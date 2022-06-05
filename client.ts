@@ -263,24 +263,7 @@ export type ClientArg<
    * request. Default: `undefined`
    */
   serializers?: Serializers;
-  // June 2, 2022: I wanted to do this progress feature, but the Fetch API
-  // doesn't support request streaming and the initial spec for that feature may
-  // be dropped altogether if chrome decides to bow out. They've declared they
-  // won't attempt full-duplex Fetch streams or streams supporting HTTP/1.1. It
-  // often seems that with stuff like this, if chrome doesn't want to do it
-  // there's a high probability it just won't get done. To follow along:
-  // https://github.com/whatwg/fetch/issues/1438
-  //
-  // A feature for upload progress monitoring in fetch requests has been on the
-  // docket for a long time, since at least 2015 with
-  // https://github.com/whatwg/fetch/issues/65. Sadly, there's no reason to hope
-  // for any remedies in the near future :(
-  /**
-   * If provided, this function will be called whenever the request progress
-   * changes. The argument is the progress as a fraction, i.e. 50% upload
-   * progress === 0.5
-   */
-  // onProgress?: (progress: number) => void | Promise<void>;
+  // onProgress?: (progress: number) => void | Promise<void>; // TODO
 }>;
 
 /**
@@ -294,7 +277,7 @@ export interface AnyClientArg<Socket extends boolean = false> {
   query?: unknown;
   message?: Socket extends true ? null | undefined : unknown;
   serializers?: Serializers;
-  // onProgress?: (progress: number) => void | Promise<void>; // :(
+  // onProgress?: (progress: number) => void | Promise<void>; // TODO
 }
 
 /**
