@@ -6,10 +6,11 @@ Cav is a web framework for [Deno](https://deno.land).
 
 ## Goals
 
-- Learn everything I can about backend web frameworks, by writing one (?)
+- Learn as much as possible about backend web frameworks, by writing one from
+  scratch (?)
   - [x] Zero third-party dependencies
-- It should come with everything I need to build any modern web app (minus the
-  database)
+- It should come with everything a solo developer would need to build a modern
+  web app (minus the database)
   - [x] Built-in request routing
   - [x] Easy static asset serving
   - [x] (Signed) cookies and JWTs (WIP)
