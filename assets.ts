@@ -2,22 +2,23 @@
 
 // TODO: Add option for source maps for prepared bundles
 
-import { path, fileServer, graph } from "./deps.ts";
+import { fileServer, graph, path } from "./deps.ts";
 import { HttpError } from "./serial.ts";
+import { noMatch } from "./router.ts";
 
 /** Options controlling how assets are found and served. */
 export interface ServeAssetOptions {
   /**
-   * Sets the current working directory when looking for assets. If a file://
-   * path is provided, the parent folder of the path is used. This is useful if
-   * you want to serve assets relative to the current file using
+   * Sets the current working directory when looking for the asset directory. If
+   * a file:// path is provided, the parent folder of the path is used. This is
+   * useful if you want to serve assets relative to the current file using
    * `import.meta.url`. Default: `"."`
    */
   cwd?: string;
   /**
    * The directory to serve assets from inside the cwd. This pattern encourages
-   * keeping public asset files separated from application source code, so that
-   * code isn't served by mistake. Default: `"assets"`
+   * keeping public asset files separated from source code, so that code isn't
+   * served by mistake. Default: `"assets"`
    */
   dir?: string;
   /**
@@ -29,8 +30,9 @@ export interface ServeAssetOptions {
 // When a requested path without a trailing slash resolves to a directory and
 // that directory has an index file in it, relative links in the html need to be
 // rewritten to account for the lack of trailing slash. This regex is used to
-// rewrite them.  
-const htmlRelativeLinks = /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
+// rewrite them.
+const htmlRelativeLinks =
+  /<[a-z\-]+(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\s+((?:href|src)=(?:"\.\.?\/.*?"|'\.\.?\/.*?'))(?:\s+[a-z\-]+(?:(?:=".*")|(?:='.*'))?\s*)*\/?>/g;
 
 function parseCwd(cwd: string): string {
   // REVIEW: What about /https?:/// ?
@@ -61,6 +63,8 @@ export async function serveAsset(
   const dir = opt.dir || "assets";
   const filePath = opt.path;
 
+  // NOTE: This is a no-op in production, and calling it multiple times with the
+  // watch option should be safe. Slight overhead
   prepareAssets({
     cwd,
     dir,
@@ -73,7 +77,7 @@ export async function serveAsset(
       dir,
       path.join("/", filePath),
     );
-  
+
     let fileInfo: Deno.FileInfo | null = null;
     try {
       if (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) {
@@ -136,13 +140,19 @@ export async function serveAsset(
     content = content.replaceAll(htmlRelativeLinks, (match, group) => {
       const newGroup = group.replace(
         /^(?:src|href)=(?:"|')(\..*)(?:"|')$/g,
-        (m: string, g: string) => m.replace(g, (
-          // TODO: This isn't complete. Make a note in the docs about trailing
-          // slashes
-          g.startsWith("./") ? `./${basename}/${g.slice(2)}`
-          : g.startsWith("../") ? `./${g.slice(3)}`
-          : g
-        )),
+        (m: string, g: string) =>
+          m.replace(
+            g,
+            (
+              // TODO: This isn't complete. Make a note in the docs about trailing
+              // slashes
+              g.startsWith("./")
+                ? `./${basename}/${g.slice(2)}`
+                : g.startsWith("../")
+                ? `./${g.slice(3)}`
+                : g
+            ),
+          ),
       );
       return match.replace(group, newGroup);
     });
@@ -150,15 +160,13 @@ export async function serveAsset(
     originalResponse.headers.delete("content-length");
     return new Response(content, { headers: originalResponse.headers });
   } catch (e1) {
-    if (e1.message === "404 not found") {
-      throw new HttpError("404 not found", { status: 404 });
+    if (e1 instanceof HttpError && e1.status === 404) {
+      return noMatch(new Response("404 not found", { status: 404 }));
     }
     throw e1;
   }
 }
 
-// @ts-ignore: Bypass error when --unstable isn't specified
-const canEmit = typeof Deno.emit === "undefined";
 const watchingAssets = new Set<string>();
 
 /**
@@ -167,44 +175,41 @@ const watchingAssets = new Set<string>();
  * - Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder (recursive)
  *   into an adjacent file with the same name plus a .js suffix
  * - Optionally uses a filesystem watcher to rebundle whenever a change is made
- *   to the typescript files or one of their local dependencies. (The default is
- *   to set watching to true)
+ *   to a bundle file or one of its local dependencies.
  *
  * When the watch option is `true`, any errors encountered during bundling will
- * be logged and suppressed, and the `prepareAssets()` call will start a
- * separate file system watching event loop that re-triggers asset preparation
- * whenever a file changes inside the assets directory. It will return
- * immediately after the initial prep.
+ * be logged and suppressed, and the `prepareAssets()` call will start a file
+ * system watching event loop that re-triggers asset preparation whenever a file
+ * changes inside the assets directory. It will return immediately after the
+ * initial prep.
  *
  * If the --unstable or --allow-write permissions are not available, this
  * function silently does nothing. i.e. In production, you can safely omit those
- * flags and this function will not throw errors if they are missing. This is
- * the intended use case, as this function acts as a kind of on-the-fly
- * code-configured bundler, merging the build step into the development process
- * so that no separate (and complex) build procedure is needed.
+ * flags and still call this function; no errors will be thrown.
  */
 export async function prepareAssets(opt: {
   /**
-   * Sets the current working directory when looking for assets. If a file://
-   * path is provided, the parent folder of the path is used. This is useful if
-   * you want to serve assets relative to the current file using
+   * Sets the current working directory when looking for the assets folder. If a
+   * file:// path is provided, the parent folder of the path is used. This is
+   * useful if you want to serve assets relative to the current file using
    * `import.meta.url`. Default: `"."`
    */
   cwd?: string;
   /**
-   * The directory to serve assets from inside the cwd. This pattern encourages
-   * keeping public asset files separated from application source code, so that
-   * code isn't served by mistake. Default: `"assets"`
+   * The path of the assets directory relative to the cwd. This pattern
+   * encourages keeping public asset files separated from application source
+   * code, so that code isn't processed by mistake. Default: `"assets"`
    */
   dir?: string;
   /**
-   * By default, any errors encountered during bundling will bubble up, and the
+   * By default, any errors encountered during bundling will bubble up and the
    * preparation procedure will only happen one time. If this option is `true`,
    * errors will be logged and then suppressed, and a file system watcher will
    * be set up to re-prepare the assets directory any time its contents are
    * modified. The `prepareAssets()` function will return immediately after the
    * initial loop, and the watcher will continue running in a disjoint event
-   * loop.
+   * loop. It's safe to `prepareAssets({ watch: true })` multiple times for the
+   * same assets directory; subsequent calls will be no-ops.
    */
   watch?: boolean;
 }) {
@@ -213,16 +218,14 @@ export async function prepareAssets(opt: {
   const assets = path.join(cwd, dir);
 
   if (
-    !canEmit ||
-    (opt.watch && watchingAssets.has(assets))
+    // @ts-ignore: emit won't compile without "--unstable"
+    typeof Deno.emit === "undefined" ||
+    (opt.watch && watchingAssets.has(assets)) ||
+    (await Deno.permissions.query({
+      name: "write",
+      path: assets,
+    })).state !== "granted"
   ) {
-    return;
-  }
-
-  if ((await Deno.permissions.query({
-    name: "write",
-    path: assets,
-  })).state !== "granted") {
     return;
   }
 
@@ -236,10 +239,10 @@ export async function prepareAssets(opt: {
     for await (const entry of Deno.readDir(dir)) {
       if (
         entry.isFile &&
-        (
-          entry.name.endsWith("_bundle.ts") ||
-          entry.name.endsWith("_bundle.tsx")
-        ) ||
+          (
+            entry.name.endsWith("_bundle.ts") ||
+            entry.name.endsWith("_bundle.tsx")
+          ) ||
         (
           entry.name === "bundle.ts" ||
           entry.name === "bundle.tsx"
@@ -288,7 +291,7 @@ export async function prepareAssets(opt: {
     if (watching.has(input)) {
       return;
     }
-    
+
     if (!await isFile(input)) {
       watching.delete(input);
       return;
@@ -298,7 +301,7 @@ export async function prepareAssets(opt: {
     let inputGraph: graph.ModuleGraph;
     try {
       inputGraph = await graph.createGraph(
-        path.toFileUrl(input).href
+        path.toFileUrl(input).href,
       );
     } catch (e) {
       console.error("Failed to graph", input, "-", e);
@@ -307,9 +310,9 @@ export async function prepareAssets(opt: {
     }
 
     const deps = inputGraph.modules
-      .filter(m => m.specifier.startsWith("file://"))
-      .map(m => path.fromFileUrl(m.specifier));
-    
+      .filter((m) => m.specifier.startsWith("file://"))
+      .map((m) => path.fromFileUrl(m.specifier));
+
     try {
       await bundle(input);
     } catch (e) {
@@ -337,7 +340,7 @@ export async function prepareAssets(opt: {
     if (!opt.watch) {
       await bundle(m);
     } else {
-      watch(m);
+      watch(m); // Don't await
     }
   }
 
@@ -345,7 +348,7 @@ export async function prepareAssets(opt: {
     return;
   }
 
-  // The disjoint fsevent loop. Wrap this in an IIFE to prevent it from blocking
+  // The disjoint fsevent loop. Wrapped in an IIFE so it doesn't block
   (async () => {
     for await (const event of Deno.watchFs(dir)) {
       if (event.kind === "create" || event.kind === "modify") {

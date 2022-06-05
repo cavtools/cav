@@ -5,544 +5,1008 @@ import {
   assertEquals,
   assertStrictEquals,
   assertThrows,
-} from "./deps_test.ts";
+} from "./test_deps.ts";
 import {
-  HttpError,
-  serialize,
   deserialize,
+  HttpError,
+  packRequest,
+  packResponse,
+  serialize,
   serializer,
+  unpack,
 } from "../serial.ts";
-import type { Serializers, Serializer } from "../serial.ts";
+import type { Serializers } from "../serial.ts";
 
-Deno.test("de/serialize(): bad inputs", async t => {
-  await t.step("serialize(): no matching serializer", () => {
-    assertThrows(() => {
-      serialize(new (class { constructor(){} }));
-    });
-  });
+function testSerializing(opt: {
+  serializers?: Serializers;
+  input: unknown;
+  // deno-lint-ignore no-explicit-any
+  check?: (x: { input: any; deserialized: any }) => void;
+}) {
+  const input = typeof opt.input === "function" ? opt.input() : opt.input;
+  const serialized = serialize(input, opt.serializers);
+  const deserialized = deserialize(serialized, opt.serializers);
 
-  await t.step("deserialize(): prototype poisoning", () => {
-    assertThrows(() => {
-      deserialize({ __proto__: { hi: "hello" } });
-    });
-  });
+  // This will throw if the output from serialize() isn't JSON-compatible
+  JSON.stringify(serialized);
 
-  await t.step("deserialize(): bad reference", () => {
-    assertThrows(() => {
-      deserialize({ $ref: ".hello" });
-    });
-  });
-
-  await t.step("deserialize(): No matching serializer", () => {
-    assertThrows(() => {
-      deserialize({ $huh: "what?" });
-    });
-  });
-});
-
-Deno.test("de/serialize() reserved serializer names", async t => {
-  const reserved = [
-    "httpError", "error", "date",
-    "undefined", "symbol", "map",
-    "set", "bigint", "regexp",
-    "number", "conflict", "ref", // Note that ref isn't a serializer
-  ];
-
-  for (const name of reserved) {
-    await t.step(name, () => {
-      assertThrows(() => {
-        serialize(null, { [name]: {} as Serializer });
-      });
-      assertThrows(() => {
-        deserialize(null, { [name]: {} as Serializer });
-      });
-    });
+  // check() can override the default assertion
+  if (opt.check) {
+    opt.check({ input, deserialized });
+  } else {
+    assertEquals(deserialized, input);
   }
-});
+}
 
-// Many of the following tests are modeled after superjson's tests as of March
-// 28, 2022: https://github.com/blitz-js/superjson/blob/main/src/index.test.ts
+Deno.test("serializing and deserializing", async (t) => {
+  // Primitives
 
-Deno.test("de/serialize(): basic IO", async t => {
-  const data: Record<string, {
-    input: unknown;
-    output: unknown;
-    custom?: (x: {
-      // deno-lint-ignore no-explicit-any
-      input: any; output: any; serialized: any; deserialized: any;
-    }) => void;
-    serializers?: Serializers | null;
-  }> = {
-    "class with toJSON method": {
+  await t.step("boolean", () =>
+    testSerializing({
+      input: true,
+    }));
+
+  await t.step("null", () =>
+    testSerializing({
+      input: null,
+    }));
+
+  await t.step("string", () =>
+    testSerializing({
+      input: "hello",
+    }));
+
+  await t.step("number", () =>
+    testSerializing({
+      input: 1234,
+    }));
+
+  await t.step("object", () =>
+    testSerializing({
+      serializers: {}, // added for coverage
       input: {
-        a: new (class {
-          constructor(){}
-          toJSON(key: string) {
-            return { key };
-          }
-        }),
-      },
-      output: {
-        a: { key: "a" },
-      },
-      custom: x => {
-        assertEquals(x.serialized, x.output);
-        assertEquals(x.deserialized, x.output);
-      },
-    },
-    "conflict": {
-      input: {
-        $conflict: "hello",
-      },
-      output: {
-        $conflict: ["$conflict", "hello"],
-      },
-    },
-    "HttpError": {
-      input: {
-        a: new HttpError("400 bad request", {
-          status: 400,
-          detail: { hello: "world" },
-          expose: { goodbye: "world" },
-        }),
-        b: new HttpError("500 internal server error"),
-      },
-      output: {
-        a: {
-          $httpError: {
-            status: 400,
-            message: "400 bad request",
-            expose: { goodbye: "world" },
-          },
-        },
-        b: {
-          $httpError: {
-            status: 500,
-            message: "500 internal server error",
-            expose: null,
-          },
-        },
-      },
-      custom: x => {
-        assertEquals(x.serialized, x.output);
-        assert(x.deserialized.a instanceof HttpError);
-        assert(x.deserialized.b instanceof HttpError);
-        assertEquals(
-          { ...x.deserialized.a, stack: null },
-          { ...x.input.a, stack: null, detail: {} },
-        );
-        assertEquals(
-          { ...x.deserialized.b, stack: null },
-          { ...x.input.b, stack: null, detail: {} },
-        );
-      },
-    },
-    "objects": {
-      input: {
-        a: { 1: 5, 2: { 3: 'c' } },
-        b: null,
-      },
-      output: {
-        a: { 1: 5, 2: { 3: 'c' } },
-        b: null,
-      },
-      // This block is for covering the case where one of the serializers is
-      // null, i.e. ignored / turned off
-      serializers: {
+        boolean: true,
         null: null,
+        string: "hello",
+        number: 1234,
+        object: { hello: "world" },
+        array: [1234, "foobar"],
       },
-    },
-    "special case: objects with array-like keys": {
-      input: {
-        a: { 0: 3, 1: 5, 2: { 3: "c" } },
-        b: null,
-      },
-      output: {
-        a: { 0: 3, 1: 5, 2: { 3: "c" } },
-        b: null,
-      },
-      // This line is for covering the case where the serializers obj is null
-      serializers: null,
-    },
-    "arrays": {
-      input: {
-        a: [1, undefined, 2],
-      },
-      output: {
-        a: [1, { $undefined: null }, 2],
-      },
-    },
-    "Sets": {
-      input: {
-        a: new Set([1, undefined, 2]),
-      },
-      output: {
-        a: { $set: [1, { $undefined: null }, 2] },
-      },
-    },
-    "top-level Sets": {
-      input: new Set([1, undefined, 2]),
-      output: { $set: [1, { $undefined: null }, 2] },
-    },
-    "Maps": {
-      input: {
-        a: new Map([[1, "a"], [NaN, "b"]]),
-        b: new Map([["2", "b"]]),
-        d: new Map([[true, "true key"]]),
-      },
-      output: {
-        a: { $map: [[1, "a"], [{ $number: "nan" }, "b"]] },
-        b: { $map: [["2", "b"]] },
-        d: { $map: [[true, "true key"]] },
-      },
-    },
-    "preserves object identity": {
-      input: () => {
-        const a = { id: "a" };
-        const b = { id: "b" };
-        return {
-          options: [a, b],
-          selected: a,
-        };
-      },
-      output: {
-        options: [{ id: "a" }, { id: "b" }],
-        selected: { $ref: ".options.0" },
-      },
-      custom: (x) => {
-        assertEquals(x.serialized, x.output);
-        assertEquals(x.deserialized, x.input);
-        assertStrictEquals(x.deserialized.options[0], x.deserialized.selected);
-      },
-    },
-    "paths containing dots": {
-      input: {
-        "a.1": {
-          b: new Set([1, 2]),
-        },
-      },
-      output: {
-        "a.1": {
-          b: { $set: [1, 2] },
-        },
-      },
-    },
-    "paths containing backslashes": {
-      input: () => {
-        const set = new Set([1, 2]);
-        return {
-          "a\\.1": set,
-          ref: set,
-        };
-      },
-      output: {
-        "a\\.1": { $set: [1, 2] },
-        ref: { $ref: ".a\\\\.1" },
-      },
-      custom: (x) => {
-        assertEquals(x.serialized, x.output);
-        assertEquals(x.deserialized, x.input);
-        assertStrictEquals(x.deserialized["a\\.1"], x.deserialized.ref);
-      },
-    },
-    "dates": {
-      input: {
-        meeting: {
-          date: new Date(2022, 2, 28),
-        },
-      },
-      output: {
-        meeting: {
-          date: { $date: new Date(2022, 2, 28).toISOString() },
-        },
-      },
-    },
-    "errors": {
-      input: {
-        e: new Error("epic fail"),
-      },
-      output: {
-        e: { $error: "epic fail" },
-      },
-    },
-    "regex": {
-      input: {
-        a: /hello/g,
-      },
-      output: {
-        a: { $regexp: "/hello/g" },
-      },
-    },
-    "Infinity": {
-      input: {
-        a: Number.POSITIVE_INFINITY,
-      },
-      output: {
-        a: { $number: "+infinity" },
-      },
-    },
-    "-Infinity": {
-      input: {
-        a: Number.NEGATIVE_INFINITY,
-      },
-      output: {
-        a: { $number: "-infinity" },
-      },
-    },
-    "-zero": {
-      input: {
-        a: -0,
-      },
-      output: {
-        a: { $number: "-zero" },
-      },
-    },
-    "NaN": {
-      input: {
-        a: NaN,
-      },
-      output: {
-        a: { $number: "nan" },
-      },
-    },
-    "bigint": {
-      input: {
-        a: BigInt("4206942069420694206942069"),
-      },
-      output: {
-        a: { $bigint: "4206942069420694206942069" },
-      },
-    },
-    "unknown": {
-      input: () => {
-        type WarCriminal = {
-          name: string;
-          age: unknown;
-        };
-        const person: WarCriminal = {
-          name: "Vladimir Putin",
-          age: "hell is forever",
-        };
-        return person;
-      },
-      output: {
-        name: "Vladimir Putin",
-        age: "hell is forever",
-      },
-    },
-    "self-referencing objects": {
-      input: () => {
-        const a = { role: "parent", children: [] as unknown[] };
-        const b = { role: "child", parents: [a] };
-        a.children.push(b);
-        return a;
-      },
-      output: {
-        role: "parent",
-        children: [{
-          role: "child",
-          parents: [{ $ref: "" }],
-        }],
-      },
-      custom: (x) => {
-        assertEquals(x.serialized, x.output);
-        assertEquals({
-          role: x.deserialized.role,
-          children: [{
-            role: x.deserialized.children[0].role,
-          }],
-        }, {
-          role: "parent",
-          children: [{
-            role: "child",
-          }],
-        });
-        assertStrictEquals(x.deserialized, x.deserialized.children[0].parents[0]);
-      },
-    },
-    "Maps with two keys that serialize to the same string but have a different reference": {
-      input: new Map([
-        [/a/g, "cav"],
-        [/a/g, "bar"],
-      ]),
-      output: {
-        $map: [
-          [{ $regexp: "/a/g" }, "cav"],
-          [{ $regexp: "/a/g" }, "bar"],
-        ],
-      },
-    },
-    "Maps with a key that's referentially equal to another field": {
-      input: () => {
-        const robbyBubble = { id: 5 };
-        const highscores = new Map([
-          [robbyBubble, 5000],
-        ]);
-        return {
-          highscores,
-          topScorer: robbyBubble,
-        };
-      },
-      output: {
-        highscores: {
-          $map: [[{ id: 5 }, 5000]],
-        },
-        topScorer: { $ref: ".highscores.$map.0.0" },
-      },
-    },
-    "referentially equal maps": {
-      input: () => {
-        const map = new Map([[1, 1]]);
-        return { a: map, b: map };
-      },
-      output: {
-        a: { $map: [[1, 1]] },
-        b: { $ref: ".a" },
-      },
-      custom: (x) => {
-        assertEquals(x.serialized, x.output);
-        assertEquals(x.deserialized, x.input);
-        assertStrictEquals(x.deserialized.a, x.deserialized.b);
-      },
-    },
-    "maps with non-uniform keys": {
-      input: {
-        map: new Map<string | number, number>([[1, 1], ["1", 1]]),
-      },
-      output: {
-        map: { $map: [[1, 1], ["1", 1]] },
-      },
-    },
-    "referentially equal values inside a set": {
-      input: () => {
-        const user = { id: 2 };
-        return {
-          users: new Set([user]),
-          userOfTheMonth: user,
-        };
-      },
-      output: {
-        users: { $set: [{ id: 2 }] },
-        userOfTheMonth: { $ref: ".users.$set.0" },
-      },
-      custom: (x) => {
-        assertEquals(x.serialized, x.output);
-        assertEquals(x.deserialized, x.input);
-        const vals = Array.from(x.deserialized.users);
-        assertStrictEquals(x.deserialized.userOfTheMonth, vals[0]);
-      },
-    },
-    "symbols": {
-      // I'm testing something different this time. Symbols don't have a lot of
-      // use in pack.ts when compared with superjson. I might adopt their symbol
-      // registry idea in the future but I don't have a use-case in mind right
-      // now so I'm just going to leave it on the table and do referential
-      // equality only
-      input: () => {
-        const sym = Symbol("description");
-        return { a: sym, b: sym };
-      },
-      output: {
-        a: { $symbol: "description" },
-        b: { $ref: ".a" },
-      },
-      custom: (x) => {
-        assertEquals(x.serialized, x.output);
-        assertEquals(Object.keys(x.deserialized), ["a", "b"]);
-        assertEquals(typeof x.deserialized.a, "symbol");
-        assertEquals(x.deserialized.a.description, "description");
-        assertStrictEquals(x.deserialized.a, x.deserialized.b);
-      },
-    },
-    "custom transformers": {
-      input: {
-        testLocal: { testLocal: true },
-      },
-      output: {
-        testLocal: { $testLocal: null },
-      },
-      serializers: {
-        testLocal: serializer({
-          check: (v: { testLocal?: boolean }) => v.testLocal === true,
-          serialize: () => null,
-          deserialize: () => ({ testLocal: true }),
-        }),
-      },
-    },
-    // Skipping "Decimal.js" (N/A)
-    "issue #58": {
-      input: () => {
-        const cool = Symbol("cool");
-        return {
-          q: [
-            9,
-            {
-              henlo: undefined,
-              yee: new Date(2022, 2, 28),
-              yee2: new Date(2022, 2, 28),
-              foo1: new Date(2022, 2, 28),
-              z: cool,
-            },
-          ],
-        };
-      },
-      output: {
-        q: [9, {
-          henlo: { $undefined: null },
-          yee: { $date: new Date(2022, 2, 28).toISOString() },
-          yee2: { $date: new Date(2022, 2, 28).toISOString() },
-          foo1: { $date: new Date(2022, 2, 28).toISOString() },
-          z: { $symbol: "cool" },
-        }],
-      },
-      custom: (x) => {
-        assertEquals(x.serialized, x.output);
-        assertEquals(Object.keys(x.deserialized), ["q"]);
-        assertEquals(x.deserialized.q.length, 2);
-        assertEquals(x.deserialized.q[0], 9);
-        assertEquals(Object.keys(x.deserialized.q[1]), [
-          "henlo",
-          "yee",
-          "yee2",
-          "foo1",
-          "z",
-        ])
+    }));
 
-        const io = x.input.q[1];
-        const uo = x.deserialized.q[1];
-        assertEquals({ ...io, z: null }, { ...uo, z: null });
-        assertEquals(typeof uo.z, "symbol");
-        assertEquals(io.z.description, uo.z.description);
-      },
-    },
-    // Skipping "works with custom allowedProps" (N/A)
-    // TODO: "works with typed arrays": {
-    "undefined, issue #48": {
+  await t.step("array", () =>
+    testSerializing({
+      input: [true, null, "hello", 1234, { hello: "world" }, [1234, "foobar"]],
+    }));
+
+  // Non-primitives
+
+  await t.step("undefined", () =>
+    testSerializing({
       input: undefined,
-      output: { $undefined: null },
-    },
-    // Skipping "regression #109: nested classes" (I'm lazy)
+    }));
+
+  await t.step("nan", () =>
+    testSerializing({
+      input: NaN,
+    }));
+
+  await t.step("date", () =>
+    testSerializing({
+      input: new Date(1994, 11, 6),
+    }));
+
+  await t.step("regexp", () =>
+    testSerializing({
+      input: /hello[world]/g,
+    }));
+
+  await t.step("+infinity", () =>
+    testSerializing({
+      input: Number.POSITIVE_INFINITY,
+    }));
+
+  await t.step("-infinity", () =>
+    testSerializing({
+      input: Number.NEGATIVE_INFINITY,
+    }));
+
+  await t.step("-zero", () =>
+    testSerializing({
+      input: -0,
+      check: (x) => {
+        // Only way to check for -0
+        assert(Object.is(x.deserialized, -0));
+      },
+    }));
+
+  await t.step("bigint", () =>
+    testSerializing({
+      input: BigInt("584837272849585737282992848575732929"),
+    }));
+
+  await t.step("set", () =>
+    testSerializing({
+      input: new Set<unknown>(["foo", null, 123]),
+    }));
+
+  await t.step("map", () =>
+    testSerializing({
+      input: new Map<unknown, unknown>([["foo", "bar"], [123, null]]),
+    }));
+
+  await t.step("conflict", () =>
+    testSerializing({
+      input: { $hi: { world: "foobar" } },
+    }));
+
+  await t.step("global symbol", () =>
+    testSerializing({
+      input: Symbol.for("global"),
+    }));
+
+  await t.step("array buffer view", () =>
+    testSerializing({
+      input: new Int32Array([0, 1, 2, 3, 4, 5]),
+    }));
+
+  await t.step("array buffer", () =>
+    testSerializing({
+      input: new Uint8Array([0, 1, 2, 3, 4, 5]).buffer,
+    }));
+
+  // Not tested in nesting section
+  await t.step("local symbol", () =>
+    testSerializing({
+      input: Symbol("local"),
+      check: (x) => {
+        assert(typeof x.deserialized === "symbol");
+        assertEquals(x.deserialized.description, "local");
+        assert(x.deserialized !== Symbol.for("local"));
+      },
+    }));
+
+  // Not tested in nesting section
+  await t.step("jsonable instance", () =>
+    testSerializing({
+      input: new (class {
+        toJSON(key: string) {
+          return { key };
+        }
+      })(),
+      check: (x) => {
+        assertEquals(x.deserialized, { key: "" });
+      },
+    }));
+
+  await t.step("error", () =>
+    testSerializing({
+      input: new Error("error"),
+    }));
+
+  await t.step("http error", () =>
+    testSerializing({
+      input: new HttpError("httpError", {
+        detail: { priv: true },
+        expose: { pub: true },
+      }),
+      check: (x) => {
+        assertEquals(
+          x.deserialized,
+          new HttpError("httpError", {
+            status: 500,
+            // detail is never serialized
+            expose: { pub: true },
+          }),
+        );
+      },
+    }));
+
+  // Not tested in nesting section
+  await t.step("error subclass", () =>
+    testSerializing({
+      input: new SyntaxError("syntaxError"),
+    }));
+
+  // Nesting non-primitives
+
+  // A lot of this is overkill, I know. But now I would have to put effort into
+  // shortening it, which would also be overkill...
+
+  await t.step("object with non-primitives nested", () =>
+    testSerializing({
+      input: {
+        a: undefined,
+        b: Number.POSITIVE_INFINITY,
+        c: Number.NEGATIVE_INFINITY,
+        d: -0,
+        e: NaN,
+        f: /foobar/g,
+        g: new HttpError("idk", { status: 418 }),
+        h: new Error("idk2"),
+        i: BigInt("5757892927657389191874757"),
+        j: new Date(2022, 4, 26),
+        k: new Set<unknown>([null, "hello", 123]),
+        l: new Map<unknown, unknown>([["hello", 0], [null, null]]),
+        m: { $foo: "bar" },
+        n: Symbol.for("global"),
+        o: new Int32Array([1, 2, 3]),
+        p: new Uint8Array([1, 2, 3]).buffer,
+      },
+    }));
+
+  await t.step("array with non-primitives nested", () =>
+    testSerializing({
+      input: [
+        undefined,
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+        -0,
+        NaN,
+        /foobar/g,
+        new HttpError("idk", { status: 418 }),
+        new Error("idk2"),
+        BigInt("5757892927657389191874757"),
+        new Date(2022, 4, 26),
+        new Set<unknown>([null, "hello", 123]),
+        new Map<unknown, unknown>([["hello", 0], [null, null]]),
+        { $foo: "bar" },
+        Symbol.for("global"),
+        new Int32Array([1, 2, 3]),
+        new Uint8Array([1, 2, 3]).buffer,
+      ],
+    }));
+
+  await t.step("set with non-primitives nested", () =>
+    testSerializing({
+      input: new Set<unknown>([
+        undefined,
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+        -0, // NOTE: -0 is converted to +0 as a value in a Set
+        NaN,
+        /foobar/g,
+        new HttpError("idk", { status: 418 }),
+        new Error("idk2"),
+        BigInt("5757892927657389191874757"),
+        new Date(2022, 4, 26),
+        new Set<unknown>([null, "hello", 123]),
+        new Map<unknown, unknown>([["hello", 0], [null, null]]),
+        { $foo: "bar" },
+        Symbol.for("global"),
+        new Int32Array([1, 2, 3]),
+        new Uint8Array([1, 2, 3]).buffer,
+      ]),
+    }));
+
+  await t.step("map with non-primitives nested", () =>
+    testSerializing({
+      input: new Map<unknown, unknown>([
+        // I'm not testing references here, so I switched global to global2 in
+        // this first entry. Besides that, the values are just the keys in reverse
+        // order
+        [undefined, Symbol.for("global2")],
+        [Number.POSITIVE_INFINITY, { $foo: "bar" }],
+        [
+          Number.NEGATIVE_INFINITY,
+          new Map<unknown, unknown>([["hello", 0], [null, null]]),
+        ],
+        // NOTE: The -0 is converted to +0 as a key in a Map
+        [-0, new Set<unknown>([null, "hello", 123])],
+        [NaN, new Date(2022, 4, 26)],
+        [/foobar/g, BigInt("5757892927657389191874757")],
+        [new HttpError("idk", { status: 418 }), new Error("idk2")],
+        [new Error("idk2"), new HttpError("idk", { status: 418 })],
+        [BigInt("5757892927657389191874757"), /foobar/g],
+        [new Date(2022, 4, 26), NaN],
+        [new Set<unknown>([null, "hello", 123]), -0],
+        [
+          new Map<unknown, unknown>([["hello", 0], [null, null]]),
+          Number.NEGATIVE_INFINITY,
+        ],
+        [{ $foo: "bar" }, Number.POSITIVE_INFINITY],
+        [Symbol.for("global"), undefined],
+        // Added later, not redoing the order
+        [new Int32Array([1, 2, 3]), new Int32Array([4, 5, 6])],
+        [new Uint8Array([1, 2, 3]).buffer, new Uint8Array([1, 2, 3]).buffer],
+      ]),
+    }));
+
+  await t.step("http error with non-primitives nested", () =>
+    testSerializing({
+      input: new HttpError("message", {
+        status: 200,
+        expose: {
+          a: undefined,
+          b: Number.POSITIVE_INFINITY,
+          c: Number.NEGATIVE_INFINITY,
+          d: -0,
+          e: NaN,
+          f: /foobar/g,
+          g: new HttpError("idk", { status: 418 }),
+          h: new Error("idk2"),
+          i: BigInt("5757892927657389191874757"),
+          j: new Date(2022, 4, 26),
+          k: new Set<unknown>([null, "hello", 123]),
+          l: new Map<unknown, unknown>([["hello", 0], [null, null]]),
+          m: { $foo: "bar" },
+          n: Symbol.for("global"),
+          o: new Int16Array([1, 2, 3]),
+          p: new Uint8Array([1, 2, 3]).buffer,
+        },
+      }),
+    }));
+
+  await t.step("conflict with non-primitives nested", () =>
+    testSerializing({
+      input: {
+        $conflict: {
+          a: undefined,
+          b: Number.POSITIVE_INFINITY,
+          c: Number.NEGATIVE_INFINITY,
+          d: -0,
+          e: NaN,
+          f: /foobar/g,
+          g: new HttpError("idk", { status: 418 }),
+          h: new Error("idk2"),
+          i: BigInt("5757892927657389191874757"),
+          j: new Date(2022, 4, 26),
+          k: new Set<unknown>([null, "hello", 123]),
+          l: new Map<unknown, unknown>([["hello", 0], [null, null]]),
+          m: { $foo: "bar" },
+          n: Symbol.for("global"),
+          o: new Float64Array([1, 2, 3]),
+          p: new Uint8Array([1, 2, 3]).buffer,
+        },
+      },
+    }));
+
+  // References
+
+  const refObj = { hello: "world" };
+  await t.step("referential equality for objects", () =>
+    testSerializing({
+      input: {
+        a: refObj,
+        b: refObj,
+      },
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.b, x.deserialized.a);
+      },
+    }));
+
+  const refArr = [null, 123];
+  await t.step("referential equality for arrays", () =>
+    testSerializing({
+      input: [refArr, refArr],
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized[0], x.deserialized[1]);
+      },
+    }));
+
+  const refSet = new Set<unknown>([123, "hello", {}]);
+  await t.step("referential equality for sets", () =>
+    testSerializing({
+      input: new Set<unknown>([
+        refSet,
+        [refSet],
+      ]),
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        const [a, b] = Array.from(x.deserialized.values());
+        assertEquals(a, b[0]);
+      },
+    }));
+
+  const refMap = new Map<unknown, unknown>([["foo", null]]);
+  await t.step("referential equality for maps", () =>
+    testSerializing({
+      input: new Map<unknown, unknown>([
+        [refMap, refMap],
+      ]),
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        const [[k, v]] = Array.from(x.deserialized.entries());
+        assertEquals(k, v);
+      },
+    }));
+
+  const refHttpError = new HttpError("message", {
+    status: 418,
+    expose: true,
+  });
+  await t.step("referential equality for httpErrors", () =>
+    testSerializing({
+      input: new HttpError("message2", {
+        status: 500,
+        expose: {
+          a: refHttpError,
+          b: refHttpError,
+        },
+      }),
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.expose.a, x.deserialized.expose.b);
+      },
+    }));
+
+  const refError = new Error("message");
+  await t.step("referential equality for errors", () =>
+    testSerializing({
+      input: {
+        a: refError,
+        b: refError,
+      },
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
+      },
+    }));
+
+  const refDate = new Date(2000, 0, 1);
+  await t.step("referential equality for dates", () =>
+    testSerializing({
+      input: {
+        a: refDate,
+        b: refDate,
+      },
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
+      },
+    }));
+
+  const refRegexp = /^[^abc]/g;
+  await t.step("referential equality for regexps", () =>
+    testSerializing({
+      input: {
+        a: refRegexp,
+        b: refRegexp,
+      },
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
+      },
+    }));
+
+  const refLocalSym = Symbol("local");
+  await t.step("referential equality for local syms", () =>
+    testSerializing({
+      input: {
+        a: refLocalSym,
+        b: refLocalSym,
+      },
+      check: (x) => {
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
+      },
+    }));
+
+  const refGlobalSym = Symbol.for("global");
+  await t.step("referential equality for global syms", () =>
+    testSerializing({
+      input: {
+        a: refGlobalSym,
+        b: refGlobalSym,
+      },
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized.a, x.deserialized.b);
+      },
+    }));
+
+  const refBuffer = new Float32Array([1, 2, 3]);
+  await t.step(
+    "referential equality for array buffer views",
+    () =>
+      testSerializing({
+        input: {
+          a: refBuffer,
+          b: refBuffer,
+        },
+        check: (x) => {
+          assertEquals(x.deserialized, x.input);
+          assertStrictEquals(x.deserialized.a, x.deserialized.b);
+        },
+      }),
+  );
+
+  const refBuffer2 = new Uint8Array([1, 2, 3]).buffer;
+  await t.step(
+    "referential equality for array buffers",
+    () =>
+      testSerializing({
+        input: {
+          a: refBuffer2,
+          b: refBuffer2,
+        },
+        check: (x) => {
+          assertEquals(x.deserialized, x.input);
+          assertStrictEquals(x.deserialized.a, x.deserialized.b);
+        },
+      }),
+  );
+
+  const refObj2 = {};
+  const refObj3 = {};
+  await t.step("references to paths containing '.'", () =>
+    testSerializing({
+      input: {
+        "a..b.": refObj2,
+        "c.d": [refObj2, refObj3],
+        e: refObj3,
+      },
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(x.deserialized["a..b."], x.deserialized["c.d"][0]);
+        assertStrictEquals(x.deserialized.e, x.deserialized["c.d"][1]);
+      },
+    }));
+
+  await t.step("references to paths containing '\\'", () =>
+    testSerializing({
+      input: {
+        "a\\\\b\\": refObj2,
+        "c\\d\\.": [refObj2, refObj3],
+        e: refObj3,
+      },
+      check: (x) => {
+        assertEquals(x.deserialized, x.input);
+        assertStrictEquals(
+          x.deserialized["a\\\\b\\"],
+          x.deserialized["c\\d\\."][0],
+        );
+        assertStrictEquals(x.deserialized["c\\d\\."][1], x.deserialized.e);
+      },
+    }));
+
+  const refCircular = {
+    set: new Set(),
+    map: new Map(),
+    top: null as unknown,
   };
+  refCircular.top = refCircular;
+  refCircular.set.add(refCircular.set);
+  refCircular.map.set(refCircular.map, refCircular.map);
+  await t.step("circular references", () =>
+    testSerializing({
+      input: refCircular,
+      check: (x) => {
+        assertStrictEquals(x.deserialized, x.deserialized.top);
+        const setValues = Array.from(x.deserialized.set);
+        assertStrictEquals(setValues[0], x.deserialized.set);
+        const mapEntries: [unknown, unknown][] = Array.from(
+          x.deserialized.map.entries(),
+        );
+        assertStrictEquals(mapEntries[0][0], mapEntries[0][1]);
+        assertStrictEquals(mapEntries[0][0], x.deserialized.map);
+      },
+    }));
 
-  for (const [k, v] of Object.entries(data)) {
-    await t.step(k, () => {
-      const i = typeof v.input === "function" ? v.input() : v.input;
+  // Misc
 
-      const serialized = serialize(i, v.serializers);
-      const deserialized = deserialize(v.output, v.serializers);
+  await t.step("throws when prototype poisoned", () => {
+    assertThrows(() => serialize({ __proto__: { a: true }, b: true }));
+    assertThrows(() => deserialize({ __proto__: { a: true }, b: true }));
+  });
 
-      if (v.custom) {
-        v.custom({
-          input: i,
-          output: v.output,
-          serialized: serialized,
-          deserialized: deserialized,
-        });
-      } else {
-        assertEquals(serialized, v.output);
-        assertEquals(deserialized, i);
+  await t.step("custom serializers", () => {
+    class Custom {
+      a: unknown;
+      constructor(a: unknown) {
+        this.a = a;
       }
+    }
+
+    const custom = serializer({
+      check: (v) => v instanceof Custom,
+      serialize: (v: Custom) => v.a,
+      deserialize: (_, whenDone) => {
+        const inst = new Custom(null);
+        whenDone((ready) => {
+          inst.a = ready;
+        });
+        return inst;
+      },
     });
-  }
+
+    const inst = new Custom(null);
+    inst.a = inst;
+    testSerializing({
+      serializers: { custom, custom2: null },
+      input: inst,
+      check: (x) => {
+        assertStrictEquals(x.deserialized.a, x.deserialized);
+        assert(x.deserialized instanceof Custom);
+      },
+    });
+  });
+
+  await t.step("two local symbols with the same desc", () =>
+    testSerializing({
+      input: {
+        a: Symbol("local"),
+        b: Symbol("local"),
+      },
+      check: (x) => {
+        assert(typeof x.deserialized.a === "symbol");
+        assert(typeof x.deserialized.b === "symbol");
+        assert(x.deserialized.a !== x.deserialized.b);
+      },
+    }));
 });
 
+interface TestPackingOptions {
+  serializers?: Serializers;
+  message?: unknown;
+  headers?: HeadersInit;
+}
+
+async function testPacking(
+  opt: TestPackingOptions & {
+    check?: (x: {
+      opt: TestPackingOptions;
+      // deno-lint-ignore no-explicit-any
+      unpacked: any;
+    }) => Promise<void> | void;
+  },
+) {
+  const run = async (which: string) => {
+    // Because ReadableStreams can only be read 1 time, useful to be able to
+    // recreate them when testing packResponse()
+    let message = opt.message;
+    if (typeof opt.message === "function") {
+      message = opt.message();
+    }
+
+    const r = (
+      which === "packRequest" ? packRequest("http://localhost/test", {
+        ...opt,
+        message,
+      })
+      : packResponse(message, opt)
+    );
+
+    const unpacked = await unpack(r, { serializers: opt.serializers });
+    if (opt.check) {
+      await opt.check({ opt, unpacked });
+    } else {
+      assertEquals(unpacked, message);
+    }
+  };
+  
+  await run("packRequest");
+  await run("packResponse");
+}
+
+async function assertEqualsBlob(a: File | Blob, b: File | Blob) {
+  assertEquals({
+    name: a instanceof File ? a.name : "blob",
+    type: a.type,
+    body: await a.text(),
+  }, {
+    name: b instanceof File ? b.name : "blob",
+    type: b.type,
+    body: await b.text(),
+  });
+}
+
+Deno.test("packing and unpacking", async (t) => {
+  // Symmetric
+
+  await t.step("undefined", () => testPacking({
+    message: undefined,
+  }));
+
+  await t.step("null", () => testPacking({
+    message: null,
+  }));
+
+  await t.step("string", () => testPacking({
+    message: "foo-bar",
+  }));
+
+  await t.step("object", () => testPacking({
+    message: {
+      a: new Set(["baz"]),
+      b: Symbol.for("poop"),
+    },
+  }));
+
+  await t.step("File", () => testPacking({
+    message: new File(["blah"], "eh.txt", { type: "text/plain" }),
+    check: async (x) =>
+      await assertEqualsBlob(x.unpacked, x.opt.message as File),
+  }));
+
+  await t.step("Blob", () => testPacking({
+    message: new Blob(
+      ["you look lovely today, btw"],
+      { type: "text/plain" },
+    ),
+    check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as Blob),
+  }));
+
+  await t.step(
+    "File with quotes in filename (testing content-disposition)",
+    () => testPacking({
+      message: new File(["jk i can't see you"], 'thank "god".txt', {
+        type: "text/plain",
+      }),
+      check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as File),
+    }),
+  );
+
+  await t.step("object w/Files", () => testPacking({
+    message: new Map([[
+      new File(["hello"], "dumb.csv", { type: "text/csv" }),
+      new File(["world"], "dumber.csv", { type: "text/csv" }),
+    ]]),
+    check: async (x) => {
+      const [[a, b]] = Array.from(x.unpacked.entries());
+      const [[oa, ob]] = Array.from(
+        (x.opt.message as Map<File, File>).entries(),
+      );
+      await assertEqualsBlob(a, oa);
+      await assertEqualsBlob(b, ob);
+    },
+  }));
+
+  await t.step("object w/Blobs", () => testPacking({
+    message: new Map([[
+      new Blob(["hello"], { type: "text/csv" }),
+      new Blob(["world"], { type: "text/csv" }),
+    ]]),
+    check: async (x) => {
+      const [[a, b]] = Array.from(x.unpacked.entries());
+      const [[oa, ob]] = Array.from(
+        (x.opt.message as Map<File, File>).entries(),
+      );
+      await assertEqualsBlob(a, oa);
+      await assertEqualsBlob(b, ob);
+    },
+  }));
+
+  const refFile = new File(["red cards for everybody"], "soccer.txt", {
+    type: "text/plain",
+  });
+  await t.step(
+    "object w/ multiple ref. equal Files",
+    () => testPacking({
+      message: {
+        a: refFile,
+        b: refFile,
+      },
+      check: async (x) => {
+        assertStrictEquals(x.unpacked.a, x.unpacked.b);
+        await assertEqualsBlob(
+          x.unpacked.a,
+          (x.opt.message as Record<string, File>).a,
+        );
+      },
+    }),
+  );
+
+  // Asymmetric
+
+  await t.step("ArrayBufferView w/o content-type", () => testPacking({
+    message: new Uint8Array([1, 2, 3]),
+    check: (x) => assertEqualsBlob(
+      x.unpacked,
+      new Blob([new Uint8Array([1, 2, 3])]),
+    ),
+  }));
+
+  await t.step(
+    "ArrayBufferView w/content-type",
+    () => testPacking({
+      message: new Uint8Array([1, 2, 3]),
+      headers: { "content-type": "none-of-your/business" },
+      check: (x) =>
+        assertEqualsBlob(
+          x.unpacked,
+          new Blob([new Uint8Array([1, 2, 3])], {
+            type: "none-of-your/business",
+          }),
+        ),
+    }),
+  );
+
+  await t.step("ReadableStream w/o content-type", () => testPacking({
+    // This readable stream gets recreated for both packRequest and
+    // packResponse
+    message: () =>
+      new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
+          controller.close();
+        },
+      }),
+    check: (x) => assertEqualsBlob(x.unpacked, new Blob(["-"])),
+  }));
+
+  await t.step("ReadableStream w/content-type", () => testPacking({
+    // This readable stream gets recreated for both packRequest and
+    // packResponse
+    message: () =>
+      new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          controller.enqueue(new Uint8Array(["-".charCodeAt(0)]));
+          controller.close();
+        },
+      }),
+    headers: { "content-type": "text/plain" },
+    check: (x) => {
+      assertEquals(x.unpacked, "-");
+    },
+  }));
+
+  await t.step("URLSearchParams", () => testPacking({
+    message: new URLSearchParams({ hello: "world" }),
+    check: (x) => assertEquals(x.unpacked, { hello: "world" }),
+  }));
+
+  const form = new FormData();
+  form.set("hello", "world");
+  form.append("foo", "bar");
+  form.append("foo", "baz");
+  await t.step("FormData", () => testPacking({
+    message: form,
+    check: (x) =>
+      assertEquals(x.unpacked, {
+        hello: "world",
+        foo: ["bar", "baz"],
+      }),
+  }));
+
+  // Max body size
+
+  await t.step("default max body size w/ content-length header", async () => {
+    const decoder = new TextDecoder();
+    const resolves = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(1024 * 1024 + 1)),
+      headers: { "content-length": (1024 * 1024).toString() },
+    });
+    const rejects = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(1024 * 1024 + 1)),
+    });
+    await unpack(resolves);
+    try {
+      await unpack(rejects);
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("default max body size w/o content-length header", async () => {
+    const resolves = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(1024 * 1024));
+        controller.close();
+      },
+    }));
+    const rejects = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(1024 * 1024 + 1));
+        controller.close();
+      },
+    }));
+    await unpack(resolves);
+    try {
+      await unpack(rejects);
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("max body size w/ content-length header", async () => {
+    const decoder = new TextDecoder();
+    const resolves = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(10)),
+    });
+    const rejects = packRequest("http://localhost/test", {
+      message: decoder.decode(new Uint8Array(11)),
+    });
+    await unpack(resolves, { maxBodySize: 10 });
+    try {
+      await unpack(rejects, { maxBodySize: 10 });
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("max body size w/o content-length header", async () => {
+    const resolves = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(10));
+        controller.close();
+      },
+    }));
+    const rejects = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(11));
+        controller.close();
+      },
+    }));
+    await unpack(resolves, { maxBodySize: 10 });
+    try {
+      await unpack(rejects, { maxBodySize: 10 });
+      assert(false, "the payload that was too large didn't reject");
+    } catch (err) {
+      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+    }
+  });
+
+  await t.step("max body size 0", async () => {
+    const resolves = new Response(new ReadableStream({
+      start: controller => {
+        controller.enqueue(new Uint8Array(1024 * 1024 + 1));
+        controller.close();
+      },
+    }));
+    await unpack(resolves, { maxBodySize: 0 });
+  });
+
+  // Misc
+
+  await t.step("packResponse: Response forwarding", () => {
+    const res = new Response(null, {
+      status: 418,
+      headers: { "x-custom-1": "original" },
+    });
+    const packed = packResponse(res, {
+      headers: { "x-custom-2": "merged" },
+      status: 500, // ignored
+      statusText: "hello", // ignored
+    });
+    assertStrictEquals(packed, res);
+    assertEquals(packed.headers.get("x-custom-1"), "original");
+    assertEquals(packed.headers.get("x-custom-2"), "merged");
+    assertEquals(packed.status, 418);
+    assert(packed.statusText !== "hello", "didn't ignore status text");
+  });
+
+  await t.step("specified status overrides auto status", async () => {
+    const res = packResponse(undefined, { status: 200 });
+    assertEquals(await unpack(res), null); // Would've been undefined w/o 200
+  });
+
+  await t.step("specified headers override auto headers", async () => {
+    const req = packRequest("http://localhost/test", {
+      message: { hello: "world" },
+      headers: { "content-type": "text/plain" },
+    });
+    assertEquals(await unpack(req), `{"hello":"world"}`);
+
+    const req2 = packRequest("http://localhost/test", {
+      message: new Blob(["foobar"], { type: "text/csv" }),
+      headers: { "content-type": "text/plain", "content-disposition": "" },
+    });
+    assertEquals(
+      await unpack(req2),
+      "foobar",
+    );
+  });
+
+  await t.step("undefined message means GET request", async () => {
+    const req = packRequest("http://localhost/test");
+    assertEquals(req.method, "GET");
+    assertEquals(await unpack(req), undefined);
+  });
+
+  class Custom {}
+  await t.step("custom serializers", () => testPacking({
+    message: new Custom(),
+    serializers: {
+      custom: serializer({
+        check: (v) => v instanceof Custom,
+        serialize: () => null,
+        deserialize: () => new Custom(),
+      }),
+    },
+  }));
+});

@@ -5,17 +5,9 @@
  * An object or function responsible for parsing data or throwing errors if the
  * data isn't shaped as expected. These can either be functions with a single
  * data argument that return the parsed data or an object with a `parse(data):
- * unknown` function property that does the same. Cav is specifically tuned to
- * be compatible with (but not dependent on) Zod, a schema-based data parsing
- * library. However, any parsing library can be used, as long as its parsers
- * satisfy this Parser interface. (Let me know if more shapes should be
- * supported in a github issue.) You can also write strongly-typed parsing
- * functions and objects by hand if you don't want to use a third-party parsing
- * library.
- *
- * To read more about Zod, visit https://github.com/colinhacks/zod.
+ * unknown` function that does the same. Parsers can be asynchronous.
  */
-export type Parser<I = unknown, O = unknown> = (
+ export type Parser<I = unknown, O = unknown> = (
   | ParserFunction<I, O>
   | ParserObject<I, O>
 );
@@ -42,13 +34,24 @@ export interface ParserObject<I = unknown, O = unknown> {
 /** Extracts the input type of a given Parser. */
 export type ParserInput<T> = (
   T extends { _input: infer I } ? I // zod
-  : T extends Parser<infer I> ? I
-  : never
+    : T extends Parser<infer I> ? I
+    : never
 );
 
 /** Extracts the output type of a given Parser. */
 export type ParserOutput<T> = (
   T extends { _output: infer O } ? O // zod
-  : T extends Parser<unknown, infer O> ? O
-  : never
+    : T extends Parser<unknown, infer O> ? O
+    : never
 );
+
+/** Normalizes a Parser into a ParserFunction. */
+export function normalizeParser<
+  I = unknown,
+  O = unknown,
+>(parser: Parser<I, O>): ParserFunction<I, O> {
+  return (
+    typeof parser === "function" ? parser
+    : parser.parse
+  );
+}

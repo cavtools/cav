@@ -1,221 +1,15 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-// TODO: The ability to monitor request progress (XMLHttpRequest)
-// TODO: The ability to specify custom headers
-
-import {
-  HttpError,
-  serialize,
-  serializeBody,
-  deserialize,
-  deserializeBody,
-} from "./serial.ts";
+import { webSocket } from "./ws.ts";
+import { HttpError, packRequest, unpack } from "./serial.ts";
+import type { WS } from "./ws.ts";
 import type { Serializers } from "./serial.ts";
-import type {
-  Parser,
-  ParserFunction,
-  ParserOutput,
-} from "./parser.ts";
 
-/**
- * Cav's WebSocket wrapper interface.
- */
-export interface Socket<Send = unknown, Message = unknown> {
-  /**
-   * The raw WebSocket instance.
-   */
-  raw: WebSocket;
-  /**
-   * Send data to the connected party. The data provided is serialized using the
-   * top-level `serialize()` function.
-   */
-  send: (data: Send) => void;
-  /**
-   * Closes the web socket connection. An optional code and reason may be
-   * provided, and will be available to all "close" event listeners.
-   */
-  close: (code?: number, reason?: string) => void;
-  /**
-   * Register an event listener for the "open" event, which is fired when the web
-   * socket connection is established. The socket must be opened before any data
-   * can be sent.
-   */
-  on(type: "open", cb: SocketListener<"open">): void;
-  /**
-   * Register an event listener for the "close" event, which is fired when the
-   * web socket connection is ended.
-   */
-  on(type: "close", cb: SocketListener<"close">): void;
-  /**
-   * Register an event listener for the "message" event, which is fired every
-   * time a message is received from the connected party. The message received
-   * is deserialized and made available on the "message" property assigned to
-   * the event.
-   */
-  on(type: "message", cb: SocketListener<"message", Message>): void;
-  /**
-   * Register an event listener for the "error" event, which is fired when the
-   * connection has been closed due to an error.
-   */
-  on(type: "error", cb: SocketListener<"error">): void;
-  /**
-   * Unregister an event listener for a particular event type. If no listener is
-   * provided, all listeners for that event type will be unregistered. If the
-   * event type is also omitted, all listeners for the web socket will be
-   * unregistered.
-   */
-  off(
-    type?: "open" | "close" | "message" | "error",
-    cb?: (ev: Event) => void | Promise<void>,
-  ): void;
-}
-
-/**
- * Type that matches any socket. Useful for type constraints.
- */
-// deno-lint-ignore no-explicit-any
-export type AnySocket = Socket<any, any>;
-
-/**
- * Type for a web socket event listener. The shape of the listener depends on
- * the event type. For the "message" event, the message type may be provided as
- * the second type parameter.
- */
-export type SocketListener<
-  Type extends "open" | "close" | "message" | "error",
-  Message = unknown,
-> = (ev: (
-  Type extends "open" ? Event
-  : Type extends "close" ? CloseEvent
-  : Type extends "message" ? MessageEvent & { message: Message }
-  : Type extends "error" ? Event | ErrorEvent
-  : never
-)) => void | Promise<void>;
-
-/**
- * Initializer options to use when upgrading a request into a web socket using
- * the `upgradeWebSocket` function.
- */
-export interface SocketInit<Message extends Parser | null = null> {
-  /**
-   * Message parser, for parsing incoming messages. If this is ommitted,
-   * messages won't be parsed and will be typed as "unknown".
-   */
-  message?: Message;
-  /**
-   * Additional serializers to use when serializing and deserializing message
-   * data.
-   */
-  serializers?: Serializers | null;
-}
-
-/**
- * Wraps a regular WebSocket with serializer functionality and type support.
- */
-export function wrapWebSocket<
-  Send = unknown,
-  Message extends Parser | null = null,
->(
-  raw: WebSocket,
-  init?: SocketInit<Message>,
-): Socket<Send, Message extends Parser ? ParserOutput<Message> : unknown> {
-  const listeners = {
-    open: new Set<(ev: Event) => unknown>(),
-    close: new Set<(ev: CloseEvent) => unknown>(),
-    message: new Map<unknown, (ev: MessageEvent) => unknown>(),
-    error: new Set<(ev: Event | ErrorEvent) => unknown>(),
-  };
-
-  return {
-    raw,
-    send: data => {
-      raw.send(JSON.stringify(serialize(data, init?.serializers)));
-    },
-    close: (code, reason) => {
-      raw.close(code, reason);
-    },
-    on: (type, cb) => {
-      const decoder = new TextDecoder();
-
-      // Only message gets a special process
-      if (type !== "message") {
-        listeners[type].add(cb as (ev: Event) => unknown);
-        raw.addEventListener(type, cb as (ev: Event) => unknown);
-        return;
-      }
-
-      const messageListener = async (ev: MessageEvent) => {
-        const data = ev.data;
-        if (
-          typeof data !== "string" &&
-          !ArrayBuffer.isView(data) &&
-          !(data instanceof Blob)
-        ) {
-          throw new Error(`Invalid data received: ${data}`);
-        }
-  
-        // deno-lint-ignore no-explicit-any
-        let message: any = deserialize(JSON.parse(
-          typeof data === "string" ? data
-          : ArrayBuffer.isView(data) ? decoder.decode(data)
-          : await data.text() // Blob
-        ), init?.serializers);
-  
-        if (init?.message) {
-          const parse: ParserFunction = (
-            typeof init.message === "function" ? init.message
-            : init.message.parse
-          );
-          message = await parse(message);
-        }
-
-        Object.assign(ev, { message });
-        (cb as (ev: Event) => void)(ev);
-      };
-
-      listeners.message.set(cb, messageListener);
-      raw.addEventListener(type, messageListener);
-    },
-    off: (type, cb) => {
-      // If the callback isn't defined, turn off everything for the given type.
-      // If the given type also isn't defined, turn off everything
-      if (!cb) {
-        const turnOff = (t: Exclude<typeof type, undefined>) => {
-          for (const listener of listeners[t].values()) {
-            raw.removeEventListener(t, listener as (ev: Event) => unknown);
-          }
-          listeners[t].clear();
-        };
-        if (!type) {
-          for (const k of Object.keys(listeners)) {
-            turnOff(k as keyof typeof listeners);
-          }
-          return;
-        }
-        turnOff(type);
-        return;
-      }
-
-      if (!type) {
-        throw new Error("If a callback is specified, the event type must also be specified");
-      }
-
-      // Otherwise, only turn off the listener if it was registered with this
-      // interface. Don't forget to remove it from the listeners, and that
-      // message listeners are stored in a map instead of a set
-      const listener = (
-        type === "message" ? listeners[type].get(cb) as (ev: Event) => unknown
-        : listeners[type].has(cb) ? cb
-        : undefined
-      );
-      if (listener) {
-        listeners[type].delete(cb);
-        raw.removeEventListener(type, listener);
-      }
-    },
-  };
-}
+// TODO: Constrain Query to Record<string, string | string[]>
+// TODO: Support most/all of the regexes supported by NextJS's fs-based router  
+// TODO: The ability to specify a Key parameter when constructing the client
+// that pre-keys into the given handler if its a Router  
 
 /**
  * Generic handler type for server-defined Request handlers.
@@ -226,113 +20,211 @@ export type Handler = (
   ...a: any[]
 ) => Promise<Response> | Response;
 
-// TODO: Add an Endpoint interface
-// TODO: Add a Router interface
-
 /**
- * An endpoint handler can use this Request type to ferry type information to
- * the client from the server about what client arguments are acceptable.
+ * A server endpoint handler can use this Request type to ferry type information
+ * to the client about what argument types are acceptable and what the Response
+ * will deserialize into.
  */
 export interface EndpointRequest<
-  Query = never,
-  Message = never,
-  Upgrade = never,
+  Query = unknown,
+  Message = unknown,
+  Resp = unknown,
 > extends Request {
-  __cav?: { // imaginary
+  // REVIEW: I wanted to use a Symbol() instead of string key so that this
+  // property wouldn't show up in intellisense. However, doing that creates a
+  // rogue Symbol() call in the asset bundles anytime this file is imported,
+  // even if nothing from it is used. (Side-effect.) I didn't really like that,
+  // so I switch it to zzz_cav (no side-effect), named so that it would come
+  // last in the intellisense suggestions. Should I go back? Having something
+  // like `Symbol("cav")` in the bundles would be arrogant but not that terrible
+  // if it means this imaginary property never shows up
+  /** @internal organs */
+  zzz_cav?: { // imaginary
+    socketEndpointRequest?: never;
+    routerRequest?: never;
     endpointRequest: {
       query: Query;
       message: Message;
-      upgrade: Upgrade; 
-    }
-    routerRequest?: never;
-  }
-}
-
-/**
- * Response type used to ferry the type of the deserialized response to the
- * client from the server. If a server handler doesn't return this type, the
- * response type of the corresponding client call will be "unknown".
- */
-export interface EndpointResponse<T = unknown> extends Response {
-  __cav?: { // imaginary
-    endpointResponse: T;
+      resp: Resp;
+    };
   };
 }
 
 /**
- * A router handler on the server can use this Request type to ferry type
- * information about valid routes to the client. The client uses the provided
- * RouterShape to infer which property accesses are valid.
+ * A server socket handler can use this Request type to ferry type information
+ * to the client about valid the socket send/receive message types and
+ * acceptable query string parameters for the initial request.
+ */
+export interface SocketRequest<
+  Query = unknown,
+  Send = unknown,
+  Receive = unknown,
+> extends Request {
+  /** @internal organs */
+  zzz_cav?: { // imaginary
+    endpointRequest?: never;
+    routerRequest?: never;
+    socketEndpointRequest?: {
+      query: Query;
+      send: Send;
+      receive: Receive;
+    };
+  };
+}
+
+/**
+ * A server router handler can use this Request type to ferry type information
+ * to the client about what routes exist and what data they accept/return. The
+ * client uses the RouterShape to infer which property accesses are valid and
+ * what their response type will be when called.
  */
 export interface RouterRequest<
   Shape extends RouterShape = Record<never, never>,
 > extends Request {
-  __cav?: { // imaginary
+  /** @internal organs */
+  zzz_cav?: { // imaginary
     endpointRequest?: never;
+    socketEndpointRequest?: never;
     routerRequest: Shape;
   };
 }
 
 /**
- * Type constraint for the Shape parameter of a RouterRequest. The shape
+ * Type constraint for the type parameter of a RouterRequest. The shape
  * describes the client property accesses that would result in a valid endpoint
- * call.
+ * call. The endpoints are specified by their handler definitions.
  */
-export interface RouterShape {
-  [x: string]: (
-    | Handler
-    | Handler[]
-    | RouterShape
-    | null
-  );
+ export interface RouterShape {
+  [x: string]: ClientType;
 }
 
+/** Type constraint for the Client's type parameter. */
+export type ClientType = (
+  | Handler
+  | { [x: number]: ClientType } // same thing as ClientType[]
+  | RouterShape
+  | null
+);
+
+// REVIEW: I was going to try two implementation ideas when approaching the e2e
+// type safety problem re: how routers are handled on the client. One that
+// expanded router paths into objects that resembled the router shape, and
+// another that flattened the router shape into a 2D array of all acceptable
+// paths. The former requires using a Proxy, the latter doesn't. I ended up
+// going with the former because it seemed easier at the time given how
+// typescript template strings work, and it better aligns with how routers get
+// defined (like methods on objects). But now I'm not so sure since it isn't
+// super intuitive and requires Proxies to pull it off (magic), which is
+// generally discouraged in the community. I think time will tell me if I need
+// to change it to the other idea. I kinda like it rn tho... magic is fun
+
 /**
- * A function that wraps `fetch()` with a tailored process for making requests
- * to a Cav server. Each property access on the function itself returns a new
- * Client that extends the URL of the original Client. The periods represent
- * path dividers and the accessed properties are path segments, like this:
- * `client("http://localhost/base").nested["pa.th"]()` will result in a request
- * to "http://localhost/base/nested/pa.th".
+ * Expands a route path from a RouterRequest into an object representing the
+ * Client property accesses required to trigger a request for that route.
+ * Example: `ExpandPath<"hello/world", true>` becomes `{ hello: { world: true }
+ * }`
  *
- * The type parameter is the type of the handler this client points to, which
- * allows the client TypeScript to extract information about what data the
- * server expects to receive and respond with.
+ * This is needed because routes are allowed to have slashes and/or path groups
+ * in them.
  */
-export type Client<
-  T extends Handler | Handler[] | RouterShape | null = null,
-> = (
-  // Handler[]
-  T extends Handler[] ? Client<T[number]>
-  // Stack
+type ExpandPath<K, T> = (
+  K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
+  : K extends `*` | `:${string}` ? { [x: string]: T }
+  : K extends `/${infer P}` | `${infer P}/` | `${infer P}/*` ? ExpandPath<P, T>
+  : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
+  : K extends string ? { [x in K]: T }
+  : never
+);
+
+/**
+ * Generates a type from the input with any strictly undefined/never properties
+ * removed. Preserves optional properties.
+ */
+type Clean<
+  T,
+  Required = {
+    [
+      K in keyof T as (
+        T[K] extends never ? never
+          : undefined extends T[K] ? never
+          : K
+      )
+    ]: T[K];
+  },
+  Optional = {
+    [
+      K in keyof T as (
+        K extends keyof Required ? never
+          : T[K] extends never ? never // ParserInput can return never
+          : K
+      )
+    ]?: T[K];
+  },
+> = Required & Optional;
+
+/** https://fettblog.eu/typescript-union-to-intersection/ */
+type UnionToIntersection<U> = (
+  U extends unknown ? (k: U) => void : never
+) extends ((k: infer I) => void) ? I : never;
+
+/**
+ * A (Proxied) client function that wraps a `fetch()` process tailored for
+ * making requests to a Cav handler.
+ */
+// i'm sorry
+export type Client<T extends ClientType = null> = {
+  <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+    Socket extends true ? WS : Promise<[unknown, Response]>
+  );
+  [x: string]: Client;
+} & (
+  // Non-Cav handlers get the fallback treatment  
+  // NOTE: This only works if T comes after the extends
+  ((
+    req: Request & { zzz_cav?: never },
+    // deno-lint-ignore no-explicit-any
+    ...a: any[]
+  ) => Promise<Response> | Response) extends T ? Client
+
+  // Router
   : T extends (
     req: RouterRequest<infer S>,
     // deno-lint-ignore no-explicit-any
     ...a: any[]
   ) => Response | Promise<Response> ? Client<S>
-  // Rpc
+
+  // Endpoint
   : T extends (
-    req: EndpointRequest<infer Q, infer M, infer U>,
+    req: EndpointRequest<infer Q, infer M, infer R>,
     // deno-lint-ignore no-explicit-any
     ...a: any[]
-  ) => EndpointResponse<infer R> | Promise<EndpointResponse<infer R>> ? (
-    x: ClientArg<Q, M, U>,
-  ) => Promise<R extends Socket<infer S, infer M2> ? Socket<M2, S> : R>
-  // Handler
-  /// deno-lint-ignore no-explicit-any
-  // : T extends (req: Request, ...a: any[]) => Response | Promise<Response> ? (
-  //   (x: ClientArg<unknown, unknown, unknown>) => Promise<unknown>
-  // )
-  // When a router's type is specified, the router's shape is passed into the
-  // client and gets handled here
+  ) => Response | Promise<Response> ? (
+    x: ClientArg<Q, M>,
+  ) => Promise<[R, Response]>
+
+  // SocketEndpoint
+  : T extends (
+    req: SocketRequest<infer Q, infer S, infer R>,
+  ) => Response | Promise<Response> ? (
+    x: ClientArg<Q, never, true>
+  ) => WS<R, S> // NOTE: Not a Promise
+
+  // RouterShape  
+  // When a router's type is specified, the router's shape is passed back into
+  // the client and gets handled here
   : T extends RouterShape ? UnionToIntersection<{
     [K in keyof T]: ExpandPath<K, Client<T[K]>>;
   }[keyof T]>
-  // Any other type results in an unknown response
-  // deno-lint-ignore no-explicit-any
-  : (x: ClientArg<any, any, any>) => Promise<unknown>
+
+  // ClientType[]
+  : T extends ClientType[] ? UnionToIntersection<Client<T[number]>>
+
+  // no-op for anything else (see up top)
+  // deno-lint-ignore ban-types
+  : {}
 );
 
+// TODO: Any other fetch options that can be forwarded (example: CORS)
 /**
  * Arguments for the client function when its internal path points to an
  * endpoint.
@@ -340,7 +232,7 @@ export type Client<
 export type ClientArg<
   Query = never,
   Message = never,
-  Upgrade = never,
+  Socket = never,
 > = Clean<{
   /**
    * Additional path segments to use when making a request to this endpoint.
@@ -349,99 +241,168 @@ export type ClientArg<
    */
   path?: string;
   /**
+   * Additional headers to include when making this request.
+   */
+  headers?: HeadersInit;
+  /**
+   * If the endpoint requires upgrading for web sockets (socket endpoint), this
+   * value should be set to `true`. Default: `undefined`
+   */
+  socket: Socket extends true ? true : never;
+  /**
    * The query string parameters expected by the endpoint. Default: `undefined`
    */
   query: Query;
   /**
-   * If this isn't an upgraded endpoint, this is the posted message expected by
-   * the Rpc. Default: `undefined`
+   * This is the type of message the endpoint expects to be POSTed. Ignored if
+   * the `socket` option is `true`. Default: `undefined`
    */
-  message: true extends Upgrade ? never : Message;
+  message: Socket extends true ? never : Message;
   /**
-   * Additional serializers to use while serializing data. Default: `undefined`
+   * Additional serializers to use while serializing data for this specific
+   * request. Default: `undefined`
    */
   serializers?: Serializers;
+  // June 2, 2022: I wanted to do this progress feature, but the Fetch API
+  // doesn't support request streaming and the initial spec for that feature may
+  // be dropped altogether if chrome decides to bow out. They've declared they
+  // won't attempt full-duplex Fetch streams or streams supporting HTTP/1.1. It
+  // often seems that with stuff like this, if chrome doesn't want to do it
+  // there's a high probability it just won't get done. To follow along:
+  // https://github.com/whatwg/fetch/issues/1438
+  //
+  // A feature for upload progress monitoring in fetch requests has been on the
+  // docket for a long time, since at least 2015 with
+  // https://github.com/whatwg/fetch/issues/65. Sadly, there's no reason to hope
+  // for any remedies in the near future :(
   /**
-   * If the endpoint requires upgrading for web sockets, this value should be
-   * set to `true`. Default: `undefined`
+   * If provided, this function will be called whenever the request progress
+   * changes. The argument is the progress as a fraction, i.e. 50% upload
+   * progress === 0.5
    */
-  upgrade: true extends Upgrade ? true : never;
+  // onProgress?: (progress: number) => void | Promise<void>;
 }>;
 
-interface CustomFetchArg {
+/**
+ * ClientArg but without any type information. These are the arguments when the
+ * type for the client function isn't known.
+ */
+export interface AnyClientArg<Socket extends boolean = false> {
   path?: string;
-  query?: Record<string, string | string[]>;
-  message?: unknown;
+  socket?: Socket;
+  headers?: HeadersInit;
+  query?: unknown;
+  message?: Socket extends true ? null | undefined : unknown;
   serializers?: Serializers;
-  upgrade?: boolean;
+  // onProgress?: (progress: number) => void | Promise<void>; // :(
 }
 
 /**
- * Constructs a new Client tied to a given base URL. The provided set of packers
- * will be used everywhere that data is packed/unpacked when using this client,
- * including web sockets.
+ * Constructs a new Client function tied to the base URL. The provided set of
+ * serializers will be used everywhere that data is de/serialized when using
+ * this client, including web sockets.
  *
- * If the type parameter provided is a Stack or an Rpc, the returned client
- * function's type will be tailored to match the inputs and outputs expected on
- * the Stack/Rpc. In the case of Stacks, the returned client function is wrapped
- * in a Proxy that will translate property accesses into path segments to append
- * to the internal URL of the request. Once the client function is called (as
- * opposed to keyed into), the fetch process uses that internal URL. The generic
- * types are imaginary; they're used only to keep the server setup and the
- * client-side api accesses in sync with each other. When they get out of sync,
- * there will be a typescript error in the IDE but the bundleScript() process
- * will ignore the error.
+ * If the type parameter provided is a Router, Endpoint, or SocketEndpoint, the
+ * returned Client's type will be tailored to match the inputs and outputs
+ * expected by that handler.
  *
- * For example:
+ * The Client is a function wrapped in a getter Proxy. Each property access will
+ * return a new Client, extending the URL of the original Client; the periods
+ * translate to path dividers and the property keys are path segments.
+ * 
+ * Extended example:
  *
  * ```ts
- * // On the server... (server.ts)
- * import { cav as c, zod as z } from "./deps.ts";
+ * // server.ts -------------------------------------------
  *
- * export type MyRpc = typeof myRpc;
+ * import {
+ *   router,
+ *   endpoint,
+ *   serve,
+ * } from "https://deno.land/x/cav/mod.ts";
  *
- * const myRpc = c.rpc({
- *   query: z.object({
- *     hi: z.string(),
- *   }),
- *   resolve: x => {
- *     return `Hello, ${x.query.hi}!`;
+ * export type Main = typeof main;
+ *
+ * const main = router({
+ *   api: {
+ *     v1: {
+ *       // GET /api/v1/hello -> `123` (application/json)
+ *       hello: endpoint(() => 123),
+ *     },
+ *     v2: {
+ *       // GET /api/v2/hello?name=$name -> `$name` (text/plain)
+ *       hello: endpoint({
+ *         query: (q: { name: string }) => q,
+ *         resolve: (x) => x.query.name,
+ *       }),
+ *     },
  *   },
  * });
  *
- * export type MyStack = typeof myStack;
+ * serve(main, { port: 8080 });
  *
- * export const myStack = c.stack({
- *   // There's multiple ways to divide up stack routes. Here's two of those
- *   // ways:
- *   path: {
- *     "to/rpc": myRpc,
- *   },
- * });
+ * // client.ts ---------------------------------------------
  *
- * // On the client... (browser/app.tsx)
- * import type { MyStack, MyRpc } from "../server.ts"; // Discarded upon build
+ * import { client } from "https://deno.land/x/cav/mod.ts";
+ * import type { Main } from "../server.ts";
  *
- * // Each of these equates to the same request. The a/b/c variables below are
- * // all of type `Promise<string>`, which is automatically determined by the
- * // passed in type parameter. The final request will be: `GET
- * // /path/to/rpc?hi=world`. When the promises resolve, the strings will be
- * // "Hello, world!"
- * const a = client<MyStack>("/").path.to.rpc({ query: { hi: "world" } });
- * const b = client<MyStack>("/")["path/to/rpc"]({ query: { hi: "world" } });
- * const c = client<MyRpc>("/path/to/rpc")({ query: { hi: "world" } });
+ * const main = client<Main>("http://localhost:8080");
+ *
+ * const v1 = main.api.v1.hello;
+ * // Type: (x: ClientArg) => Promise<number>
+ *
+ * const v2 = main.api.v2.hello;
+ * // Type: (x: ClientArg<{ name: string }>) => Promise<string>
+ *
+ * console.log(await v1());
+ * console.log(await main.api.v1.hello());
+ * // Output: [123, Response] (for both)
+ *
+ * console.log(await v2({ query: { name: "world" } }))
+ * // Output: ["world", Response]
+ *
+ * console.log(await v2({ query: {} }));
+ * // IDE error: Missing "name: string" on query
+ * // Output: [undefined, Response]
+ *
+ * await main.not.found();
+ * // Throws: HttpError("404 not found", { status: 404 })
  * ```
  */
-export function client<T extends Handler | RouterShape | null = null>(
-  base = "",
-  serializers?: Serializers,
+export function client<T extends ClientType = null>(
+  baseUrl = "",
+  baseSerializers?: Serializers,
 ): Client<T> {
-  const customFetch = (path: string, x: CustomFetchArg = {}) => {
+  // Remove duplicate/trailing slashes from the base url
+  let [proto, ...others] = baseUrl.split("://");
+  others = others.map(v => v.split("/").filter(v2 => !!v2).join("/"));
+  baseUrl = proto + "://" + others.join("/");
+
+  const clientFn = (path: string, x: AnyClientArg = {}) => {
+    // Calculate the final request path
+    let xp = x.path || "";
+    xp = xp.split("/").filter(v => !!v).join("/");
+    path = baseUrl + (path ? "/" + path : "") + (xp ? "/" + xp : "");
+
+    // Check that there's no conflicting serializer names
+    let serializers: Serializers = { ...(x.serializers || {}) };
+    for (const [k, v] of Object.entries(serializers)) {
+      if (v && baseSerializers && baseSerializers[k]) {
+        throw new Error(
+          `Conflict: The serializer key "${k}" is already used by one of the client's base serializers`,
+        );
+      } else if (!v) {
+        delete serializers[k];
+      }
+    }
+    serializers = { ...baseSerializers, ...serializers };
+
     // If there is an explicit origin in the path, it should override the second
     // argument. i.e. the second argument is just a fallback
     const url = new URL(path, self.location?.origin);
     if (x.query) {
-      for (const [k, v] of Object.entries(x.query)) {
+      const q = x.query as Record<string, string | string[]>;
+      for (const [k, v] of Object.entries(q)) {
         if (Array.isArray(v)) {
           for (const v2 of v) {
             url.searchParams.append(k, v2);
@@ -451,122 +412,54 @@ export function client<T extends Handler | RouterShape | null = null>(
         }
       }
     }
-  
-    if (x.upgrade) {
+
+    if (x.socket) {
       if (url.protocol === "http:") {
         url.protocol = "ws:";
       } else {
         url.protocol = "wss:";
       }
-  
-      const raw = new WebSocket(url.href, "json");
-      return wrapWebSocket(raw, { serializers: x.serializers });
+
+      // Note that this is returned synchronously. It's anti-pattern to
+      // sometimes return promises but not all the time. I'm doing this
+      // consciously; I don't want to need async/await just to use web sockets,
+      // whose API is already asynchronous b/c event listeners
+      return webSocket(url.href, { serializers });
     }
-  
+
     return (async () => {
-      let body: BodyInit | null = null;
-      let mime = "";
-      if (x.message) {
-        const pb = serializeBody(x.message, x.serializers);
-        body = pb.body;
-        mime = pb.mime;
-      }
-    
-      const method = body === null ? "GET" : "POST";
-      const res = await fetch(url.href, {
-        method,
-        headers: mime ? { "content-type": mime } : {},
-        body,
+      const req = packRequest(url.href, {
+        headers: x.headers,
+        message: x.message,
+        serializers,
       });
-    
-      let resBody: unknown = undefined;
-      if (res.body) {
-        resBody = await deserializeBody(res, x.serializers);
-      }
-    
+
+      const res = await fetch(req);
+      const body = await unpack(res, { serializers });
       if (!res.ok) {
-        const detail = { body: resBody };
-        let message: string;
-        let status: number;
-        let expose: unknown;
-        if (resBody instanceof HttpError) {
-          message = resBody.message;
-          status = resBody.status;
-          expose = resBody.expose;
-        } else if (typeof resBody === "string") {
-          message = resBody;
-          status = res.status;
-          expose = undefined;
-        } else {
-          message = res.statusText;
-          status = res.status;
-          expose = undefined;
-        }
-        throw new HttpError(message, { status, expose, detail });
+        throw new HttpError((
+          body instanceof HttpError ? body.message
+          : typeof body === "string" ? body
+          : res.statusText
+        ), {
+          status: res.status, // Note that HTTP status is always used
+          detail: { body, res },
+          expose: body instanceof HttpError ? body.expose : null,
+        });
       }
-    
-      return resBody;
+      return [body, res];
     })();
   };
 
-  const proxy = (path: string, serializers?: Serializers): unknown => {
-    return new Proxy((x: CustomFetchArg) => customFetch(path, {
-      ...x,
-      serializers: { ...serializers, ...x.serializers },
-    }), {
+  const proxy = (path: string): unknown => {
+    return new Proxy((x: AnyClientArg) => clientFn(path, x), {
       get(_, property) {
-        if (typeof property !== "string") {
-          throw new TypeError("Symbol segments can't be used on the client");
-        }
-  
-        const append = property.split("/").filter(p => !!p).join("/");
-        return proxy(
-          path.endsWith("/") ? path + append : path + "/" + append,
-          serializers,
-        );
-      }
+        const append = (property as string)
+          .split("/").filter(p => !!p).join("/");
+        return proxy(path && append ? path + "/" + append : path + append);
+      },
     });
   };
 
-  return proxy(base, serializers) as Client<T>;
+  return proxy("") as Client<T>;
 }
-
-/**
- * Expands the route path from a Stack into an object representing the client
- * property accesses required to make a successful request for the given route.
- * Example: `ExpandPath<"hello/world", true>` becomes `{ hello: { world: true }
- * }`
- */
-type ExpandPath<K, T> = (
-  K extends `*` | `:${string}` ? { [x: string]: T }
-  : K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
-  : K extends `/${infer P}` | `${infer P}/` | `${infer P}/*` ? ExpandPath<P, T>
-  : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
-  : K extends string ? { [x in K]: T }
-  : never
-);
-
-type Clean<
-  T,
-  Required = {
-    [K in keyof T as (
-      T[K] extends never ? never
-      : undefined extends T[K] ? never
-      : K
-    )]: T[K];
-  },
-  Optional = {
-    [K in keyof T as (
-      K extends keyof Required ? never
-      : T[K] extends never ? never
-      : K
-    )]?: T[K];
-  },
-> = Required & Optional;
-
-/**
- * https://fettblog.eu/typescript-union-to-intersection/
- */
-type UnionToIntersection<U> = (
-  U extends unknown ? (k: U) => void : never
-) extends ((k: infer I) => void) ? { [K in keyof I]: I[K] } : never

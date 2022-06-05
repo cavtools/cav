@@ -1,23 +1,14 @@
-// Copyright 2022 Connor Logan. All rights reserved. MIT License.
-// This module is browser-compatible.
+// Copyright 2022 Connor Logan. All rights reserved. MIT License.  
+// This module is browser-compatible.  
+// This module is heavily inspired by https://github.com/blitz-js/superjson.
 
-// This module is heavily inspired by https://github.com/blitz-js/superjson
-
-// TODO: Having $undefined be an object (which isn't falsy) is awkward. I see
-// why superjson did it the way they did it...  
-// TODO: Automatically escape strings for XSS, see
-// https://github.com/yahoo/serialize-javascript ?  
-// TODO: Support for ArrayBuffer/View  
-// TODO: Support for functions?
-
-// HttpError is defined here so that serial.ts can be self-contained, and
-// because the default serializers need to be able to handle an error class with
-// some exposed data by default. Also, the error class needs to be available on
-// the client, therefore it can't go in http.ts which is server-only
+// REVIEW: Automatically escape strings for XSS, see
+// https://github.com/yahoo/serialize-javascript ?
+// REVIEW: Support for functions?
 
 /**
- * Initializer arguments for constructing HttpErrors, which can expose arbitrary
- * data and status codes during de/serialization.
+ * Init options for constructing HttpErrors, which can expose arbitrary data and
+ * status codes during de/serialization.
  */
 export interface HttpErrorInit {
   /** An HTTP status code describing what kind of error this is. */
@@ -28,7 +19,8 @@ export interface HttpErrorInit {
   detail?: Record<string, unknown>;
 }
 
-/** An error class for describing exceptions during HTTP processing. */
+// HttpError is defined here so that serial.ts can be self-contained
+/** Error class for describing exceptions during HTTP processing. */
 export class HttpError extends Error {
   /** An HTTP status code describing what kind of error this is. */
   status: number;
@@ -46,53 +38,36 @@ export class HttpError extends Error {
 }
 
 /**
- * A group of functions used to recognize (check), serialize, and deserialize
- * objects and special values that are not strings, basic numbers, booleans, or
- * nulls into objects that are JSON compatible.
+ * Interface for serializing and deserializing arbitrary non-JSON primitive
+ * values into JSON.
  */
 export interface Serializer<I = unknown, O = unknown> {
   /**
-   * Function for checking if the serializer applies to a given value. JSON
-   * primitives like basic numbers, strings, booleans, and nulls skip all
-   * serializers and are returned as-is. For example, `check: (v) => typeof v
-   * === "string"` always returns false.
+   * Checks if this serializer applies to the value.
    */
   check(value: unknown): boolean;
   /**
-   * Transforms the value into its output on the resulting json-compatible
-   * object. The value returned by this function will be reserialized; the
-   * output does not need to be JSON-compatible. 
+   * Transforms the value into its JSON-compatible format. The value returned by
+   * this function will be re-serialized, i.e. not every nested value needs to
+   * be JSON compatible.
    */
   serialize(value: I): O;
   /**
-   * Transforms serialized values into their original shape and structure.
-   * Initially, the value is only constructed from the raw serialized JSON.
-   * Values that are more complex and need things like referential equality or
-   * non-POJO/Array objects will need to use the `whenDone` registration
-   * function to access the equivalent of the value returned from `serialize()`
-   * when the value was serialized. (See the docs for the WhenDone type for more
-   * details.)
+   * Transforms serialized values into their original input. Any nested
+   * serialized values will still be serialized when this function is called
+   * initially. Use the `whenDone` registration function to finish setting up
+   * the resulting output only when each of the nested values is finished
+   * deserializing, i.e. "ready".
    */
-  deserialize(raw: unknown, whenDone: WhenDone<O>): I;
+  deserialize(
+    raw: unknown,
+    whenDone: (fn: (ready: O) => void) => void,
+  ): I;
 }
 
-/**
- * A Serializer's `deserialize()` function receives the raw serialized JSON
- * value as its first argument and this registration function as the second.
- * Functions registered with whenDone will be run last-in-first-out (stack
- * order) when the raw JSON has been processed into the final object instance.
- * WhenDone functions are needed whenever the serialized data is more complex
- * than simple JSON values, for example when referential equality needs to be
- * maintained or when the serialize function returns anything that needs to be
- * re-serialized by some other serializer. Referenced objects may not be fully
- * initialized when the registered function is called, but its instance will be
- * instantiated so that references can be fixed.
- *
- * Credit goes to [json-dry](https://github.com/11ways/json-dry) for the
- * whenDone concept.
- */
-export type WhenDone<O> = (fn: (ready: O) => void) => void;
-
+// REVIEW: I don't think this function is really necessary. Probably fine to
+// make all the serializer types unknowns and not provide this typing function
+// at all
 /**
  * Constructs a Serializer. This simply returns the first argument, it's only
  * used for type annotations.
@@ -117,127 +92,280 @@ export type AnySerializer = Serializer<any, any>;
  */
 export type Serializers = Record<string, AnySerializer | null>;
 
-const defaults = new Map<string, AnySerializer>(Object.entries({
-  httpError: serializer({
-    check: (v) => v instanceof HttpError,
-    serialize: (v: HttpError) => ({
-      status: v.status,
-      message: v.message,
-      expose: v.expose || null,
-    }),
-    deserialize: (raw: { status: number, message: string }, whenDone) => {
-      const err = new HttpError(raw.message, { status: raw.status });
-      whenDone(ready => {
-        err.expose = ready.expose;
-      });
-      return err;
-    },
-  }),
-  error: serializer({
-    check: (v) => v instanceof Error,
-    serialize: (v: Error) => v.message,
-    deserialize: (raw) => new Error(raw as string),
-  }),
-  date: serializer({
-    check: (v) => v instanceof Date,
-    serialize: (v: Date) => v.toJSON(),
-    deserialize: (raw) => new Date(raw as string),
-  }),
-  undefined: serializer({
-    check: (v) => typeof v === "undefined",
-    serialize: () => null,
-    deserialize: () => undefined,
-  }),
-  symbol: serializer({
-    check: (v) => typeof v === "symbol",
-    serialize: (v: symbol) => v.description,
-    deserialize: (raw) => Symbol(raw as string),
-  }),
-  map: serializer({
-    check: (v) => v instanceof Map,
-    serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
-    deserialize: (_, whenDone) => {
-      const map = new Map();
-      whenDone(entries => {
-        entries.forEach(v => map.set(v[0], v[1]));
-      });
-      return map;
-    },
-  }),
-  set: serializer({
-    check: (val) => val instanceof Set,
-    serialize: (v: Set<unknown>) => Array.from(v.values()),
-    deserialize: (_, whenDone) => {
-      const set = new Set();
-      whenDone(values => {
-        values.forEach(v => set.add(v));
-      });
-      return set;
-    },
-  }),
-  bigint: serializer({
-    check: (v) => typeof v === "bigint",
-    serialize: (v: bigint) => v.toString(),
-    deserialize: (raw) => BigInt(raw as string),
-  }),
-  regexp: serializer({
-    check: (v) => v instanceof RegExp,
-    serialize: (v: RegExp) => v.toString(),
-    deserialize: (raw) => {
-      const r = (raw as string).slice(1).split("/");
-      return new RegExp(r[0], r[1]);
-    },
-  }),
-  number: serializer({
-    check: (v) => typeof v === "number" && (
-      isNaN(v) ||
-      v === Number.POSITIVE_INFINITY ||
-      v === Number.NEGATIVE_INFINITY ||
-      Object.is(v, -0)
-    ),
-    serialize: (v: number) => (
-      Object.is(v, -0) ? "-zero"
-      : v === Number.POSITIVE_INFINITY ? "+infinity"
-      : v === Number.NEGATIVE_INFINITY ? "-infinity"
-      : "nan"
-    ),
-    deserialize: (raw: string) => (
-      raw === "-zero" ? -0
-      : raw === "+infinity" ? Number.POSITIVE_INFINITY
-      : raw === "-infinity" ? Number.NEGATIVE_INFINITY
-      : NaN
-    ),
-  }),
-  conflict: serializer({
-    check: (v) => {
-      if (!isPojo(v)) {
-        return false;
-      }
-      const keys = Object.keys(v);
-      return keys.length === 1 && keys[0].startsWith("$");
-    },
-    serialize: (v: Record<string, string>) => Object.entries(v)[0],
-    deserialize: (_, whenDone) => {
-      const result: Record<string, unknown> = {};
-      whenDone(entry => {
-        result[entry[0]] = entry[1];
-      });
-      return result;
-    },
-  }),
-}));
+/**
+ * Determines if the object is a plain object or not. This also checks for
+ * prototype poisoning; it returns false whenever the prototype of an input
+ * object was poisoned before JSON.parsing it. See
+ * https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution
+ * for more information on prototype poisoning.
+ */
+export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
+  return (
+    !!obj &&
+    typeof obj === "object" &&
+    (
+      Object.getPrototypeOf(obj) === Object.prototype ||
+      Object.getPrototypeOf(obj) === null
+    )
+  );
+}
+
+// Creating a constant object results in the default serializers being included
+// in bundles regardless of whether or not they get used. Wrapping them in a
+// function fixes this. Also, creating them on every call is unnecessary work,
+// so they get cached to the window with a symbol
+function defaults(): Map<string, AnySerializer> {
+  const sym = Symbol.for("defaults.serial.cav.bar");
+  const s = self as unknown as typeof self & {
+    [sym]?: Map<string, AnySerializer>;
+  };
+
+  const cached = s[sym];
+  if (cached) {
+    return cached;
+  }
+
+  Object.assign(self, {
+    [sym]: new Map<string, AnySerializer>(Object.entries({
+      symbol: serializer({
+        check: (v) => typeof v === "symbol",
+        serialize: (v: symbol) => {
+          const key = Symbol.keyFor(v);
+          if (typeof key === "string") {
+            return { for: key };
+          }
+          return { desc: v.description };
+        },
+        deserialize: (raw: { for: string } | { desc: string }) => {
+          if ("for" in raw && typeof raw.for === "string") {
+            return Symbol.for(raw.for);
+          }
+          return Symbol((raw as { desc: string }).desc);
+        },
+      }),
+      error: serializer({
+        check: (v) => v instanceof Error,
+        serialize: (v: Error) => {
+          if (v instanceof HttpError) {
+            return {
+              type: "HttpError",
+              message: v.message,
+              status: v.status,
+              expose: v.expose,
+            };
+          }
+          // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
+          switch (v.name) {
+            case "EvalError":
+            case "RangeError":
+            case "ReferenceError":
+            case "SyntaxError":
+            case "TypeError":
+            case "URIError":
+            case "AggregateError":
+              return { type: v.name, message: v.message };
+            default:
+              return v.message;
+          }
+        },
+        // deno-lint-ignore no-explicit-any
+        deserialize: (raw: any, whenDone) => {
+          if (typeof raw === "string") {
+            return new Error(raw);
+          }
+    
+          switch (raw.type) {
+            case "HttpError": {
+              const err = new HttpError(raw.message, {
+                status: parseInt(raw.status, 10), // Should be parsed first
+              });
+              // deno-lint-ignore no-explicit-any
+              whenDone((ready: any) => {
+                err.expose = ready.expose;
+              });
+              return err;
+            }
+            case "EvalError":
+              return new EvalError(raw.message);
+            case "RangeError":
+              return new RangeError(raw.message);
+            case "ReferenceError":
+              return new ReferenceError(raw.message);
+            case "SyntaxError":
+              return new SyntaxError(raw.message);
+            case "TypeError":
+              return new TypeError(raw.message);
+            case "URIError":
+              return new URIError(raw.message);
+            case "AggregateError":
+              return new AggregateError(raw.message);
+            default:
+              return new Error(raw.message);
+          }
+        },
+      }),
+      date: serializer({
+        check: (v) => v instanceof Date,
+        serialize: (v: Date) => v.toJSON(),
+        deserialize: (raw) => new Date(raw as string),
+      }),
+      undefined: serializer({
+        check: (v) => typeof v === "undefined",
+        serialize: () => true,
+        deserialize: () => undefined,
+      }),
+      map: serializer({
+        check: (v) => v instanceof Map,
+        serialize: (v: Map<unknown, unknown>) => Array.from(v.entries()),
+        deserialize: (_, whenDone) => {
+          const map = new Map();
+          whenDone((entries) => {
+            entries.forEach((v) => map.set(v[0], v[1]));
+          });
+          return map;
+        },
+      }),
+      set: serializer({
+        check: (val) => val instanceof Set,
+        serialize: (v: Set<unknown>) => Array.from(v.values()),
+        deserialize: (_, whenDone) => {
+          const set = new Set();
+          whenDone((values) => {
+            values.forEach((v) => set.add(v));
+          });
+          return set;
+        },
+      }),
+      bigint: serializer({
+        check: (v) => typeof v === "bigint",
+        serialize: (v: bigint) => v.toString(),
+        deserialize: (raw) => BigInt(raw as string),
+      }),
+      regexp: serializer({
+        check: (v) => v instanceof RegExp,
+        serialize: (v: RegExp) => v.toString(),
+        deserialize: (raw) => {
+          const r = (raw as string).slice(1).split("/");
+          return new RegExp(r[0], r[1]);
+        },
+      }),
+      number: serializer({
+        check: (v) =>
+          typeof v === "number" && (
+            isNaN(v) ||
+            v === Number.POSITIVE_INFINITY ||
+            v === Number.NEGATIVE_INFINITY ||
+            Object.is(v, -0)
+          ),
+        serialize: (v: number) => (
+          Object.is(v, -0)
+            ? "-zero"
+            : v === Number.POSITIVE_INFINITY
+            ? "+infinity"
+            : v === Number.NEGATIVE_INFINITY
+            ? "-infinity"
+            : "nan"
+        ),
+        deserialize: (raw: string) => (
+          raw === "-zero"
+            ? -0
+            : raw === "+infinity"
+            ? Number.POSITIVE_INFINITY
+            : raw === "-infinity"
+            ? Number.NEGATIVE_INFINITY
+            : NaN
+        ),
+      }),
+      conflict: serializer({
+        check: (v) => {
+          if (!isPojo(v)) {
+            return false;
+          }
+          const keys = Object.keys(v);
+          return keys.length === 1 && keys[0].startsWith("$");
+        },
+        serialize: (v: Record<string, string>) => Object.entries(v)[0],
+        deserialize: (_, whenDone) => {
+          const result: Record<string, unknown> = {};
+          whenDone((entry) => {
+            result[entry[0]] = entry[1];
+          });
+          return result;
+        },
+      }),
+      buffer: serializer({
+        check: (v) => v instanceof ArrayBuffer || ArrayBuffer.isView(v),
+        // TODO: This could be faster - https://jsben.ch/wnaZC
+        serialize: (v: ArrayBufferView | ArrayBuffer) => {
+          let base64 = "";
+          const data = new Uint8Array(
+            v instanceof ArrayBuffer ? v : v.buffer,
+          );
+          for (let i = 0; i < data.length; i++) {
+            base64 += String.fromCharCode(data[i]);
+          }
+          return {
+            type: v.constructor.name,
+            data: self.btoa(base64),
+          };
+        },
+        deserialize: (raw: { type: string; data: string }) => {
+          const data = self.atob(raw.data);
+          const buf = new Uint8Array(data.length);
+          for (let i = 0; i < data.length; i++) {
+            buf[i] = data.charCodeAt(i);
+          }
+    
+          switch (raw.type) {
+            case "ArrayBuffer":
+              return buf.buffer;
+            case "Int8Array":
+              return new Int8Array(buf.buffer);
+            case "Uint8Array":
+              return new Uint8Array(buf.buffer);
+            case "Uint8ClampedArray":
+              return new Uint8ClampedArray(buf.buffer);
+            case "Int16Array":
+              return new Int16Array(buf.buffer);
+            case "Uint16Array":
+              return new Uint16Array(buf.buffer);
+            case "Int32Array":
+              return new Int32Array(buf.buffer);
+            case "Uint32Array":
+              return new Uint32Array(buf.buffer);
+            case "Float32Array":
+              return new Float32Array(buf.buffer);
+            case "Float64Array":
+              return new Float64Array(buf.buffer);
+            case "BigInt64Array":
+              return new BigInt64Array(buf.buffer);
+            case "BigUint64Array":
+              return new BigUint64Array(buf.buffer);
+            case "DataView":
+              return new DataView(buf.buffer);
+            default: // Uint8Array is the fallback
+              return buf;
+          }
+        },
+      }),
+    })),
+  });
+
+  return s[sym]!;
+}
 
 function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
   if (!serializers) {
-    return defaults;
+    return defaults();
   }
 
+  const defs = defaults();
   const smap = new Map<string, AnySerializer>();
   for (const [k, v] of Object.entries(serializers)) {
     if (v === null) {
       continue;
     }
-    if (k === "ref" || defaults.has(k)) {
+    if (k === "ref" || defs.has(k)) {
       throw new Error(
         `Conflict: The serializer key "${k}" is reserved`,
       );
@@ -245,9 +373,9 @@ function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
     smap.set(k, v);
   }
   if (!smap.size) {
-    return defaults;
+    return defs;
   }
-  for (const [k, v] of defaults.entries()) {
+  for (const [k, v] of defs.entries()) {
     smap.set(k, v);
   }
   return smap;
@@ -256,9 +384,8 @@ function serializerMap(serializers?: Serializers): Map<string, AnySerializer> {
 /**
  * Serializes a value recursively until it's JSON-compatible. Serializers can be
  * plugged in to extend the accepted types beyond what Cav supports by default.
- * Referential equality will be preserved whenever the same object or symbol
- * value is encountered more than once. If a value isn't recognized by any of
- * the provided serializers or the default serializers, an error is thrown.
+ * If a value isn't recognized by any of the provided or default serializers, an
+ * error will be thrown.
  */
 export function serialize(
   value: unknown,
@@ -268,9 +395,9 @@ export function serialize(
   const paths = new Map<unknown, string[]>();
 
   const pathString = (p: string[]) => (
-    p.map(v => v.replace(/\./g, "\\.")).join(".")
+    p.map((v) => v.replace(/\./g, "\\.")).join(".")
   );
-  
+
   const recur = (
     val: unknown,
     path: string[],
@@ -325,7 +452,8 @@ export function serialize(
     }
 
     throw new TypeError(
-      `No matching serializers for ${val}`,
+      // deno-lint-ignore no-explicit-any
+      `No matching serializers for instance of "${(val as any).constructor.name}"`,
     );
   };
 
@@ -333,9 +461,9 @@ export function serialize(
 }
 
 /**
- * Deserializes a value returned by `serialize()` into the original input value.
- * Referential equality will be restored on the output object. An error will be
- * thrown if a value was serialized with an unknown/unused serializer.
+ * Deserializes a JSON value that was `serialize()`d back into the original
+ * input. An error will be thrown if a value was serialized with an unknown
+ * serializer.
  */
 export function deserialize<T = unknown>(
   value: unknown,
@@ -362,7 +490,7 @@ export function deserialize<T = unknown>(
     // NOTE: This block should protect against prototype poisoning
     if (!isPojo(val)) {
       throw new TypeError(
-        `Non-plain objects can't be deserialized - Path: ${path}`,
+        `Non-plain objects can't be deserialized - Path: "${path}"`,
       );
     }
 
@@ -392,10 +520,12 @@ export function deserialize<T = unknown>(
       const result = serializer.deserialize(raw, (fn) => {
         whenDones.push(() => fn(serialized));
       });
-      if (result && (
-        typeof result === "object" ||
-        typeof result === "symbol"
-      )) {
+      if (
+        result && (
+          typeof result === "object" ||
+          typeof result === "symbol"
+        )
+      ) {
         objects.set(path, result);
       }
       serialized = recur(raw, `${path}.${tag}`);
@@ -409,7 +539,7 @@ export function deserialize<T = unknown>(
     }
     return copy;
   };
-  
+
   const result = recur(value, "");
   let fn = whenDones.pop();
   while (fn) {
@@ -419,55 +549,47 @@ export function deserialize<T = unknown>(
   return result as T;
 }
 
-/**
- * Serializes a value into a type that's compatible with a BodyInit for a new
- * Response or a fetch() call, making it easy to serialize values for sending to
- * an external host/client via HTTP. If a provided value is already compatible
- * with BodyInit, it will be returned with an appropriate mime type, skipping
- * the serialization process. During serialization, this function extends the
- * serializable types to include Blobs and Files. If a Blob is encountered
- * during serialization, the resulting body will be a multipart FormData that
- * encodes the shape of the input as well as the blobs that were encountered.
- * Otherwise, a regular JSON string will be returned. Blobs and Files can be
- * placed anywhere on the input value, even if they are nested, inside a Map or
- * Set, etc. 
- */
-export function serializeBody(value: unknown, serializers?: Serializers): {
-  body: BodyInit;
-  mime: string;
-} {
+interface PackedBody {
+  body?: BodyInit | null;
+  headers?: HeadersInit;
+}
+
+function packBody(
+  body: unknown,
+  serializers?: Serializers,
+): PackedBody {
   if (
-    value instanceof ArrayBuffer ||
-    value instanceof ReadableStream ||
-    ArrayBuffer.isView(value)
+    body === null ||
+    typeof body === "undefined" ||
+    body instanceof ReadableStream ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    typeof body === "string" ||
+    body instanceof URLSearchParams ||
+    body instanceof FormData
   ) {
+    return { body };
+  }
+
+  if (body instanceof File) {
     return {
-      body: value,
-      mime: "application/octet-stream",
+      body,
+      headers: { "content-disposition": `attachment; filename="${body.name}"` },
     };
   }
-  if (typeof value === "string") {
+
+  if (body instanceof Blob) {
     return {
-      body: value,
-      mime: "text/plain",
+      body,
+      headers: { "content-disposition": "attachment" },
     };
   }
-  if (value instanceof URLSearchParams) {
-    return {
-      body: value,
-      mime: "application/x-www-form-urlencoded",
-    };
-  }
-  if (value instanceof Blob) {
-    return {
-      body: value,
-      mime: value.type,
-    };
-  }
-  
+
+  // Anything else needs to be serialized either as JSON or as a multipart form
+  // if there's Blobs anywhere in the input
   const form = new FormData();
   const fileKeys = new Map<Blob, string>();
-  const shape = JSON.stringify(serialize(value, {
+  const json = JSON.stringify(serialize(body, {
     ...serializers,
     __blob: serializer({
       check: (v) => v instanceof Blob,
@@ -485,98 +607,264 @@ export function serializeBody(value: unknown, serializers?: Serializers): {
       deserialize: () => null, // Not needed here
     }),
   }));
-
   if (!fileKeys.size) {
     return {
-      body: shape,
-      mime: "application/json",
+      body: json,
+      headers: { "content-type": "application/json" },
     };
   }
-  form.set("__shape", new Blob([shape], {
-    type: "application/json",
-  }));
-  return {
-    body: form,
-    mime: "multipart/form-data",
-  };
+  form.set(
+    "__shape",
+    new File([json], "__shape.json", {
+      type: "application/json",
+    }),
+  );
+  return { body: form };
 }
 
-const mimeStream = /^application\/octet-stream;?/;
+function mergeHeaders(a?: HeadersInit, b?: HeadersInit) {
+  const ah = new Headers(a);
+  const bh = new Headers(b);
+  for (const [k, v] of bh.entries()) {
+    if (k === "content-type" || k === "content-disposition") {
+      ah.set(k, v);
+    } else {
+      ah.append(k, v);
+    }
+  }
+  return ah;
+}
+
+export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
+  serializers?: Serializers;
+  message?: unknown;
+}
+
+/**
+ * Serializes a new Request, which can then be deserialized using `unpack()`.
+ * Only GET and POST requests are supported; the method used is automatically
+ * determined based on the presence of the `message` init option. Any headers
+ * specified on the init options will override the headers determined during
+ * serialization. The serializable input types can be extended with the
+ * serializers option.
+ *
+ * If the message is `undefined`, the method is GET. If the message is `null`,
+ * the method is POST with no body. Any defined message (including null) results
+ * in a POST request.
+ *
+ * If the message extends BodyInit, it'll be passed through to the Request
+ * constructor unmodified. During `unpack()`, it'll be deserialized according to
+ * the content-type set on the request headers, which can sometimes result in
+ * asymmetric deserialization.
+ *
+ * If the message is a File or Blob, it'll also be sent with a
+ * "content-disposition: attachment" header. During `unpack()`, it will be
+ * deserialized back into a regular Blob or File, along with the file name if
+ * there is one, regardless of the content-type.
+ *
+ * If the message is any other type, it'll first be serialized as JSON using
+ * `serialize()`. The default serializers are extended to include Files and
+ * Blobs; if a File or Blob exists on the serialized value, the request will be
+ * sent as a specially formatted FormData instead of JSON. During `unpack()`,
+ * it'll be deserialized back into the original `message` with all the Files and
+ * Blobs back in the right place. Referential equality for Files and Blobs will
+ * be preserved, so that duplicate Blobs only have 1 copy uploaded.
+ */
+export function packRequest(url: string, init?: PackRequestInit): Request {
+  const packed = packBody(init?.message, init?.serializers);
+  return new Request(url, {
+    ...init,
+    method: typeof packed.body === "undefined" ? "GET" : "POST",
+    headers: mergeHeaders(packed.headers, init?.headers),
+    body: packed.body,
+  });
+}
+
+export interface PackResponseInit extends ResponseInit {
+  serializers?: Serializers;
+}
+
+/**
+ * Serializes a new Response, which can then be deserialized back into the input
+ * body using `unpack()`. Any headers specified on the init options will
+ * override the headers determined during serialization. The same applies for
+ * status and statusText. The serializable input types can be extended with the
+ * serializers option.
+ *
+ * If the body is `undefined`, a 204 Response is created. If the body is `null`,
+ * a 200 response is created with a zero-length body.
+ *
+ * If the body extends BodyInit, it'll be passed through to the Response
+ * constructor unmodified. During `unpack()`, it'll be deserialized according to
+ * the content-type set on the response headers, which can sometimes result in
+ * asymmetric deserialization.
+ *
+ * If the message is a File or Blob, it'll also be sent with a
+ * "content-disposition: attachment" header. During `unpack()`, it will be
+ * deserialized back into a regular Blob or File, along with the file name if
+ * there is one, regardless of the content-type.
+ *
+ * If the message is any other type, it'll first be serialized as JSON using
+ * `serialize()`. The default serializers are extended to include Files and
+ * Blobs; if a File or Blob exists on the serialized value, the response will be
+ * sent as a specially formatted FormData instead of JSON. During `unpack()`,
+ * it'll be deserialized back into the original `message` with all the Files and
+ * Blobs back in the right place. Referential equality for Files and Blobs will
+ * be preserved, so that duplicate Blobs only have 1 copy uploaded.
+ */
+export function packResponse(
+  body?: unknown,
+  init?: PackResponseInit,
+): Response {
+  // If it's already a Response, just append the headers and forward it. Ignore
+  // the init status and statusText
+  if (body instanceof Response) {
+    const mergeHeaders = new Headers(init?.headers);
+    for (const [k, v] of mergeHeaders.entries()) {
+      body.headers.append(k, v);
+    }
+    return body;
+  }
+
+  const packed = packBody(body, init?.serializers);
+  return new Response(packed.body, {
+    status: typeof packed.body === "undefined" ? 204 : 200,
+    ...init,
+    headers: mergeHeaders(packed.headers, init?.headers),
+  });
+}
+
 const mimeString = /^text\/plain;?/;
 const mimeParams = /^application\/x-www-form-urlencoded;?/;
 const mimeJson = /^application\/json;?/;
 const mimeForm = /^multipart\/form-data;?/;
 
+/** Options for the `unpack()` function. */
+export interface UnpackOptions {
+  /** Serializers to use when unpacking the Request or Response body. */
+  serializers?: Serializers;
+  /**
+   * If the Request or Response body exceeds this size, a 413 HttpError will be
+   * thrown. If not specified, the default is 1 megabyte. If the number is 0,
+   * there will be no limit on body size.
+   */
+  maxBodySize?: number;
+}
+
+// TODO: Add an option for controlling the way forms/blobs/files are processed.
+// (For large file uploads that are disk backed)
 /**
- * Deserializes a Request or Response object whose body was serialized with
- * `serializeBody()`. Any Serializers used outside of the library defaults
- * during serialization need to be provided here as well, or an error may be
- * thrown.
+ * Deserializes a Request or Response generated with `packRequest()` or
+ * `packResponse()` back into the original request message or response body. Any
+ * serializers specified during packing need to be specified here as well.
  */
-export async function deserializeBody(
-  from: Request | Response,
-  serializers?: Serializers,
+export async function unpack(
+  packed: Request | Response,
+  opt?: UnpackOptions,
 ): Promise<unknown> {
-  const mime = from.headers.get("content-type");
-  if (!mime || mime.match(mimeStream)) {
-    return from.body;
+  // GET requests and 204 responses return undefined. Any other Request or
+  // Response without a body returns null
+  if (
+    (packed instanceof Request && packed.method === "GET") ||
+    (packed instanceof Response && packed.status === 204)
+  ) {
+    return undefined;
   }
-  if (mime.match(mimeString)) {
-    return await from.text();
+  if (!packed.body) {
+    return null;
   }
-  if (mime.match(mimeParams)) {
-    const form = await from.formData();
-    const params = new URLSearchParams();
-    for (const [k, v] of form.entries()) {
-      params.append(k, v as string);
+
+  const maxBodySize = (
+    typeof opt?.maxBodySize === "number" ? opt.maxBodySize
+    : 1024 * 1024 // 1 megabyte
+  );
+  const contentLength = parseInt(packed.headers.get("content-length")!, 10);
+  if (isNaN(contentLength) && maxBodySize !== 0) {
+    // If there's no content-length specified but there's a body stream, we need
+    // to use ReadableStreams to track the size of the body. If the size ever
+    // exceeds the maxBodySize, throw a 413
+    const reader = packed.body.getReader();
+    const op = packed;
+    let size = 0;
+    packed = new Response(new ReadableStream({
+      start: controller => {
+        const pump = async (): Promise<void> => {
+          const chunk = await reader.read();
+          if (chunk.done) {
+            controller.close();
+            return;
+          }
+          if (chunk.value) {
+            size += chunk.value.length;
+            if (size > maxBodySize) {
+              throw new HttpError("413 payload too large", { status: 413 });
+            }
+          }
+          controller.enqueue(chunk.value);
+          return pump();
+        };
+        return pump();
+      },
+    }), { headers: op.headers });
+  }
+
+  const type = packed.headers.get("content-type") || "";
+  const disposition = packed.headers.get("content-disposition");
+  if (disposition) {
+    const match = disposition.match(/^attachment; filename="(.+)"/);
+    if (match) {
+      const filename = match[1];
+      return new File([await packed.blob()], filename, { type }); // REVIEW
     }
-    return params;
+    if (disposition.match(/^attachment;?/)) {
+      return await packed.blob();
+    }
   }
-  if (mime.match(mimeJson)) {
-    return deserialize(await from.json(), serializers);
+
+  const parseForm = (form: FormData) => {
+    const result: Record<string, string | File | (string | File)[]> = {};
+    for (const [k, v] of form.entries()) {
+      const old = result[k];
+      if (Array.isArray(old)) {
+        old.push(v);
+      } else if (typeof old === "undefined") {
+        result[k] = v;
+      } else {
+        result[k] = [old, v];
+      }
+    }
+    return result;
+  };
+
+  if (type.match(mimeString)) {
+    return await packed.text();
   }
-  if (mime.match(mimeForm)) {
-    const form = await from.formData();
+  if (type.match(mimeParams)) {
+    return parseForm(await packed.formData());
+  }
+  if (type.match(mimeJson)) {
+    return deserialize(await packed.json(), opt?.serializers);
+  }
+  if (type.match(mimeForm)) {
+    const form = await packed.formData();
     const shape = form.get("__shape");
     if (
       !shape ||
       !(shape instanceof Blob) ||
       shape.type !== "application/json"
     ) {
-      return form;
+      return parseForm(form);
     }
-    return JSON.parse(deserialize(await shape.text(), {
-      ...serializers,
+    return deserialize(JSON.parse(await shape.text()), {
+      ...opt?.serializers,
       __blob: serializer({
         check: () => false, // Not needed here
-        serialize: () => false, // Not needed here
-        deserialize: (raw: string) => {
-          const blob = form.get(raw);
-          if (!blob || !(blob instanceof Blob)) {
-            throw new Error(
-              `Referenced blob "${raw}" is missing from the form body`,
-            );
-          }
-          return blob;
-        },
+        serialize: () => null, // Not needed here
+        deserialize: (raw: string) => form.get(raw),
       }),
-    }));
+    });
   }
-  return await from.blob();
-}
 
-/**
- * Utility function used in the serial functions that determines if an object is
- * a plain object or not. Because this is such a common operation when checking
- * and serializing unknown objects, it's being exported as part of the API.
- */
-export function isPojo(obj: unknown): obj is Record<string, unknown> {
-  return (
-    !!obj &&
-    typeof obj === "object" &&
-    (
-      Object.getPrototypeOf(obj) === Object.prototype ||
-      Object.getPrototypeOf(obj) === null
-    )
-  );
+  // The fallback behavior just returns a Blob (for now)
+  return await packed.blob();
 }

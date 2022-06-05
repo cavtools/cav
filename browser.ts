@@ -10,3 +10,4 @@
 export * from "./client.ts";
 export * from "./parser.ts";
 export * from "./serial.ts";
+export * from "./ws.ts";
