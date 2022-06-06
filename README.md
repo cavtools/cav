@@ -1,17 +1,15 @@
 # Cav
 
 Cav is a freelancer's web framework, made for [Deno](https://deno.land). It
-provides a craft brewed development flow, leveraging many powerful TypeScript
-features to help solo developers do more with less.
+touts a craft brewed development flow, leveraging many powerful features of
+TypeScript and Deno to help solo devs do more with less. Guiding principles:
 
-**Core principles:**
-
-- Modularity
-- Declarative server definitions
-- Automatic end-to-end typesafety
+- Modular, maintainable server definitions
+- Isomorphic client integrations
+- Automatic end-to-end type safety
 - Use The Platform
 
-**Status:** New, active, and not yet ready for production.
+**Status:** New, active, almost fully tested, and not yet ready for production.
 
 ## Goals
 
@@ -20,21 +18,21 @@ features to help solo developers do more with less.
   - [x] Zero third-party dependencies
 - It should come with everything a solo developer would need to build a modern
   web app (minus the database)
-  - [x] Built-in request routing
-  - [x] Easy static asset serving
+  - [x] Routing
+  - [x] Static asset serving
   - [x] (Signed) cookies and JWTs
-  - [x] Fully typed web sockets
+  - [x] Web sockets
+  - [x] Form and JSON parsing / validation
+  - [x] Automatic de/serialization of most data types, including Dates, Maps,
+        etc.
   - [x] Dev-time bundling for TypeScript assets
   - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
-  - [x] Form parsing and file uploads
-  - [x] Automatic de/serialization of most data types, including Maps, Sets,
-        etc.
 - "Hello world" should be as easy as `deno run`ning a tiny `main.ts`
   - [x] Zero config
   - [x] Zero CLI commands
 - The client should use types imported from the server to catch API mistakes at
   the IDE level automatically
-  - [x] [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
+  - [x] End-to-end type safety
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
 - Most tasks should be typesafe without needing to write TypeScript
   - [x] Uses inferencing and generics behind-the-scenes
@@ -54,7 +52,6 @@ features to help solo developers do more with less.
 - [ ] SSG
 - [ ] Strict file/folder structure
 - [ ] File-system based routing
-- [ ] Official plugins for popular libraries
 - [ ] Make everyone happy
 - [ ] Money
 
@@ -66,6 +63,51 @@ features to help solo developers do more with less.
 - [superjson](https://github.com/blitz-js/superjson) /
   [devalue](https://github.com/Rich-Harris/devalue) /
   [json-dry](https://github.com/11ways/json-dry)
+
+## Notes
+
+Links and thoughts related to Cav's architecture.
+
+- [HackerNews](https://news.ycombinator.com/item?id=31285827): **TRPC: End-to-end typesafe APIs made easy (trpc.io)**
+  - Cav and tRPC scratch a similar itch, but Cav wanders a little further into
+    Express territory.
+    
+    When I started writing what would become Cav, tRPC couldn't (on its own)
+    accept posted bodies that weren't JSON, which led to a craving for an input
+    normalization step before the parsing step that could accept both JSON and
+    regular HTML forms. i.e. an endpoint with a single input parser could use it
+    to parse both FormData and JSON request bodies. This would be useful in
+    simple static sites that only need a contact or subscription form, for
+    example.
+    
+    I had also been toying around with Deno's bundler in my spare time, and
+    superjson was something I had been using at work. I loved the thought of a
+    comprehensive, full-stack solution that combined these dope ideas into a
+    unified module, built on this standards-compliant runtime I was rapidly
+    falling for. At the time, it seemed like writing such a framework myself
+    would be a fun learning project.
+
+    Lessons so far: Web frameworks are hard, Deno is awesome, and creating your
+    own tools is a great way to learn things you never knew you never knew [🍃](https://www.youtube.com/watch?v=O9MvdMqKvpU)
+  - End-to-end type safety is fairly straightforward TypeScript witchcraft.
+    Short summary: TypeScript strips type imports at build time, making it
+    possible to import server-side type definitions into client-side code
+    without bundling consequences. The client can then use those types to keep
+    API inputs/outputs in-sync with what the server expects, triggering TS
+    errors when something isn't right. It can do this without code generation,
+    which is a limitation of the venerable [gRPC](https://grpc.io/). Add
+    TypeScript's inferencing and generics to the mix, and a new world of
+    developer tools is born.
+    
+    This is a really cool pattern to work with. A great resource to learn more
+    is this [essay](https://colinhacks.com/essays/painless-typesafety) written
+    by Colin McDonnell, the creator of Zod and tRPC.
+    
+    It seems like there's some convergent evolution going on in the community
+    regarding this concept, with several projects mentioned in the HN comments
+    working with similar ideas. TypeScript makes implementing this pattern
+    pretty simple, and Cav is just one person's subjective take on what it can
+    look like.
 
 ## Dedication
 

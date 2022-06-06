@@ -173,9 +173,9 @@ Deno.test("wildcard + router context + path + groups + query", async () => {
     ":a": {
       "b/:c/:a": handler, // #1
       "b/:c/:d/:e": handler, // #2, #5
-      // These duplicates check that the groups get put back correctly after a
-      // route matches but then throws a no match
-      "/b/:notC": () => noMatch(new Response()),
+      // this pair of routes checks that the groups get put back correctly after
+      // a route matches but the handler throws a no match
+      "/b/:shouldntBeInGroups": () => noMatch(new Response()),
       "b/:c": handler, // #3
       "*": handler, // #4
     },
