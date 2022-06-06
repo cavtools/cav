@@ -19,7 +19,7 @@ export interface RouterContext {
   /** The raw query string parameters, as an object. */
   query: Record<string, string | string[]>;
   /** The path groups captured during the routing process so far. */
-  groups: Record<string, string>;
+  groups: Record<string, string | string[]>;
   /**
    * If this isn't null, this Response should be returned as soon as possible in
    * the routing process. It means the path requested wasn't canonical, and this
@@ -89,10 +89,38 @@ export type Router<S extends RouterShape = {}>  = S & ((
  * properties are also available on the returned Router function.
  */
 export function router<S extends RouterShape>(routes: S): Router<S> {
-  const shape: RouterShape = {};
+  const shape: Record<string, Handler | Handler[]> = {};
   for (let [k, v] of Object.entries(routes)) {
+    if (!v) {
+      continue;
+    }
+
     k = k.split("/").filter(k2 => !!k2).join("/");
-    shape[k] = v;
+    const old = shape[k];
+
+    if (!old) {
+      if (typeof v === "function" || Array.isArray(v)) {
+        shape[k] = v;
+      } else {
+        shape[k] = router(v);
+      }
+    } else if (Array.isArray(old)) {
+      if (typeof v === "function") {
+        shape[k] = [...old, v];
+      } else if (Array.isArray(v)) {
+        shape[k] = [...old, ...v];
+      } else {
+        shape[k] = router(v);
+      }
+    } else {
+      if (typeof v === "function") {
+        shape[k] = [old, v];
+      } else if (Array.isArray(v)) {
+        shape[k] = [old, ...v];
+      } else {
+        shape[k] = [old, router(v)];
+      }
+    }
   }
 
   // Check that routes are valid
@@ -104,6 +132,13 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
 
     const split = k.split("/");
     for (const s of split) {
+      // "." and ".." aren't allowed
+      if (s === "." || s === "..") {
+        throw new SyntaxError(
+          "'.' and '..' aren't allowed in route path segments",
+        );
+      }
+
       if (
         // If it doesn't match the path capture regex
         !s.match(/^:[a-zA-Z_$]+[a-zA-Z_$0-9]*$/) &&
@@ -117,21 +152,12 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     }
   }
 
-  const handlers: Record<string, Handler | Handler[]> = {}
-  for (const [k, v] of Object.entries(shape)) {
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      handlers[k] = router(v);
-    } else if (v) {
-      handlers[k] = v;
-    }
-  }
-
   // Sort the handlers like this:
   //   1. Solo wildcards are always last
   //   2. By path depth. Paths with more path segments get tested sooner.
   //   3. For two paths that have the same depth, index order is used (lower
   //      index === higher priority)
-  const paths = Object.keys(handlers);
+  const paths = Object.keys(shape);
   const sortedPaths: string[] = paths.sort((a, b) => {
     if (a === b) {
       return 0;
@@ -153,20 +179,19 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     }
 
     // #3
-    return paths.indexOf(a) - paths.indexOf(b);
+    return paths.indexOf(b) - paths.indexOf(a);
   });
 
   const patterns = new Map<URLPattern, Handler | Handler[]>();
-  for (let p of sortedPaths) {
-    if (p === "*") {
-      p = `/:__nextPath*/*?`;
-    } else {
-      p = `${p}/:__nextPath*/?`;
-    }
-    patterns.set(new URLPattern(p, "http://_._"), handlers[p]);
+  for (const p of sortedPaths) {
+    const pattern = p === "*" ? `/:__nextPath*/*?` : `${p}/:__nextPath*/*?`;
+    patterns.set(new URLPattern(pattern, "http://_._"), shape[p]);
   }
   
-  const handler = async (req: Request, conn: http.ConnInfo): Promise<Response> => {
+  const handler = async (
+    req: Request,
+    conn: http.ConnInfo,
+  ): Promise<Response> => {
     // Check for redirect
     const ctx = routerContext(req);
     if (ctx.redirect) {
@@ -175,13 +200,30 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
 
     let lastNoMatch: Response | null = null;
 
-    for (const [pattern, handler] of patterns.entries()) {
+    for (const [pattern, fn] of patterns.entries()) {
       const match = pattern.exec(ctx.path, "http://_._");
       if (!match) {
         continue;
       }
+      
+      const groups = { ...ctx.groups };
+      for (const [k, v] of Object.entries(match.pathname.groups)) {
+        const old = groups[k];
+        if (Array.isArray(old)) {
+          groups[k] = [...old, v];
+        } else if (typeof old === "string") {
+          groups[k] = [old, v];
+        } else {
+          groups[k] = v;
+        }
+      }
 
-      const groups = { ...ctx.groups, ...match.pathname.groups };
+      // REVIEW: I don't think this delete will ever cause a bug but it might?
+      // The 0 group is always empty I think.
+      // https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API#unnamed_and_named_groups
+      delete groups["0"];
+
+      // const groups = { ...ctx.groups, ...match.pathname.groups };
       const path = `/${groups.__nextPath || ""}`;
       delete groups.__nextPath;
 
@@ -194,9 +236,9 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       Object.assign(ctx, { path, groups });
 
       try {
-        if (Array.isArray(handler)) {
-          for (const h of handler) {
-            const response = await h(req, conn);
+        if (Array.isArray(fn)) {
+          for (const f of fn) {
+            const response = await f(req, conn);
             if (didMatch(response)) {
               return response;
             } else {
@@ -204,7 +246,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
             }
           }
         } else {
-          const response = await handler(req, conn);
+          const response = await fn(req, conn);
           if (didMatch(response)) {
             return response;
           } else {
@@ -214,7 +256,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       } finally {
         // Before moving on, put the path and groups back to their original
         // state
-        Object.assign(req, { path: oPath, groups: oGroups });
+        Object.assign(ctx, { path: oPath, groups: oGroups });
       }
     }
 

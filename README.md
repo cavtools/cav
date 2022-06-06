@@ -1,8 +1,8 @@
 # Cav
 
 Cav is a freelancer's web framework, made for [Deno](https://deno.land). It
-provides a craft brewed development experience, leveraging many powerful
-TypeScript features to streamline the creation of full-stack web applications.
+provides a craft brewed development flow, leveraging many powerful TypeScript
+features to help solo developers do more with less.
 
 **Core principles:**
 
@@ -15,7 +15,7 @@ TypeScript features to streamline the creation of full-stack web applications.
 
 ## Goals
 
-- Learn as much as possible about backend web frameworks by writing one, from
+- Learn as much as possible about backend web frameworks, by writing one from
   ~~scratch~~ Deno
   - [x] Zero third-party dependencies
 - It should come with everything a solo developer would need to build a modern
@@ -23,9 +23,9 @@ TypeScript features to streamline the creation of full-stack web applications.
   - [x] Built-in request routing
   - [x] Easy static asset serving
   - [x] (Signed) cookies and JWTs
-  - [x] Web socket support
+  - [x] Fully typed web sockets
   - [x] Dev-time bundling for TypeScript assets
-  - [x] Works with JSX frameworks like [Preact](https://preactjs.com)
+  - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
   - [x] Form parsing and file uploads
   - [x] Automatic de/serialization of most data types, including Maps, Sets,
         etc.
@@ -69,4 +69,4 @@ TypeScript features to streamline the creation of full-stack web applications.
 
 ## Dedication
 
-Cav is dedicated to the bar it was named after.
+Cav is dedicated to the bar it's named after. 🍻

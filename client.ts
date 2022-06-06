@@ -101,7 +101,7 @@ export interface RouterRequest<
 /** Type constraint for the Client's type parameter. */
 export type ClientType = (
   | Handler
-  | { [x: number]: ClientType } // same thing as ClientType[]
+  | Handler[]
   | RouterShape
   | null
 );

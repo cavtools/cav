@@ -15,7 +15,7 @@ import type { WS } from "../ws.ts";
 import type { PackResponseInit, Serializers } from "../serial.ts";
 
 // This import starts the web socket server that's defined in ws_test.ts. Using
-// it to test the client socket functionality.
+// it to test the client socket functionality
 import "./ws_test.ts";
 
 const nextRes: {
@@ -268,20 +268,19 @@ const _trs: (Client<TestRouterShape> extends Client & {
   g: Client;
 } ? true : never) = true;
 
-// ClientType[]
-type TestClientTypeArray = (
-  | null
+// Handler[]
+type TestHandlerArray = (
   | TestRouter
   | TestEndpoint
   | TestSocketEndpoint
-  | TestRouterShape
+  | (() => Response)
 )[];
-const _tcta: (Client<TestClientTypeArray> extends (
+const _tha: (Client<TestHandlerArray> extends (
   & Client
   & Client<TestRouter>
   & Client<TestEndpoint>
   & Client<TestSocketEndpoint>
-  & Client<TestRouterShape>
+  & Client<() => Response>
 ) ? true : never) = true;
 
 // Everything
@@ -292,14 +291,14 @@ type TestIntegration = (req: RouterRequest<{
       f: TestSocketEndpoint;
     };
   };
-  "a/b": TestClientTypeArray; // tests route collisions
+  "a/b": TestHandlerArray; // tests route collisions
   g: TestRouterShape;
   h: TestRouter;
   i: null;
 }>) => Response;
 const _ti: (Client<TestIntegration> extends Client & {
   a: Client & {
-    b: Client<TestClientTypeArray> & {
+    b: Client<TestHandlerArray> & {
       c: Client & {
         [d: string]: Client & {
           [e: string]: Client<TestEndpoint>;

@@ -160,7 +160,7 @@ export interface ContextArg {
   /** The unprocessed query object associated with this request. */
   query: Record<string, string | string[]>;
   /** The unprocoessed path groups object captured during routing. */
-  groups: Record<string, string>;
+  groups: Record<string, string | string[]>;
   /**
    * When context functions need to run cleanup tasks after the Endpoint has
    * resolved the Response (such as setting cookies, logging performance
@@ -212,7 +212,7 @@ export interface ResolveArg<
   /** The parsed path groups captured while routing the request. */
   groups: (
     Groups extends AnyParser ? ParserOutput<Groups>
-    : Record<string, string>
+    : Record<string, string | string[]>
   );
   /** The Context created after the Endpoint matched the Request. */
   ctx: Ctx extends Context<infer C> ? C : undefined;
@@ -264,7 +264,7 @@ export interface ResolveErrorArg {
   /** The unprocessed query object associated with this request. */
   query: Record<string, string | string[]>;
   /** The unprocoessed path groups object captured during routing. */
-  groups: Record<string, string>;
+  groups: Record<string, string | string[]>;
   /** The offending error. */
   error: unknown;
   /** Returns a Response created using an asset from an assets directory. */
@@ -341,7 +341,7 @@ export function endpoint(
     let output: unknown = undefined;
     let path: string;
     let groups: unknown;
-    let unparsedGroups: Record<string, string>;
+    let unparsedGroups: Record<string, string | string[]>;
     let error: unknown = undefined;
 
     try {
@@ -545,7 +545,7 @@ function pathMatcher(opt: {
 }): (req: Request) => Promise<{
   path: string;
   groups: unknown;
-  unparsedGroups: Record<string, string>;
+  unparsedGroups: Record<string, string | string[]>;
 }> {
   const useFullPath = opt.path && opt.path.startsWith("^");
   const pattern = new URLPattern(
@@ -567,7 +567,18 @@ function pathMatcher(opt: {
       throw new HttpError("404 not found", { status: 404 });
     }
 
-    const unparsedGroups = { ...routerCtx.groups, ...match.pathname.groups };
+    const unparsedGroups = { ...routerCtx.groups };
+    for (const [k, v] of Object.entries(match.pathname.groups)) {
+      const old = unparsedGroups[k];
+      if (Array.isArray(old)) {
+        unparsedGroups[k] = [...old, v];
+      } else if (typeof old === "string") {
+        unparsedGroups[k] = [old, v];
+      } else {
+        unparsedGroups[k] = v;
+      }
+    }
+
     let groups = unparsedGroups;
     if (!parseGroups) {
       return { path, groups, unparsedGroups };
