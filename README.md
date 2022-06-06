@@ -40,7 +40,7 @@ features to help solo developers do more with less.
   - [x] Uses inferencing and generics behind-the-scenes
   - [x] Maximal TypeScript benefits, minimal TypeScript
 - Its syntax should be functional and declarative
-  - [x] Schema-like Router and Endpoint definitions
+  - [x] Immutable, schema-like Router and Endpoint definitions
   - [x] No hidden context
   - [x] No middleware
   - [x] ~~No magic~~ Yes magic 🧙‍♂️
