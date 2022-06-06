@@ -78,7 +78,9 @@ export interface EndpointSchema<
   query?: Query;
   /**
    * Limits the size of posted messages. If a message exceeds the limit, a 413
-   * HttpError will be thrown and serialized back to the client.
+   * HttpError will be thrown and serialized back to the client. If 0 is
+   * specified, body size is unlimited. (Don't do that.) The default max body
+   * size is 1024 * 1024 bytes (1 Megabyte).
    */
   maxBodySize?: number | null;
   /**

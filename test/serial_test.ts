@@ -17,6 +17,9 @@ import {
 } from "../serial.ts";
 import type { Serializers } from "../serial.ts";
 
+// TODO: Ran deno fmt without thinking. Need to go back and undo the changes
+// because I don't like how deno fmt does it. Sorry for the inconsistencies
+
 function testSerializing(opt: {
   serializers?: Serializers;
   input: unknown;
@@ -874,10 +877,11 @@ Deno.test("packing and unpacking", async (t) => {
     await unpack(resolves);
     try {
       await unpack(rejects);
-      assert(false, "the payload that was too large didn't reject");
     } catch (err) {
-      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+      assertEquals(err,new HttpError("413 payload too large", { status: 413 }));
+      return;
     }
+    assert(false, "the payload that was too large didn't reject");
   });
 
   await t.step("default max body size w/o content-length header", async () => {
@@ -896,10 +900,11 @@ Deno.test("packing and unpacking", async (t) => {
     await unpack(resolves);
     try {
       await unpack(rejects);
-      assert(false, "the payload that was too large didn't reject");
     } catch (err) {
-      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+      assertEquals(err,new HttpError("413 payload too large", { status: 413 }));
+      return;
     }
+    assert(false, "the payload that was too large didn't reject");
   });
 
   await t.step("max body size w/ content-length header", async () => {
@@ -913,10 +918,11 @@ Deno.test("packing and unpacking", async (t) => {
     await unpack(resolves, { maxBodySize: 10 });
     try {
       await unpack(rejects, { maxBodySize: 10 });
-      assert(false, "the payload that was too large didn't reject");
     } catch (err) {
-      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+      assertEquals(err,new HttpError("413 payload too large", { status: 413 }));
+      return;
     }
+    assert(false, "the payload that was too large didn't reject");
   });
 
   await t.step("max body size w/o content-length header", async () => {
@@ -935,10 +941,11 @@ Deno.test("packing and unpacking", async (t) => {
     await unpack(resolves, { maxBodySize: 10 });
     try {
       await unpack(rejects, { maxBodySize: 10 });
-      assert(false, "the payload that was too large didn't reject");
     } catch (err) {
-      assertEquals(err, new HttpError("413 payload too large", { status: 413 }));
+      assertEquals(err,new HttpError("413 payload too large", { status: 413 }));
+      return;
     }
+    assert(false, "the payload that was too large didn't reject");
   });
 
   await t.step("max body size 0", async () => {
