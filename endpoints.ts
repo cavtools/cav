@@ -197,8 +197,8 @@ export interface ResolveArg<
   /** The Request being handled. */
   req: Request;
   /**
-   * A ResponseInit applied to the Rpc response after resolving and packing the
-   * value to send to the client. The Headers object is always available.
+   * A ResponseInit applied to the Endpoint response after resolving and packing
+   * the value to send to the client. The Headers object is always available.
    */
   res: ResponseInit & { headers: Headers };
   /** new URL(req.url) */
@@ -251,8 +251,8 @@ export interface ResolveErrorArg {
   /** The Request being processed. */
   req: Request;
   /**
-   * A ResponseInit applied to the Rpc response after resolving and packing the
-   * value to send to the client. The Headers object is always available.
+   * A ResponseInit applied to the Endpoint response after resolving and packing
+   * the value to send to the client. The Headers object is always available.
    */
   res: ResponseInit & { headers: Headers };
   /** new URL(req.url) */
@@ -325,6 +325,7 @@ export function endpoint(
       return routerCtx.redirect;
     }
 
+    // Utilities
     const asset = (opt: ServeAssetOptions) => serveAsset(req, opt);
     const redirect = (to: string, status?: number) => {
       if (to.startsWith(".")) {
@@ -382,14 +383,10 @@ export function endpoint(
         conn,
         cookies,
         path,
-        // deno-lint-ignore no-explicit-any
-        groups: groups as any,
-        // deno-lint-ignore no-explicit-any
-        ctx: ctx as any,
-        // deno-lint-ignore no-explicit-any
-        query: query as any,
-        // deno-lint-ignore no-explicit-any
-        message: message as any,
+        groups,
+        ctx,
+        query,
+        message,
         asset,
         redirect,
       });
@@ -462,8 +459,6 @@ export function endpoint(
   return Object.assign(handler, { ...schema });
 }
 
-// I'm pulling these functions out and explaining them because they're
-// significant chunks of the request handling process
 /**
  * Given an Endpoint's "message" option, this returns a function that checks
  * whether a Request's method is allowed or not during handling. When a
@@ -749,8 +744,6 @@ export interface SocketSchema<
    * is made available to socket setups as the `ctx` property on the resolver
    * arguments. Context handling happens after the Socket matched with the
    * Request but before query validation begins.
-   *
-   * TODO: Example use case
    */
   ctx?: Ctx;
   /**
@@ -823,8 +816,8 @@ export interface SocketSetupArg<
   /** The Request being handled. */
   req: Request;
   /**
-   * A ResponseInit applied to the Rpc response after resolving and packing the
-   * value to send to the client. The Headers object is always available.
+   * A ResponseInit applied to the Endpoint response after resolving and packing
+   * the value to send to the client. The Headers object is always available.
    */
   res: ResponseInit & { headers: Headers };
   /** new URL(req.url) */
