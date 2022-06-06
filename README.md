@@ -5,7 +5,7 @@ touts a craft brewed development flow, leveraging many powerful features of
 TypeScript and Deno to help solo devs do more with less. Guiding principles:
 
 - Modular, maintainable server definitions
-- Isomorphic client integrations
+- Isomorphic client integration
 - Automatic end-to-end type safety
 - Use The Platform
 
