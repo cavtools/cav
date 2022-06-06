@@ -18,6 +18,12 @@ import type { Serializers } from "./serial.ts";
 import type { ServeAssetOptions } from "./assets.ts";
 import type { WS } from "./ws.ts";
 
+// TODO: Several type constraints are more permissive than they should be, for
+// example query parsers should constrain to Parser<Record<string, string |
+// string[]>>. Further, the Any types (like AnyParser, AnyEndpointSchema, etc.)
+// probably don't need to exist, but I'm not positive. I should get everything
+// tested before I try to fix these things
+
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<S extends EndpointSchema = EndpointSchema> = S & ((
   req: EndpointRequest<
@@ -79,8 +85,8 @@ export interface EndpointSchema<
   /**
    * Limits the size of posted messages. If a message exceeds the limit, a 413
    * HttpError will be thrown and serialized back to the client. If 0 is
-   * specified, body size is unlimited. (Don't do that.) The default max body
-   * size is 1024 * 1024 bytes (1 Megabyte).
+   * specified, body size is unlimited. (Don't do that.) The default max body size is 1024 * 1024
+   * bytes (1 Megabyte).
    */
   maxBodySize?: number | null;
   /**

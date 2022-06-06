@@ -1,6 +1,12 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
+// TODO: Several type constraints are more permissive than they should be, for
+// example query parsers should constrain to Parser<Record<string, string |
+// string[]>>. Further, the Any types (like AnyParser, AnyEndpointSchema, etc.)
+// probably don't need to exist, but I'm not positive. I should get everything
+// tested before I try to fix these things
+
 /**
  * An object or function responsible for parsing data or throwing errors if the
  * data isn't shaped as expected. These can either be functions with a single

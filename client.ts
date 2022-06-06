@@ -6,10 +6,11 @@ import { HttpError, packRequest, unpack } from "./serial.ts";
 import type { WS } from "./ws.ts";
 import type { Serializers } from "./serial.ts";
 
-// TODO: Constrain Query to Record<string, string | string[]>
-// TODO: Support most/all of the regexes supported by NextJS's fs-based router  
-// TODO: The ability to specify a Key parameter when constructing the client
-// that pre-keys into the given handler if its a Router  
+// TODO: Several type constraints are more permissive than they should be, for
+// example query parsers should constrain to Parser<Record<string, string |
+// string[]>>. Further, the Any types (like AnyParser, AnyEndpointSchema, etc.)
+// probably don't need to exist, but I'm not positive. I should get everything
+// tested before I try to fix these things
 
 /**
  * Generic handler type for server-defined Request handlers.
@@ -52,7 +53,7 @@ export interface EndpointRequest<
 
 /**
  * A server socket handler can use this Request type to ferry type information
- * to the client about valid the socket send/receive message types and
+ * to the client about the valid socket send/receive message types and
  * acceptable query string parameters for the initial request.
  */
 export interface SocketRequest<
@@ -76,7 +77,7 @@ export interface SocketRequest<
  * A server router handler can use this Request type to ferry type information
  * to the client about what routes exist and what data they accept/return. The
  * client uses the RouterShape to infer which property accesses are valid and
- * what their response type will be when called.
+ * what their response type will be.
  */
 export interface RouterRequest<
   Shape extends RouterShape = Record<never, never>,
