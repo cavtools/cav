@@ -1,7 +1,7 @@
 # Cav
 
 Cav is a freelancer's web framework, made for [Deno](https://deno.land). It aims
-to provide all the modern server-side essentials along with a few TypeScript
+to provide all the modern server-side essentials, along with some TypeScript
 tricks to streamline the development process.
 
 **Status:** New, active, and not yet ready for production.
@@ -61,4 +61,4 @@ tricks to streamline the development process.
 
 ## Dedication
 
-Cav is dedicated to the bar it's named after.
+Cav is dedicated to the bar it was named after.
