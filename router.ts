@@ -110,7 +110,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       } else if (Array.isArray(v)) {
         shape[k] = [...old, ...v];
       } else {
-        shape[k] = router(v);
+        shape[k] = [...old, router(v)];
       }
     } else {
       if (typeof v === "function") {

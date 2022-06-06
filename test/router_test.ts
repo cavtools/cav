@@ -154,6 +154,12 @@ Deno.test("equally deep routes use index order to resolve", async () => {
   const rtr = router({
     "///a/b": () => res1,
     "a/b///////": () => res2,
+    // This caught a bug where I was discarding the previously collected router
+    // Handler[] by accident while normalizing the router shape. This nested
+    // router definition replaced the previous two when it shouldn't have
+    "a/b": {
+      "*": () => res2,
+    },
   });
   const res = await rtr(new Request("http://localhost/a/b/c"), conn);
   assertEquals(await res.text(), "yes");
