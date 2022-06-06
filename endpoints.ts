@@ -293,8 +293,8 @@ export function endpoint<
   schema: Schema & EndpointSchema<Groups, Ctx, Query, Message, Resp>,
 ): Endpoint<Schema>;
 export function endpoint<
+  Res extends Resolve<null, null, null, null, Resp>,
   Resp = void,
-  Res extends Resolve<null, null, null, null, Resp> = () => Resp,
 >(
   resolve: Res & Resolve<null, null, null, null, Resp>,
 ): Endpoint<{ resolve: Res }>
