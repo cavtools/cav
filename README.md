@@ -1,15 +1,22 @@
 # Cav
 
-Cav is a freelancer's web framework, made for [Deno](https://deno.land). It aims
-to provide all the modern server-side essentials, along with some TypeScript
-tricks to streamline the development process.
+Cav is a freelancer's web framework, made for [Deno](https://deno.land). It
+provides a craft brewed development experience, leveraging many powerful
+TypeScript features to streamline the creation of full-stack web applications.
+
+**Core principles:**
+
+- Modularity
+- Declarative server definitions
+- Automatic end-to-end typesafety
+- Use The Platform
 
 **Status:** New, active, and not yet ready for production.
 
 ## Goals
 
-- Learn as much as possible about backend web frameworks, by writing one from
-  scratch (?)
+- Learn as much as possible about backend web frameworks by writing one, from
+  ~~scratch~~ Deno
   - [x] Zero third-party dependencies
 - It should come with everything a solo developer would need to build a modern
   web app (minus the database)
@@ -19,6 +26,7 @@ tricks to streamline the development process.
   - [x] Web socket support
   - [x] Dev-time bundling for TypeScript assets
   - [x] Works with JSX frameworks like [Preact](https://preactjs.com)
+  - [x] Form parsing and file uploads
   - [x] Automatic de/serialization of most data types, including Maps, Sets,
         etc.
 - "Hello world" should be as easy as `deno run`ning a tiny `main.ts`
@@ -29,7 +37,7 @@ tricks to streamline the development process.
   - [x] [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
 - Most tasks should be typesafe without needing to write TypeScript
-  - [x] Heavily leverages TypeScript inferencing and generics behind-the-scenes
+  - [x] Uses inferencing and generics behind-the-scenes
   - [x] Maximal TypeScript benefits, minimal TypeScript
 - Its syntax should be functional and declarative
   - [x] Schema-like Router and Endpoint definitions
