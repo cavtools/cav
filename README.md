@@ -7,7 +7,7 @@ TypeScript and Deno to help solo devs do more with less. Guiding principles:
 - Full stack
 - Modular, maintainable server definitions
 - Isomorphic client integration
-- Automatic end-to-end type safety
+- Automatic end-to-end typesafety
 - Use The Platform
 
 **Status:** New, active, almost fully tested, and not yet ready for production.
@@ -33,7 +33,7 @@ TypeScript and Deno to help solo devs do more with less. Guiding principles:
   - [x] Zero CLI commands
 - The client should use types imported from the server to catch API mistakes at
   the IDE level automatically
-  - [x] End-to-end type safety
+  - [x] End-to-end typesafety
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
 - Most tasks should be typesafe without needing to write TypeScript
   - [x] Uses inferencing and generics behind-the-scenes
@@ -90,7 +90,7 @@ Links and thoughts related to Cav's architecture.
 
     Lessons so far: Web frameworks are hard, Deno is awesome, and creating your
     own tools is a great way to learn things you never knew you never knew [🍃](https://www.youtube.com/watch?v=O9MvdMqKvpU)
-  - End-to-end type safety is fairly straightforward TypeScript witchcraft.
+  - End-to-end typesafety is fairly straightforward TypeScript witchcraft.
     Short summary: TypeScript strips type imports at build time, making it
     possible to import server-side type definitions into client-side code
     without bundling consequences. The client can then use those types to keep
