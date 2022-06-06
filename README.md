@@ -1,6 +1,8 @@
 # Cav
 
-Cav is a web framework for [Deno](https://deno.land).
+Cav is a freelancer's web framework, made for [Deno](https://deno.land). It aims
+to provide all the modern server-side essentials along with a few TypeScript
+tricks to streamline the development process.
 
 **Status:** New, active, and not yet ready for production.
 
@@ -13,7 +15,7 @@ Cav is a web framework for [Deno](https://deno.land).
   web app (minus the database)
   - [x] Built-in request routing
   - [x] Easy static asset serving
-  - [x] (Signed) cookies and JWTs (WIP)
+  - [x] (Signed) cookies and JWTs
   - [x] Web socket support
   - [x] Dev-time bundling for TypeScript assets
   - [x] Works with JSX frameworks like [Preact](https://preactjs.com)
@@ -22,10 +24,12 @@ Cav is a web framework for [Deno](https://deno.land).
 - "Hello world" should be as easy as `deno run`ning a tiny `main.ts`
   - [x] Zero config
   - [x] Zero CLI commands
-- The client API should use types imported from the server to catch I/O type
-  errors at the IDE level
+- The client should use types imported from the server to catch API mistakes at
+  the IDE level automatically
   - [x] [End-to-end type safety](https://colinhacks.com/essays/painless-typesafety)
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
+- Most tasks should be typesafe without needing to write TypeScript
+  - [x] Heavily leverages TypeScript inferencing and generics behind-the-scenes
   - [x] Maximal TypeScript benefits, minimal TypeScript
 - Its syntax should be functional and declarative
   - [x] Schema-like Router and Endpoint definitions
@@ -54,3 +58,7 @@ Cav is a web framework for [Deno](https://deno.land).
 - [superjson](https://github.com/blitz-js/superjson) /
   [devalue](https://github.com/Rich-Harris/devalue) /
   [json-dry](https://github.com/11ways/json-dry)
+
+## Dedication
+
+Cav is dedicated to the bar it's named after.
