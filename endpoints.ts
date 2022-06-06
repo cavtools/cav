@@ -2,7 +2,7 @@
 
 import { http, path as stdPath } from "./deps.ts";
 import { prepareAssets, serveAsset } from "./assets.ts";
-import { routerContext } from "./router.ts";
+import { routerContext, noMatch } from "./router.ts";
 import { HttpError, packResponse, unpack } from "./serial.ts";
 import { cookieJar } from "./cookies.ts";
 import { webSocket } from "./ws.ts";
@@ -17,8 +17,6 @@ import type { CookieJar } from "./cookies.ts";
 import type { Serializers } from "./serial.ts";
 import type { ServeAssetOptions } from "./assets.ts";
 import type { WS } from "./ws.ts";
-
-// TODO: Add "allow" | "require" to the allowed message types
 
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<S extends EndpointSchema = EndpointSchema> = S & ((
@@ -58,20 +56,10 @@ export interface EndpointSchema<
    */
   groups?: Groups;
   /**
-   * Limits the size of posted messages. If a message exceeds the limit, a 413
-   * HttpError will be thrown and serialized back to the client.
-   */
-  maxBodySize?: number | null;
-  /**
    * Keys to use when signing cookies. The cookies are available as the
    * "cookies" resolver argument.
    */
   keys?: [string, ...string[]] | null;
-  /**
-   * Serializers to use when serializing and deserializing Request and Response
-   * bodies.
-   */
-  serializers?: Serializers | null;
   /**
    * Factory function Endpoints can use to create a custom context,
    * which is made available to resolvers as the `ctx` property on the resolver
@@ -88,6 +76,16 @@ export interface EndpointSchema<
    * available as the "query" resolver argument.
    */
   query?: Query;
+  /**
+   * Limits the size of posted messages. If a message exceeds the limit, a 413
+   * HttpError will be thrown and serialized back to the client.
+   */
+  maxBodySize?: number | null;
+  /**
+   * Serializers to use when serializing and deserializing Request and Response
+   * bodies.
+   */
+  serializers?: Serializers | null;
   /**
    * Parses the POSTed body, if there is one. The behavior of this parser
    * determines the methods allowed for this endpoint. If there is no parser,
@@ -294,9 +292,12 @@ export function endpoint<
 >(
   schema: Schema & EndpointSchema<Groups, Ctx, Query, Message, Resp>,
 ): Endpoint<Schema>;
-export function endpoint<Resp = void>(
-  resolve: Resolve<AnyParser, null, AnyParser, null, Resp>,
-): Endpoint<{ resolve: Resolve<AnyParser, null, AnyParser, null, Resp> }>
+export function endpoint<
+  Resp = void,
+  Res extends Resolve<null, null, null, null, Resp> = () => Resp,
+>(
+  resolve: Res & Resolve<null, null, null, null, Resp>,
+): Endpoint<{ resolve: Res }>
 export function endpoint(
   schemaOrFn: (
     EndpointSchema | Resolve<AnyParser, null, AnyParser, null, unknown>
@@ -333,26 +334,29 @@ export function endpoint(
       return Response.redirect(u.href, status || 302);
     };
 
-    const res: ResponseInit & { headers: Headers } = {
-      headers: new Headers(),
-    };
+    const res: ResponseInit & { headers: Headers } = { headers: new Headers() };
     const { url } = routerCtx;
     const cleanupTasks: (() => Promise<void> | void)[] = [];
     let output: unknown = undefined;
+    let path: string;
+    let groups: unknown;
+    let unparsedGroups: Record<string, string>;
+    let error: unknown = undefined;
 
     try {
-      // Make sure the path matches, then check the method
-      const { path, groups, unparsedGroups } = await matchPath(req);
-      const options = await checkMethod(req);
-      if (options) {
-        return options;
-      }
+      ({ path, groups, unparsedGroups } = await matchPath(req));
+    } catch {
+      return noMatch(new Response("404 not found", { status: 404 }));
+    }
+    const options = await checkMethod(req);
+    if (options) {
+      return options;
+    }
 
-      // Set up the cookie
+    try {
       const cookies = await cookieJar(req, schema.keys || undefined);
       cleanupTasks.push(() => cookies.setCookies(res.headers));
 
-      // Create the custom context, if there is one
       let ctx: unknown = undefined;
       if (schema.ctx) {
         ctx = await schema.ctx({
@@ -370,11 +374,7 @@ export function endpoint(
         });
       }
 
-      // Parse the input, i.e. the (query) string parameters and the request
-      // body (message)
       const { query, message } = await parseInput(req);
-
-      // Resolve to the output
       output = !schema.resolve ? undefined : await schema.resolve({
         req,
         res,
@@ -394,10 +394,11 @@ export function endpoint(
         redirect,
       });
     } catch (err) {
+      error = err;
       // Check to see if the resolveError function can handle it
-      let error = err;
-      let errorHandled = false;
       if (schema.resolveError) {
+        // If it rethrows, use the newly thrown error instead. If it returns
+        // something, that thing should be packed into a Response
         try {
           output = await schema.resolveError({
             req,
@@ -411,24 +412,9 @@ export function endpoint(
             asset: (opt: ServeAssetOptions) => serveAsset(req, opt),
             redirect,
           });
-          if (typeof output !== "undefined") {
-            errorHandled = true;
-          }
-        } catch (err2) {
-          error = err2;
+        } catch (err) {
+          error = err;
         }
-      }
-
-      // If it's an error but it's not an HttpError, mask it with a 500 error
-      // and a bugtrace code
-      if (!errorHandled && error instanceof HttpError) {
-        output = error;
-      } else if (!errorHandled) {
-        const bugtrace = crypto.randomUUID().slice(0, 8);
-        console.error(`ERROR: Uncaught exception [${bugtrace}] -`, err);
-        output = new HttpError(`500 internal server error [${bugtrace}]`, {
-          status: 500,
-        });
       }
     }
 
@@ -436,6 +422,27 @@ export function endpoint(
     while (cleanupTasks.length) {
       const task = cleanupTasks.pop()!;
       await task();
+    }
+
+    if (typeof error !== "undefined" && typeof output === "undefined") {
+      if (error instanceof HttpError && !error.expose) {
+        res.status = error.status;
+        output = error.message;
+      } else if (error instanceof HttpError) {
+        res.status = error.status;
+        output = error;
+      } else {
+        const bugtrace = crypto.randomUUID().slice(0, 5);
+        console.error(`ERROR: Uncaught exception [${bugtrace}] -`, error);
+        res.status = 500;
+        output = new HttpError(`500 internal server error [${bugtrace}]`, {
+          status: 500,
+        });
+      }
+    }
+
+    if (typeof output === "undefined" && !res.status) {
+      res.status = 204;
     }
 
     const response = packResponse(output, {
@@ -455,7 +462,7 @@ export function endpoint(
   return Object.assign(handler, { ...schema });
 }
 
-// I'm pulling these functions out and explaining them because they are
+// I'm pulling these functions out and explaining them because they're
 // significant chunks of the request handling process
 /**
  * Given an Endpoint's "message" option, this returns a function that checks
