@@ -24,8 +24,7 @@ TypeScript and Deno to help solo devs do more with less. Guiding principles:
   - [x] (Signed) cookies and JWTs
   - [x] Web sockets
   - [x] Form and JSON parsing / validation
-  - [x] Automatic de/serialization of most data types, including Dates, Maps,
-        etc.
+  - [x] De/serialization of most data types, including Files, Dates, Maps, etc.
   - [x] Dev-time bundling for TypeScript assets
   - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
 - "Hello world" should be as easy as `deno run`ning a tiny `main.ts`
@@ -81,34 +80,33 @@ Links and thoughts related to Cav's architecture.
     simple static sites that only need a contact or subscription form, for
     example.
     
-    I had also been toying around with Deno's bundler in my spare time, and
-    superjson was something I had been using at work. I loved the thought of a
-    comprehensive, full-stack solution that combined these dope ideas into a
-    unified module, built on this standards-compliant runtime I was rapidly
-    falling for. At the time, it seemed like writing such a framework myself
-    would be a fun learning project.
+    I was also toying around with Deno's bundler in my spare time, and superjson
+    was something I was using at work. I loved the thought of a comprehensive,
+    full-stack solution that combined these ideas into a unified module, built
+    on this standards-compliant runtime I was rapidly falling for. It seemed
+    like writing such a framework myself would be a fun learning project.
 
-    Lessons so far: Web frameworks are hard, Deno is awesome, and creating your
+    Lessons so far: Web frameworks are hard, Deno is awesome, and making your
     own tools is a great way to learn things you never knew you never knew [🍃](https://www.youtube.com/watch?v=O9MvdMqKvpU)
-  - End-to-end typesafety is fairly straightforward TypeScript witchcraft.
-    Short summary: TypeScript strips type imports at build time, making it
-    possible to import server-side type definitions into client-side code
-    without bundling consequences. The client can then use those types to keep
-    API inputs/outputs in-sync with what the server expects, triggering TS
-    errors when something isn't right. It can do this without code generation,
-    which is a limitation of the venerable [gRPC](https://grpc.io/). Add
-    TypeScript's inferencing and generics to the mix, and a new world of
-    developer tools is born.
+  - End-to-end typesafety is fairly straightforward TypeScript witchcraft. Short
+    summary: TypeScript strips type imports at build time, making it possible to
+    import server-side type definitions into client-side code without runtime
+    consequences. The client can then use those types to keep API inputs/outputs
+    in-sync with what the server expects, triggering TS errors when something
+    isn't right. This works without requiring code generation, which is a
+    limitation of the venerable [gRPC](https://grpc.io/). Add TypeScript's
+    inferencing and generics to the mix, and a new world of developer tools is
+    born.
     
     This is a really cool pattern to work with. A great resource to learn more
-    is this [essay](https://colinhacks.com/essays/painless-typesafety) written
+    is [this essay](https://colinhacks.com/essays/painless-typesafety) written
     by Colin McDonnell, the creator of Zod and tRPC.
     
     It seems like there's some convergent evolution going on in the community
-    regarding this concept, with several projects mentioned in the HN comments
-    working with similar ideas. TypeScript makes implementing this pattern
-    pretty simple, and Cav is just one person's subjective take on what it can
-    look like.
+    regarding this pattern, and there's several projects mentioned in the HN
+    comments on this post that work with similar concepts. TypeScript makes
+    implementing this pretty simple, and Cav is just one person's subjective
+    take on what it can look like.
 
 ## Dedication
 

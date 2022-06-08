@@ -139,6 +139,13 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
         );
       }
 
+      // The empty route "" isn't allowed either
+      if (s === "") {
+        throw new SyntaxError(
+          "The empty route '' isn't allowed (it would never match)",
+        );
+      }
+
       if (
         // If it doesn't match the path capture regex
         !s.match(/^:[a-zA-Z_$]+[a-zA-Z_$0-9]*$/) &&

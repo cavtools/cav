@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { router, routerContext, noMatch, didMatch } from "../router.ts";
-import { assert, assertEquals } from "./test_deps.ts";
+import { assert, assertEquals, assertThrows } from "./test_deps.ts";
 import type { http } from "../deps.ts";
 
 // Doesn't matter
@@ -127,7 +127,7 @@ Deno.test("noMatch with no routes", async () => {
   assertEquals(res.status, 404);
 });
 
-// REVIEW: I can't tell if this is useful or confusing
+// REVIEW: I can't tell if this feature is useful or confusing
 Deno.test("returns last noMatch response when nothing matches", async () => {
   const rtr = router({
     a: () => noMatch(new Response("hello")),
@@ -226,4 +226,12 @@ Deno.test("wildcard + router context + path + groups + query", async () => {
     groups: { a: "1", c: "2", d: "3", e: "4" },
     query: {},
   });
+});
+
+Deno.test("bad routes", () => {
+  const h = () => new Response();
+  assertThrows(() => router({ ".": h }), SyntaxError);
+  assertThrows(() => router({ "..": h }), SyntaxError);
+  assertThrows(() => router({ "": h }), SyntaxError);
+  assertThrows(() => router({ ":id([0-9]+)": h }), SyntaxError);
 });

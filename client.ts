@@ -420,16 +420,18 @@ export function client<T extends ClientType = null>(
 
       const res = await fetch(req);
       const body = await unpack(res, { serializers });
-      if (!res.ok) {
+      if (!res.ok && !(body instanceof HttpError)) {
         throw new HttpError((
-          body instanceof HttpError ? body.message
-          : typeof body === "string" ? body
+          typeof body === "string" ? body
           : res.statusText
         ), {
-          status: res.status, // Note that HTTP status is always used
+          status: res.status,
           detail: { body, res },
-          expose: body instanceof HttpError ? body.expose : null,
         });
+      } else if (!res.ok && body instanceof HttpError) {
+        body.detail.res = res;
+        body.detail.body = body;
+        throw body;
       }
       return [body, res];
     })();

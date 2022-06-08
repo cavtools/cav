@@ -25,14 +25,14 @@ import type { WS } from "./ws.ts";
 // tested before I try to fix these things
 
 /** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<S extends EndpointSchema = EndpointSchema> = S & ((
+export type Endpoint<S extends EndpointSchema = AnyEndpointSchema> = S & ((
   req: EndpointRequest<
     "query" extends keyof S ? ParserInput<S["query"]> : unknown,
     "message" extends keyof S ? ParserInput<S["message"]> : unknown,
     (
       // deno-lint-ignore no-explicit-any
       S["resolve"] extends (...a: any[]) => Promise<infer R> | infer R ? R
-      : undefined
+      : never
     )
   >,
   conn: http.ConnInfo,
@@ -292,28 +292,48 @@ export interface ResolveErrorArg {
  */
 export function endpoint<
   Schema extends EndpointSchema<Groups, Ctx, Query, Message, Resp>,
-  Groups extends AnyParser | null = null,
-  Ctx extends AnyContext | null = null,
-  Query extends AnyParser | null = null,
-  Message extends AnyParser | null = null,
+  // Groups extends Parser<Record<string, string | string[]>> | null,
+  // Ctx extends Context | null,
+  // Query extends Parser<Record<string, string | string[]>> | null,
+  // Message extends Parser,
+  // Resp,
+  // Groups extends AnyParser | null = (
+  //   () => Record<string, string | string[]>
+  // ),
+  // Ctx extends AnyContext | null = (
+  //   () => undefined
+  // ),
+  // Query extends Parser<Record<string, string | string[]>> | null = (
+  //   () => Record<string, string | string[]>
+  // ),
+  // Message extends AnyParser | null = (
+  //   () => undefined
+  // ),
+  // Resp = unknown,
+  Groups extends AnyParser | null,
+  Ctx extends AnyContext | null,
+  Query extends Parser<Record<string, string | string[]>> | null,
+  Message extends AnyParser | null,
   Resp = void,
 >(
-  schema: Schema & EndpointSchema<Groups, Ctx, Query, Message, Resp>,
+  schema: Schema,
 ): Endpoint<Schema>;
-export function endpoint<
-  Res extends Resolve<null, null, null, null, Resp>,
-  Resp = void,
->(
-  resolve: Res & Resolve<null, null, null, null, Resp>,
-): Endpoint<{ resolve: Res }>
+// export function endpoint<
+//   Res extends Resolve<null, null, null, null, Resp>,
+//   Resp = void,
+// >(
+//   resolve: Res & Resolve<null, null, null, null, Resp>,
+// ): Endpoint<{ resolve: Res }>
+// export function endpoint(): Endpoint<{ resolve: () => void }>;
 export function endpoint(
-  schemaOrFn: (
+  schemaOrFn?: (
     EndpointSchema | Resolve<AnyParser, null, AnyParser, null, unknown>
   ),
 ): Endpoint {
   const schema = (
     typeof schemaOrFn === "function" ? { resolve: schemaOrFn }
-    : schemaOrFn
+    : schemaOrFn ? schemaOrFn
+    : { resolve: () => {} }
   );
   const checkMethod = methodChecker(schema.message);
   const matchPath = pathMatcher({
@@ -417,6 +437,7 @@ export function endpoint(
             asset: (opt: ServeAssetOptions) => serveAsset(req, opt),
             redirect,
           });
+          error = null;
         } catch (err) {
           error = err;
         }
@@ -429,25 +450,15 @@ export function endpoint(
       await task();
     }
 
-    if (typeof error !== "undefined" && typeof output === "undefined") {
-      if (error instanceof HttpError && !error.expose) {
-        res.status = error.status;
-        output = error.message;
-      } else if (error instanceof HttpError) {
-        res.status = error.status;
-        output = error;
-      } else {
-        const bugtrace = crypto.randomUUID().slice(0, 5);
-        console.error(`ERROR: Uncaught exception [${bugtrace}] -`, error);
-        res.status = 500;
-        output = new HttpError(`500 internal server error [${bugtrace}]`, {
-          status: 500,
-        });
-      }
-    }
-
-    if (typeof output === "undefined" && !res.status) {
-      res.status = 204;
+    if (error && error instanceof HttpError) {
+      res.status = error.status;
+      output = error.expose ? error : error.message;
+    } else if (error) {
+      // Triggers a 500 HttpError on the client
+      const bugtrace = crypto.randomUUID().slice(0, 5);
+      console.error(`ERROR: Uncaught exception [${bugtrace}] -`, error);
+      res.status = 500;
+      output = `500 internal server error [${bugtrace}]`;
     }
 
     const response = packResponse(output, {
@@ -558,7 +569,7 @@ function pathMatcher(opt: {
   const useFullPath = opt.path && opt.path.startsWith("^");
   const pattern = new URLPattern(
     useFullPath ? opt.path!.slice(1) : opt.path || "/",
-    "http://_._",
+    "http://_",
   );
   const parseGroups = (
     typeof opt.groups === "function" ? opt.groups
@@ -569,14 +580,21 @@ function pathMatcher(opt: {
   return async (req: Request) => {
     const routerCtx = routerContext(req);
     const path = useFullPath ? routerCtx.url.pathname : routerCtx.path;
-    const match = pattern.exec(path, "http://_._");
+    const match = pattern.exec(path, "http://_");
 
     if (!match) {
       throw new HttpError("404 not found", { status: 404 });
     }
 
+    // 0 group should be the path that matched, i.e. the path var already set
+    delete match.pathname.groups["0"];
+
     const unparsedGroups = { ...routerCtx.groups };
     for (const [k, v] of Object.entries(match.pathname.groups)) {
+      if (!v) {
+        continue;
+      }
+      
       const old = unparsedGroups[k];
       if (Array.isArray(old)) {
         unparsedGroups[k] = [...old, v];

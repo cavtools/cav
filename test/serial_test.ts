@@ -7,12 +7,12 @@ import {
   assertThrows,
 } from "./test_deps.ts";
 import {
-  deserialize,
   HttpError,
+  serializer,
+  serialize,
+  deserialize,
   packRequest,
   packResponse,
-  serialize,
-  serializer,
   unpack,
 } from "../serial.ts";
 import type { Serializers } from "../serial.ts";
@@ -655,32 +655,29 @@ async function testPacking(
     }) => Promise<void> | void;
   },
 ) {
-  const run = async (which: string) => {
-    // Because ReadableStreams can only be read 1 time, useful to be able to
-    // recreate them when testing packResponse()
-    let message = opt.message;
-    if (typeof opt.message === "function") {
-      message = opt.message();
-    }
+  let message = opt.message;
+  if (typeof opt.message === "function") {
+    message = opt.message();
+  }
 
-    const r = (
-      which === "packRequest" ? packRequest("http://localhost/test", {
-        ...opt,
-        message,
-      })
-      : packResponse(message, opt)
-    );
+  const packedReq = packRequest("http://localhost/test", { ...opt, message });
+  const unpackedReq = await unpack(packedReq, opt);
+  if (opt.check) {
+    await opt.check({ opt, unpacked: unpackedReq });
+  } else {
+    assertEquals(unpackedReq, message);
+  }
 
-    const unpacked = await unpack(r, { serializers: opt.serializers });
-    if (opt.check) {
-      await opt.check({ opt, unpacked });
-    } else {
-      assertEquals(unpacked, message);
-    }
-  };
-  
-  await run("packRequest");
-  await run("packResponse");
+  if (typeof opt.message === "function") {
+    message = opt.message();
+  }
+  const packedRes = packResponse(message, opt);
+  const unpackedRes = await unpack(packedRes, opt);
+  if (opt.check) {
+    await opt.check({ opt, unpacked: unpackedRes });
+  } else {
+    assertEquals(unpackedRes, message);
+  }
 }
 
 async function assertEqualsBlob(a: File | Blob, b: File | Blob) {
@@ -790,6 +787,10 @@ Deno.test("packing and unpacking", async (t) => {
       },
     }),
   );
+
+  await t.step("HttpError", () => testPacking({
+    message: new HttpError("404", { status: 404 }),
+  }));
 
   // Asymmetric
 
