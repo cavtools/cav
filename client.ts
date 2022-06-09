@@ -80,7 +80,7 @@ export interface SocketRequest<
  * what their response type will be.
  */
 export interface RouterRequest<
-  Shape extends RouterShape = Record<never, never>,
+  Shape extends RouterShape = RouterShape,
 > extends Request {
   /** @internal organs */
   zzz_cav?: { // imaginary
@@ -173,12 +173,7 @@ type UnionToIntersection<U> = (
  * making requests to a Cav handler.
  */
 // i'm sorry
-export type Client<T extends ClientType = null> = {
-  <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
-    Socket extends true ? WS : Promise<[unknown, Response]>
-  );
-  [x: string]: Client;
-} & (
+export type Client<T extends ClientType = null> = (
   // Non-Cav handlers get the fallback treatment  
   // NOTE: This only works if T comes after the extends
   ((
@@ -222,8 +217,18 @@ export type Client<T extends ClientType = null> = {
 
   // no-op for anything else (see up top)
   // deno-lint-ignore ban-types
-  : {}
-);
+  : {
+    <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+      Socket extends true ? WS : Promise<[unknown, Response]>
+    );
+    [x: string]: Client;
+  }
+) & {
+  <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+    Socket extends true ? WS : Promise<[unknown, Response]>
+  );
+  [x: string]: Client;
+};
 
 // TODO: Any other fetch options that can be forwarded (example: CORS)
 /**

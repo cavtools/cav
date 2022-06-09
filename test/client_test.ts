@@ -248,6 +248,7 @@ const _null: (Client extends {
 type TestRouter = (req: RouterRequest<{
   a: (req: Request) => Response;
 }>) => Response;
+type Test = Client<TestRouter>
 const _tr: (Client<TestRouter> extends {
   a: {
     (x: AnyClientArg<boolean>): unknown;
