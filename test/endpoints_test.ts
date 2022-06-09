@@ -46,7 +46,7 @@ const conn: http.ConnInfo = {
 //   }
 // }
 
-Deno.test("endpoint client integration #1", async t => {
+Deno.test("endpoint + client integration #1", async t => {
   const end = endpoint({
     path: "users/:name?",
     groups: (g) => {
@@ -105,7 +105,6 @@ Deno.test("endpoint client integration #1", async t => {
   });
   const endClient = client<typeof end>("http://localhost");
 
-
   const oldFetch = self.fetch;
   Object.assign(self, {
     // This gives me some ideas about handling requests on a client... What if
@@ -128,7 +127,7 @@ Deno.test("endpoint client integration #1", async t => {
     query: {
       greeting: "fancy",
     },
-    message: "Have you ever wondered how Jesus can help you?",
+    message: "Have you ever wondered how Jazz can help you?",
   });
   const _checkBody1: (typeof body1 extends {
     groups: { name: string };
@@ -140,7 +139,7 @@ Deno.test("endpoint client integration #1", async t => {
     groups: { name: "connor" },
     ctx: { head: "💩", belly: "🍺", legs: "🐓" },
     query: { greeting: "fancy" },
-    message: "Have you ever wondered how Jesus can help you?",
+    message: "Have you ever wondered how Jazz can help you?",
   });
 
   Object.assign(self, { fetch: oldFetch });
