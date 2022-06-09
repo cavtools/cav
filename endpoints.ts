@@ -155,15 +155,16 @@ export interface ResolveErrorArg {
   redirect: (to: string, status?: number) => Response;
 }
 
+/** Request processing options for constructing Endpoints. */
 export interface EndpointSchema<
   GroupsOutput = Record<string, string | string[]>,
-  Ctx = undefined,
+  Ctx = unknown,
   QueryInput extends Record<string, string | string[]> = (
     Record<string, string | string[]>
   ),
   QueryOutput = Record<string, string | string[]>,
-  MessageInput = undefined,
-  MessageOutput = undefined,
+  MessageInput = unknown,
+  MessageOutput = unknown,
 > {
   /**
    * URLPattern string to match against the Request's routed path. If the
@@ -244,7 +245,7 @@ export function endpoint<
     Record<string, string | string[]>
   ),
   QueryOutput = Record<string, string | string[]>,
-  MessageInput = undefined,
+  MessageInput = unknown,
   MessageOutput = undefined,
   Resp = undefined,
 >(

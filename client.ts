@@ -223,12 +223,13 @@ export type Client<T extends ClientType = null> = (
     );
     [x: string]: Client;
   }
-) & {
-  <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
-    Socket extends true ? WS : Promise<[unknown, Response]>
-  );
-  [x: string]: Client;
-};
+);
+//  & {
+//   <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+//     Socket extends true ? WS : Promise<[unknown, Response]>
+//   );
+//   [x: string]: Client;
+// };
 
 // TODO: Any other fetch options that can be forwarded (example: CORS)
 /**
@@ -263,7 +264,7 @@ export type ClientArg<
    * This is the type of message the endpoint expects to be POSTed. Ignored if
    * the `socket` option is `true`. Default: `undefined`
    */
-  message: Socket extends true ? never : Message;
+  message: true extends Socket ? never : Message;
   /**
    * Additional serializers to use while serializing data for this specific
    * request. Default: `undefined`
