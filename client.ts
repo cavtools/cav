@@ -17,32 +17,18 @@ import type { Serializers } from "./serial.ts";
  */
 export type Handler = (
   req: Request,
-  // deno-lint-ignore no-explicit-any
   ...a: any[]
 ) => Promise<Response> | Response;
+
+const _cav = Symbol("cav");
 
 /**
  * A server endpoint handler can use this Request type to ferry type information
  * to the client about what argument types are acceptable and what the Response
  * will deserialize into.
  */
-export interface EndpointRequest<
-  Query = unknown,
-  Message = unknown,
-  Resp = unknown,
-> extends Request {
-  // REVIEW: I wanted to use a Symbol() instead of string key so that this
-  // property wouldn't show up in intellisense. However, doing that creates a
-  // rogue Symbol() call in the asset bundles anytime this file is imported,
-  // even if nothing from it is used. (Side-effect.) I didn't really like that,
-  // so I switch it to zzz_cav (no side-effect), named so that it would come
-  // last in the intellisense suggestions. Should I go back? Having something
-  // like `Symbol("cav")` in the bundles would be arrogant but not that terrible
-  // if it means this imaginary property never shows up
-  /** @internal organs */
-  zzz_cav?: { // imaginary
-    socketEndpointRequest?: never;
-    routerRequest?: never;
+export interface EndpointRequest<Query, Message, Resp> extends Request {
+  [_cav]?: { // imaginary
     endpointRequest: {
       query: Query;
       message: Message;
@@ -56,16 +42,9 @@ export interface EndpointRequest<
  * to the client about the valid socket send/receive message types and
  * acceptable query string parameters for the initial request.
  */
-export interface SocketRequest<
-  Query = unknown,
-  Send = unknown,
-  Receive = unknown,
-> extends Request {
-  /** @internal organs */
-  zzz_cav?: { // imaginary
-    endpointRequest?: never;
-    routerRequest?: never;
-    socketEndpointRequest?: {
+export interface SocketRequest<Query, Send, Receive> extends Request {
+  [_cav]?: { // imaginary
+    socketEndpointRequest: {
       query: Query;
       send: Send;
       receive: Receive;
@@ -79,13 +58,8 @@ export interface SocketRequest<
  * client uses the RouterShape to infer which property accesses are valid and
  * what their response type will be.
  */
-export interface RouterRequest<
-  Shape extends RouterShape = RouterShape,
-> extends Request {
-  /** @internal organs */
-  zzz_cav?: { // imaginary
-    endpointRequest?: never;
-    socketEndpointRequest?: never;
+export interface RouterRequest<Shape> extends Request {
+  [_cav]?: { // imaginary
     routerRequest: Shape;
   };
 }
@@ -95,7 +69,7 @@ export interface RouterRequest<
  * describes the client property accesses that would result in a valid endpoint
  * call. The endpoints are specified by their handler definitions.
  */
- export interface RouterShape {
+export interface RouterShape {
   [x: string]: ClientType;
 }
 
@@ -106,18 +80,6 @@ export type ClientType = (
   | RouterShape
   | null
 );
-
-// REVIEW: I was going to try two implementation ideas when approaching the e2e
-// type safety problem re: how routers are handled on the client. One that
-// expanded router paths into objects that resembled the router shape, and
-// another that flattened the router shape into a 2D array of all acceptable
-// paths. The former requires using a Proxy, the latter doesn't. I ended up
-// going with the former because it seemed easier at the time given how
-// typescript template strings work, and it better aligns with how routers get
-// defined (like methods on objects). But now I'm not so sure since it isn't
-// super intuitive and requires Proxies to pull it off (magic), which is
-// generally discouraged in the community. I think time will tell me if I need
-// to change it to the other idea. I kinda like it rn tho... magic is fun
 
 /**
  * Expands a route path from a RouterRequest into an object representing the
@@ -169,78 +131,44 @@ type UnionToIntersection<U> = (
 ) extends ((k: infer I) => void) ? I : never;
 
 /**
- * A (Proxied) client function that wraps a `fetch()` process tailored for
- * making requests to a Cav handler.
+ * Client function that wraps a `fetch()` process tailored for making requests
+ * to a Cav handler, complete with serialization and socket support.
  */
-// i'm sorry
-export type Client<T extends ClientType = null> = (
-  // Non-Cav handlers get the fallback treatment  
-  // NOTE: This only works if T comes after the extends
-  ((
-    req: Request & { zzz_cav?: never },
-    // deno-lint-ignore no-explicit-any
-    ...a: any[]
-  ) => Promise<Response> | Response) extends T ? Client
+export type Client<T = null> = (
+  T extends Handler ? (
+    Parameters<T>[0] extends RouterRequest<infer S> ? Client<S>
+    : Parameters<T>[0] extends EndpointRequest<infer Q, infer M, infer R> ? (
+      (x: ClientArg<Q, M, false>) => Promise<[R, Response]>
+    )
+    : Parameters<T>[0] extends SocketRequest<infer Q, infer S, infer R> ? (
+      (x: ClientArg<Q, never, true>) => WS<R, S>
+    )
+    : UnknownClient
+  )
 
-  // Router
-  : T extends (
-    req: RouterRequest<infer S>,
-    // deno-lint-ignore no-explicit-any
-    ...a: any[]
-  ) => Response | Promise<Response> ? Client<S>
-
-  // Endpoint
-  : T extends (
-    req: EndpointRequest<infer Q, infer M, infer R>,
-    // deno-lint-ignore no-explicit-any
-    ...a: any[]
-  ) => Response | Promise<Response> ? (
-    x: ClientArg<Q, M>,
-  ) => Promise<[R, Response]>
-
-  // SocketEndpoint
-  : T extends (
-    req: SocketRequest<infer Q, infer S, infer R>,
-  ) => Response | Promise<Response> ? (
-    x: ClientArg<Q, never, true>
-  ) => WS<R, S> // NOTE: Not a Promise
-
-  // RouterShape  
-  // When a router's type is specified, the router's shape is passed back into
-  // the client and gets handled here
   : T extends RouterShape ? UnionToIntersection<{
     [K in keyof T]: ExpandPath<K, Client<T[K]>>;
   }[keyof T]>
 
-  // ClientType[]
   : T extends ClientType[] ? UnionToIntersection<Client<T[number]>>
 
-  // no-op for anything else (see up top)
-  // deno-lint-ignore ban-types
-  : {
-    <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
-      Socket extends true ? WS : Promise<[unknown, Response]>
-    );
-    [x: string]: Client;
-  }
+  : UnknownClient
 );
-//  & {
-//   <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
-//     Socket extends true ? WS : Promise<[unknown, Response]>
-//   );
-//   [x: string]: Client;
-// };
+
+/** A version of the Client type without E2E type safety. */
+export interface UnknownClient {
+  <Socket extends boolean = false>(x: UnknownClientArg<Socket>): (
+    true extends Socket ? WS<unknown, unknown> : Promise<[unknown, Response]>
+  );
+  [x: string]: UnknownClient
+}
 
 // TODO: Any other fetch options that can be forwarded (example: CORS)
 /**
  * Arguments for the client function when its internal path points to an
  * endpoint.
  */
-export type ClientArg<
-  Query = never,
-  Message = never,
-  Socket = never,
-> = Clean<{
+export type ClientArg<Query, Message, Socket> = {
   /**
    * Additional path segments to use when making a request to this endpoint.
    * Including extra path segments should only be done if the endpoint expects
@@ -251,6 +179,13 @@ export type ClientArg<
    * Additional headers to include when making this request.
    */
   headers?: HeadersInit;
+  /**
+   * Additional serializers to use while serializing data for this specific
+   * request. Default: `undefined`
+   */
+  serializers?: Serializers;
+  // onProgress?: (progress: number) => void | Promise<void>; // :(
+} & Clean<{
   /**
    * If the endpoint requires upgrading for web sockets (socket endpoint), this
    * value should be set to `true`. Default: `undefined`
@@ -265,26 +200,20 @@ export type ClientArg<
    * the `socket` option is `true`. Default: `undefined`
    */
   message: true extends Socket ? never : Message;
-  /**
-   * Additional serializers to use while serializing data for this specific
-   * request. Default: `undefined`
-   */
-  serializers?: Serializers;
-  // onProgress?: (progress: number) => void | Promise<void>; // TODO
 }>;
 
 /**
  * ClientArg but without any type information. These are the arguments when the
  * type for the client function isn't known.
  */
-export interface AnyClientArg<Socket extends boolean = false> {
+export interface UnknownClientArg<Socket extends boolean = boolean> {
   path?: string;
   socket?: Socket;
   headers?: HeadersInit;
   query?: unknown;
-  message?: Socket extends true ? null | undefined : unknown;
+  message?: Socket extends true ? never : unknown;
   serializers?: Serializers;
-  // onProgress?: (progress: number) => void | Promise<void>; // TODO
+  // onProgress?: (progress: number) => void | Promise<void>; // :(
 }
 
 /**
@@ -368,7 +297,7 @@ export function client<T extends ClientType = null>(
   others = others.map(v => v.split("/").filter(v2 => !!v2).join("/"));
   baseUrl = proto + "://" + others.join("/");
 
-  const clientFn = (path: string, x: AnyClientArg = {}) => {
+  const clientFn = (path: string, x: UnknownClientArg = {}) => {
     // Calculate the final request path
     let xp = x.path || "";
     xp = xp.split("/").filter(v => !!v).join("/");
@@ -444,7 +373,7 @@ export function client<T extends ClientType = null>(
   };
 
   const proxy = (path: string): unknown => {
-    return new Proxy((x: AnyClientArg) => clientFn(path, x), {
+    return new Proxy((x: UnknownClientArg) => clientFn(path, x), {
       get(_, property) {
         const append = (property as string)
           .split("/").filter(p => !!p).join("/");

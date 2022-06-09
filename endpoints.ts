@@ -71,7 +71,7 @@ export interface ContextArg {
   path: string;
   /** The unprocessed query object associated with this request. */
   query: Record<string, string | string[]>;
-  /** The unprocoessed path groups object captured during routing. */
+  /** The unprocessed path groups object captured during routing. */
   groups: Record<string, string | string[]>;
   /**
    * When context functions need to run cleanup tasks after the Endpoint has

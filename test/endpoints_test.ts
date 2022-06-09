@@ -80,7 +80,6 @@ Deno.test("endpoint + client integration #1", async t => {
       }
       return m;
     },
-    resolveError: x => x.error,
   }, x => {
     const _checkGroups: (typeof x.groups extends {
       name: string;
@@ -107,16 +106,6 @@ Deno.test("endpoint + client integration #1", async t => {
 
   const oldFetch = self.fetch;
   Object.assign(self, {
-    // This gives me some ideas about handling requests on a client... What if
-    // one day all you needed to get a server online was a web browser connected
-    // to the internet? Then there could be a tunnel and transport layer service
-    // that funnels requests from an exposed server to your browser. When your
-    // browser is done handling them, the response gets funneled back to the
-    // client via the tunnel. Maybe even do it with E2E encryption, so that the
-    // tunnel can't read the traffic
-    //
-    // Not that this would be a useful invention necessarily. But still... how
-    // cool would that be!?
     fetch: async (req: Request) => {
       return await end(req, conn);
     },

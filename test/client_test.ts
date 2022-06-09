@@ -9,7 +9,8 @@ import type {
   RouterRequest,
   ClientArg,
   Client,
-  AnyClientArg,
+  UnknownClient,
+  UnknownClientArg,
 } from "../client.ts";
 import type { WS } from "../ws.ts";
 import type { PackResponseInit, Serializers } from "../serial.ts";
@@ -238,22 +239,19 @@ Deno.test("null value for a base serializer key at call site", async () => {
 // zone to search for them rn. When I wrote them by casting them to the correct
 // type, they didn't catch everything, so do this without writing "as".
 
-// No parameter (null)
-const _null: (Client extends {
-  (x: AnyClientArg<boolean>): unknown;
-  [x: string]: Client;
+// No parameter (null) === UnknownClient
+const _null: (Client<null> extends {
+  (x: UnknownClientArg<boolean>): unknown;
+  [x: string]: Client & UnknownClient; // Client<null> === UnknownClient
 } ? true : never) = true;
 
 // Router
 type TestRouter = (req: RouterRequest<{
   a: (req: Request) => Response;
 }>) => Response;
-type Test = Client<TestRouter>
-const _tr: (Client<TestRouter> extends {
-  a: {
-    (x: AnyClientArg<boolean>): unknown;
-    [x: string]: Client
-  };
+type TestRouterClient = Client<TestRouter>;
+const _tr: (TestRouterClient extends {
+  a: UnknownClient;
 } ? true : never) = true;
 
 // Endpoint
@@ -282,8 +280,8 @@ const _tse: (Client<TestSocketEndpoint> extends (x: ClientArg<
 
 // RouterShape
 type TestRouterShape = { g: (req: Request) => Response };
-const _trs: (Client<TestRouterShape> extends Client & {
-  g: Client;
+const _trs: (Client<TestRouterShape> extends {
+  g: UnknownClient;
 } ? true : never) = true;
 
 // Handler[]
@@ -294,7 +292,6 @@ type TestHandlerArray = (
   | (() => Response)
 )[];
 const _tha: (Client<TestHandlerArray> extends (
-  & Client
   & Client<TestRouter>
   & Client<TestEndpoint>
   & Client<TestSocketEndpoint>
@@ -314,11 +311,11 @@ type TestIntegration = (req: RouterRequest<{
   h: TestRouter;
   i: null;
 }>) => Response;
-const _ti: (Client<TestIntegration> extends Client & {
-  a: Client & {
+const _ti: (Client<TestIntegration> extends {
+  a: {
     b: Client<TestHandlerArray> & {
-      c: Client & {
-        [d: string]: Client & {
+      c: {
+        [d: string]: {
           [e: string]: Client<TestEndpoint>;
         };
       } & {
