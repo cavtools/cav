@@ -27,8 +27,8 @@ import type { WS } from "./ws.ts";
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<
   Schema extends {
-    query?: Parser | null;
-    message?: Parser | null;
+    query?: ((x: any) => any) | null;
+    message?: ((x: any) => any) | null;
     resolve?: ((x: any) => any) | null;
   } = {},
 > = Schema & ((
@@ -155,6 +155,83 @@ export interface ResolveErrorArg {
   redirect: (to: string, status?: number) => Response;
 }
 
+export interface EndpointSchema<
+  GroupsOutput = Record<string, string | string[]>,
+  Ctx = undefined,
+  QueryInput extends Record<string, string | string[]> = (
+    Record<string, string | string[]>
+  ),
+  QueryOutput = Record<string, string | string[]>,
+  MessageInput = undefined,
+  MessageOutput = undefined,
+> {
+  /**
+   * URLPattern string to match against the Request's routed path. If the
+   * string starts with '^', the full request path will be used instead. The
+   * full URLPattern syntax is supported. Any captured path groups will be
+   * merged into the path groups captured during routing. The matched path is
+   * available as the "path" resolver argument.
+   */
+  path?: string | null;
+  /**
+   * Parses any path groups captured during routing. The result is available
+   * as the "groups" resolver argument. If an error is thrown during parsing,
+   * the Endpoint won't match with the request and the router will continue
+   * looking for matching handlers.
+   */
+  groups?: Parser<Record<string, string | string[]>, GroupsOutput> | null;
+  /**
+   * Keys to use when signing cookies. The cookies are available as the
+   * "cookies" resolver argument.
+   */
+  keys?: [string, ...string[]] | null;
+  /**
+   * Factory function Endpoints can use to create a custom context, which is
+   * made available to resolvers as the `ctx` property on the resolver
+   * arguments. Context handling happens after the Endpoint matched with the
+   * Request but before input validation begins.
+   *
+   * TODO: Example use case
+   */
+  ctx?: ((c: ContextArg) => Ctx | Promise<Ctx>) | null;
+  /**
+   * Parses the query string parameters passed into the URL. If parsing fails,
+   * `undefined` will be parsed to check for a default value. If that also
+   * fails, a 400 bad request error will be sent to the client. The output is
+   * available as the "query" resolver argument.
+   */
+  query?: Parser<QueryInput, QueryOutput> | null;
+  /**
+   * Limits the size of posted messages. If a message exceeds the limit, a 413
+   * HttpError will be thrown and serialized back to the client. If 0 is
+   * specified, body size is unlimited. (Don't do that.) The default max body
+   * size is 1024 * 1024 bytes (1 Megabyte).
+   */
+  maxBodySize?: number | null;
+  /**
+   * Serializers to use when serializing and deserializing Request and
+   * Response bodies.
+   */
+  serializers?: Serializers | null;
+  /**
+   * Parses the POSTed body, if there is one. The behavior of this parser
+   * determines the methods allowed for this endpoint. If there is no parser,
+   * only GET and HEAD requests will be allowed. If there is one and it
+   * successfully parses `undefined`, POST will also be allowed. If the parser
+   * throws when parsing `undefined`, *only* POST will be allowed. The output
+   * from parsing is available as the "message" resolver argument.
+   */
+  message?: Parser<MessageInput, MessageOutput>;
+  /**
+   * Resolves an error thrown during Endpoint processing into a Response to
+   * serve to the client. If no Response is returned, the error will be
+   * serialized if it's an HttpError, or a 500 error will be serialized
+   * instead if it isn't. If a different error is re-thrown, that error will
+   * be serialized instead.
+   */
+  resolveError?: ((x: ResolveErrorArg) => any) | null;
+}
+
 /**
  * Constructs a new Endpoint handler using the provided schema. The schema
  * properties are also available on the returned Endpoint function.
@@ -171,73 +248,14 @@ export function endpoint<
   MessageOutput = undefined,
   Resp = undefined,
 >(
-  schema?: {
-    /**
-     * URLPattern string to match against the Request's routed path. If the
-     * string starts with '^', the full request path will be used instead. The
-     * full URLPattern syntax is supported. Any captured path groups will be
-     * merged into the path groups captured during routing. The matched path is
-     * available as the "path" resolver argument.
-     */
-    path?: string | null;
-    /**
-     * Parses any path groups captured during routing. The result is available
-     * as the "groups" resolver argument. If an error is thrown during parsing,
-     * the Endpoint won't match with the request and the router will continue
-     * looking for matching handlers.
-     */
-    groups?: Parser<Record<string, string | string[]>, GroupsOutput> | null;
-    /**
-     * Keys to use when signing cookies. The cookies are available as the
-     * "cookies" resolver argument.
-     */
-    keys?: [string, ...string[]] | null;
-    /**
-     * Factory function Endpoints can use to create a custom context, which is
-     * made available to resolvers as the `ctx` property on the resolver
-     * arguments. Context handling happens after the Endpoint matched with the
-     * Request but before input validation begins.
-     *
-     * TODO: Example use case
-     */
-    ctx?: ((c: ContextArg) => Ctx | Promise<Ctx>) | null;
-    /**
-     * Parses the query string parameters passed into the URL. If parsing fails,
-     * `undefined` will be parsed to check for a default value. If that also
-     * fails, a 400 bad request error will be sent to the client. The output is
-     * available as the "query" resolver argument.
-     */
-    query?: Parser<QueryInput, QueryOutput> | null;
-    /**
-     * Limits the size of posted messages. If a message exceeds the limit, a 413
-     * HttpError will be thrown and serialized back to the client. If 0 is
-     * specified, body size is unlimited. (Don't do that.) The default max body
-     * size is 1024 * 1024 bytes (1 Megabyte).
-     */
-    maxBodySize?: number | null;
-    /**
-     * Serializers to use when serializing and deserializing Request and
-     * Response bodies.
-     */
-    serializers?: Serializers | null;
-    /**
-     * Parses the POSTed body, if there is one. The behavior of this parser
-     * determines the methods allowed for this endpoint. If there is no parser,
-     * only GET and HEAD requests will be allowed. If there is one and it
-     * successfully parses `undefined`, POST will also be allowed. If the parser
-     * throws when parsing `undefined`, *only* POST will be allowed. The output
-     * from parsing is available as the "message" resolver argument.
-     */
-    message?: Parser<MessageInput, MessageOutput>;
-    /**
-     * Resolves an error thrown during Endpoint processing into a Response to
-     * serve to the client. If no Response is returned, the error will be
-     * serialized if it's an HttpError, or a 500 error will be serialized
-     * instead if it isn't. If a different error is re-thrown, that error will
-     * be serialized instead.
-     */
-    resolveError?: ((x: ResolveErrorArg) => any) | null;
-  } & Schema | null,
+  schema?: EndpointSchema<
+    GroupsOutput,
+    Ctx,
+    QueryInput,
+    QueryOutput,
+    MessageInput,
+    MessageOutput
+  > & Schema | null,
   resolve?: (x: ResolveArg<
     GroupsOutput,
     Ctx,
@@ -245,14 +263,14 @@ export function endpoint<
     MessageOutput
   >) => Resp,
 ): Endpoint<{
-  [K in (keyof Schema) | "resolve"]: (
-    K extends "resolve" ? Exclude<typeof resolve, null | undefined>
+  [K in keyof Schema | "resolve"]: (
+    K extends "resolve" ? Exclude<typeof resolve, undefined>
     : K extends keyof Schema ? Schema[K]
     : never
   );
 }> {
-  resolve = resolve || (() => {}) as any;
   const _schema: Exclude<typeof schema, undefined | null> = schema || {} as any;
+  const _resolve = resolve || (() => {}) as any;
   const checkMethod = methodChecker(_schema.message);
   const matchPath = pathMatcher({
     path: _schema.path,
@@ -322,7 +340,7 @@ export function endpoint<
       }
 
       const { query, message } = await parseInput(req);
-      output = !resolve ? undefined : await resolve({
+      output = await _resolve({
         req,
         res,
         url,
@@ -393,7 +411,7 @@ export function endpoint<
     return response;
   };
 
-  return Object.assign(handler, { ..._schema, resolve }) as any;
+  return Object.assign(handler, { ..._schema, resolve: _resolve }) as any;
 }
 
 /**
