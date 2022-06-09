@@ -1,6 +1,6 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { assert, assertEquals } from "./test_deps.ts";
+import { assertStrictEquals, assertEquals } from "./test_deps.ts";
 import { HttpError, packResponse, unpack, serializer } from "../serial.ts";
 import { client } from "../client.ts";
 import type {
@@ -182,23 +182,40 @@ Deno.test("rejects whenever there's a non-2xx status code", async () => {
   nextRes.init = {
     status: 400, // Note how the status differs
     headers: { "x-custom-header": "swag" },
-  }; 
-
+  };
   try {
-    const [_body, _res] = await client("http://localhost")({});
+    await client("http://localhost")({});
     throw new Error("the request didn't throw");
   } catch (err) {
-    assert(err instanceof HttpError, "err isn't http error");
+    if (!(err instanceof HttpError)) {
+      throw err;
+    }
+
     assertEquals(err.message, "500 internal server error");
-    assertEquals(err.status, 400); // The HTTP status overrides the original
+    assertEquals(err.status, 500);
 
     const { body, res } = err.detail;
-    assertEquals(body, new HttpError("500 internal server error", {
-      status: 500,
-      expose: { visible: true },
-    }));
+    assertStrictEquals(body, err);
     assertEquals((res as Response).status, 400);
     assertEquals((res as Response).headers.get("x-custom-header"), "swag");
+  }
+
+  nextRes.body = "hello";
+  nextRes.init = { status: 401 }
+  try {
+    await client("http://localhost")({});
+    throw new Error("the request didn't throw");
+  } catch (err) {
+    if (!(err instanceof HttpError)) {
+      throw err;
+    }
+
+    assertEquals(err.message, "hello");
+    assertEquals(err.status, 401);
+    
+    const { body, res } = err.detail;
+    assertEquals(body, "hello");
+    assertEquals((res as Response).status, 401);
   }
 });
 
@@ -231,6 +248,7 @@ const _null: (Client extends {
 type TestRouter = (req: RouterRequest<{
   a: (req: Request) => Response;
 }>) => Response;
+type Test = Client<TestRouter>
 const _tr: (Client<TestRouter> extends {
   a: {
     (x: AnyClientArg<boolean>): unknown;

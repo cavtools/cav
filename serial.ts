@@ -622,118 +622,6 @@ function packBody(
   return { body: form };
 }
 
-function mergeHeaders(a?: HeadersInit, b?: HeadersInit) {
-  const ah = new Headers(a);
-  const bh = new Headers(b);
-  for (const [k, v] of bh.entries()) {
-    if (k === "content-type" || k === "content-disposition") {
-      ah.set(k, v);
-    } else {
-      ah.append(k, v);
-    }
-  }
-  return ah;
-}
-
-export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
-  serializers?: Serializers;
-  message?: unknown;
-}
-
-/**
- * Serializes a new Request, which can then be deserialized using `unpack()`.
- * Only GET and POST requests are supported; the method used is automatically
- * determined based on the presence of the `message` init option. Any headers
- * specified on the init options will override the headers determined during
- * serialization. The serializable input types can be extended with the
- * serializers option.
- *
- * If the message is `undefined`, the method is GET. If the message is `null`,
- * the method is POST with no body. Any defined message (including null) results
- * in a POST request.
- *
- * If the message extends BodyInit, it'll be passed through to the Request
- * constructor unmodified. During `unpack()`, it'll be deserialized according to
- * the content-type set on the request headers, which can sometimes result in
- * asymmetric deserialization.
- *
- * If the message is a File or Blob, it'll also be sent with a
- * "content-disposition: attachment" header. During `unpack()`, it will be
- * deserialized back into a regular Blob or File, along with the file name if
- * there is one, regardless of the content-type.
- *
- * If the message is any other type, it'll first be serialized as JSON using
- * `serialize()`. The default serializers are extended to include Files and
- * Blobs; if a File or Blob exists on the serialized value, the request will be
- * sent as a specially formatted FormData instead of JSON. During `unpack()`,
- * it'll be deserialized back into the original `message` with all the Files and
- * Blobs back in the right place. Referential equality for Files and Blobs will
- * be preserved, so that duplicate Blobs only have 1 copy uploaded.
- */
-export function packRequest(url: string, init?: PackRequestInit): Request {
-  const packed = packBody(init?.message, init?.serializers);
-  return new Request(url, {
-    ...init,
-    method: typeof packed.body === "undefined" ? "GET" : "POST",
-    headers: mergeHeaders(packed.headers, init?.headers),
-    body: packed.body,
-  });
-}
-
-export interface PackResponseInit extends ResponseInit {
-  serializers?: Serializers;
-}
-
-/**
- * Serializes a new Response, which can then be deserialized back into the input
- * body using `unpack()`. Any headers specified on the init options will
- * override the headers determined during serialization. The same applies for
- * status and statusText. The serializable input types can be extended with the
- * serializers option.
- *
- * If the body is `undefined`, a 204 Response is created. If the body is `null`,
- * a 200 response is created with a zero-length body.
- *
- * If the body extends BodyInit, it'll be passed through to the Response
- * constructor unmodified. During `unpack()`, it'll be deserialized according to
- * the content-type set on the response headers, which can sometimes result in
- * asymmetric deserialization.
- *
- * If the message is a File or Blob, it'll also be sent with a
- * "content-disposition: attachment" header. During `unpack()`, it will be
- * deserialized back into a regular Blob or File, along with the file name if
- * there is one, regardless of the content-type.
- *
- * If the message is any other type, it'll first be serialized as JSON using
- * `serialize()`. The default serializers are extended to include Files and
- * Blobs; if a File or Blob exists on the serialized value, the response will be
- * sent as a specially formatted FormData instead of JSON. During `unpack()`,
- * it'll be deserialized back into the original `message` with all the Files and
- * Blobs back in the right place. Referential equality for Files and Blobs will
- * be preserved, so that duplicate Blobs only have 1 copy uploaded.
- */
-export function packResponse(
-  body?: unknown,
-  init?: PackResponseInit,
-): Response {
-  // If it's already a Response, just append the headers and forward it. Ignore
-  // the init status and statusText
-  if (body instanceof Response) {
-    const mergeHeaders = new Headers(init?.headers);
-    for (const [k, v] of mergeHeaders.entries()) {
-      body.headers.append(k, v);
-    }
-    return body;
-  }
-
-  const packed = packBody(body, init?.serializers);
-  return new Response(packed.body, {
-    status: typeof packed.body === "undefined" ? 204 : 200,
-    ...init,
-    headers: mergeHeaders(packed.headers, init?.headers),
-  });
-}
-
 const mimeString = /^text\/plain;?/;
 const mimeParams = /^application\/x-www-form-urlencoded;?/;
 const mimeJson = /^application\/json;?/;
@@ -754,9 +642,9 @@ export interface UnpackOptions {
 // TODO: Add an option for controlling the way forms/blobs/files are processed.
 // (For large file uploads that are disk backed)
 /**
- * Deserializes a Request or Response generated with `packRequest()` or
- * `packResponse()` back into the original request message or response body. Any
- * serializers specified during packing need to be specified here as well.
+ * Deserializes a Request generated with `packRequest()` back into the original
+ * request message. Any serializers specified during packing need to be
+ * specified here as well.
  */
 export async function unpack(
   packed: Request | Response,
@@ -867,4 +755,124 @@ export async function unpack(
 
   // The fallback behavior just returns a Blob (for now)
   return await packed.blob();
+}
+
+function mergeHeaders(a?: HeadersInit, b?: HeadersInit) {
+  const ah = new Headers(a);
+  const bh = new Headers(b);
+  for (const [k, v] of bh.entries()) {
+    if (k === "content-type" || k === "content-disposition") {
+      ah.set(k, v);
+    } else {
+      ah.append(k, v);
+    }
+  }
+  return ah;
+}
+
+/** Initializer options when creating a Request with `packRequest()`. */
+export interface PackRequestInit extends Omit<RequestInit, "body" | "method"> {
+  serializers?: Serializers;
+  message?: unknown;
+}
+
+/**
+ * Serializes a new Request, which can then be deserialized using
+ * `unpack()`. Only GET and POST requests are supported; the method used
+ * is automatically determined based on the presence of the `message` init
+ * option. Any headers specified on the init options will override the headers
+ * determined during serialization. The serializable input types can be extended
+ * with the serializers option.
+ *
+ * If the message is `undefined`, the method is GET. If the message is `null`,
+ * the method is POST with no body. Any defined message (including null) results
+ * in a POST request.
+ *
+ * If the message extends BodyInit, it'll be passed through to the Request
+ * constructor unmodified. It'll be deserialized according to the content-type
+ * set on the request headers, which can sometimes result in asymmetric
+ * deserialization.
+ *
+ * If the message is a File or Blob, it'll also be sent with a
+ * "content-disposition: attachment" header. It'l be deserialized back into a
+ * regular Blob or File, along with the file name if there is one, regardless of
+ * the content-type.
+ *
+ * If the message is any other type, it'll first be serialized as JSON using
+ * `serialize()`. The default serializers are extended to include Files and
+ * Blobs; if a File or Blob exists on the serialized value, the request will be
+ * sent as a specially formatted FormData instead of JSON. It'll be deserialized
+ * back into the original `message` with all the Files and Blobs back in the
+ * right place. Referential equality for Files and Blobs will be preserved, so
+ * that duplicate Blobs only have 1 copy uploaded.
+ */
+export function packRequest(url: string, init?: PackRequestInit): Request {
+  const packed = packBody(init?.message, init?.serializers);
+  return new Request(url, {
+    ...init,
+    method: typeof packed.body === "undefined" ? "GET" : "POST",
+    headers: mergeHeaders(packed.headers, init?.headers),
+    body: packed.body,
+  });
+}
+
+/** Options for `unpack()`-ing a Request or Response. */
+export interface UnpackOptions {
+  serializers?: Serializers;
+  maxBodySize?: number;
+}
+
+export interface PackResponseInit extends ResponseInit {
+  serializers?: Serializers;
+}
+
+/**
+ * Serializes a new Response, which can then be deserialized back into the input
+ * body using `unpack()`. Any headers specified on the init options will
+ * override the headers determined during serialization. The same applies for
+ * status and statusText. The serializable input types can be extended with the
+ * serializers option.
+ *
+ * If the body is `undefined`, a 204 Response is created. If the body is `null`,
+ * a 200 response is created with a zero-length body.
+ *
+ * If the body extends BodyInit, it'll be passed through to the Response
+ * constructor unmodified. During `unpack()`, it'll be deserialized according to
+ * the content-type set on the response headers, which can sometimes result in
+ * asymmetric deserialization.
+ *
+ * If the message is a File or Blob, it'll also be sent with a
+ * "content-disposition: attachment" header. During `unpack()`, it will be
+ * deserialized back into a regular Blob or File, along with the file name if
+ * there is one, regardless of the content-type.
+ *
+ * If the message is any other type, it'll first be serialized as JSON using
+ * `serialize()`. The default serializers are extended to include Files and
+ * Blobs; if a File or Blob exists on the serialized value, the response will be
+ * sent as a specially formatted FormData instead of JSON. During `unpack()`,
+ * it'll be deserialized back into the original `message` with all the Files and
+ * Blobs back in the right place. Referential equality for Files and Blobs will
+ * be preserved, so that duplicate Blobs only have 1 copy uploaded.
+ */
+export function packResponse(
+  body?: unknown,
+  init?: PackResponseInit,
+): Response {
+  // If it's already a Response, just append the headers and forward it. Ignore
+  // the init status and statusText
+  if (body instanceof Response) {
+    const mergeHeaders = new Headers(init?.headers);
+    for (const [k, v] of mergeHeaders.entries()) {
+      body.headers.append(k, v);
+    }
+    return body;
+  }
+
+  const packed = packBody(body, init?.serializers);
+  return new Response(packed.body, {
+    // res.status overrides default status
+    status: typeof packed.body === "undefined" ? 204 : 200,
+    ...init,
+    headers: mergeHeaders(packed.headers, init?.headers),
+  });
 }

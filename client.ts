@@ -80,7 +80,7 @@ export interface SocketRequest<
  * what their response type will be.
  */
 export interface RouterRequest<
-  Shape extends RouterShape = Record<never, never>,
+  Shape extends RouterShape = RouterShape,
 > extends Request {
   /** @internal organs */
   zzz_cav?: { // imaginary
@@ -173,12 +173,7 @@ type UnionToIntersection<U> = (
  * making requests to a Cav handler.
  */
 // i'm sorry
-export type Client<T extends ClientType = null> = {
-  <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
-    Socket extends true ? WS : Promise<[unknown, Response]>
-  );
-  [x: string]: Client;
-} & (
+export type Client<T extends ClientType = null> = (
   // Non-Cav handlers get the fallback treatment  
   // NOTE: This only works if T comes after the extends
   ((
@@ -222,8 +217,19 @@ export type Client<T extends ClientType = null> = {
 
   // no-op for anything else (see up top)
   // deno-lint-ignore ban-types
-  : {}
+  : {
+    <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+      Socket extends true ? WS : Promise<[unknown, Response]>
+    );
+    [x: string]: Client;
+  }
 );
+//  & {
+//   <Socket extends boolean = false>(x: AnyClientArg<Socket>): (
+//     Socket extends true ? WS : Promise<[unknown, Response]>
+//   );
+//   [x: string]: Client;
+// };
 
 // TODO: Any other fetch options that can be forwarded (example: CORS)
 /**
@@ -258,7 +264,7 @@ export type ClientArg<
    * This is the type of message the endpoint expects to be POSTed. Ignored if
    * the `socket` option is `true`. Default: `undefined`
    */
-  message: Socket extends true ? never : Message;
+  message: true extends Socket ? never : Message;
   /**
    * Additional serializers to use while serializing data for this specific
    * request. Default: `undefined`
@@ -420,16 +426,18 @@ export function client<T extends ClientType = null>(
 
       const res = await fetch(req);
       const body = await unpack(res, { serializers });
-      if (!res.ok) {
+      if (!res.ok && !(body instanceof HttpError)) {
         throw new HttpError((
-          body instanceof HttpError ? body.message
-          : typeof body === "string" ? body
+          typeof body === "string" ? body
           : res.statusText
         ), {
-          status: res.status, // Note that HTTP status is always used
+          status: res.status,
           detail: { body, res },
-          expose: body instanceof HttpError ? body.expose : null,
         });
+      } else if (!res.ok && body instanceof HttpError) {
+        body.detail.res = res;
+        body.detail.body = body;
+        throw body;
       }
       return [body, res];
     })();
