@@ -26,20 +26,20 @@ import type { WS } from "./ws.ts";
 
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<
-  Schema extends {
-    query?: ((x: any) => any) | null;
-    message?: ((x: any) => any) | null;
-    resolve?: ((x: any) => any) | null;
-  } = {},
+  Schema extends {},
+  //   query?: ((...a: any[]) => any) | null;
+  //   message?: ((...a: any[]) => any) | null;
+  //   resolve?: ((...a: any[]) => any) | null;
+  // } = {},
 > = Schema & ((
   req: EndpointRequest<(
-    Schema["query"] extends Parser<infer Q> ? Q
+    Schema extends { query: Parser<infer Q> } ? Q
     : Record<string, string | string[]>
   ), (
-    Schema["message"] extends Parser<infer M> ? M
+    Schema extends { message: Parser<infer M> } ? M
     : undefined
   ), (
-    Schema["resolve"] extends (x: any) => Promise<infer R> | infer R ? R
+    Schema extends { resolve: (x: any) => Awaited<infer R> } ? R
     : undefined
   )>,
   conn: http.ConnInfo,
@@ -84,10 +84,11 @@ export interface ContextArg {
 
 /** Arguments available to the Resolve function. */
 export interface ResolveArg<
-  GroupsOutput = any,
-  Ctx = any,
-  QueryOutput = any,
-  MessageOutput = any,
+  Schema,
+  GroupsOutput = Schema extends { groups: (g: any) => infer G } ? Awaited<G> : Record<string, string | string[]>,
+  Ctx = Schema extends { ctx: (x: any) => infer C } ? Awaited<C> : undefined,
+  QueryOutput = Schema extends { query: (q: any) => infer Q } ? Awaited<Q> : Record<string, string | string[]>,
+  MessageOutput = Schema extends { message: (m: any) => infer M } ? Awaited<M> : undefined,
 > {
   /** The Request being handled. */
   req: Request;
@@ -157,14 +158,14 @@ export interface ResolveErrorArg {
 
 /** Request processing options for constructing Endpoints. */
 export interface EndpointSchema<
-  GroupsOutput = Record<string, string | string[]>,
-  Ctx = unknown,
-  QueryInput extends Record<string, string | string[]> = (
-    Record<string, string | string[]>
-  ),
-  QueryOutput = Record<string, string | string[]>,
-  MessageInput = unknown,
-  MessageOutput = unknown,
+  // GroupsOutput = Record<string, string | string[]>,
+  // Ctx = unknown,
+  // QueryInput extends Record<string, string | string[]> = (
+  //   Record<string, string | string[]>
+  // ),
+  // QueryOutput = Record<string, string | string[]>,
+  // MessageInput = unknown,
+  // MessageOutput = unknown,
 > {
   /**
    * URLPattern string to match against the Request's routed path. If the
@@ -180,7 +181,7 @@ export interface EndpointSchema<
    * the Endpoint won't match with the request and the router will continue
    * looking for matching handlers.
    */
-  groups?: Parser<Record<string, string | string[]>, GroupsOutput> | null;
+  groups?: Parser<Record<string, string | string[]>, any> | null;
   /**
    * Keys to use when signing cookies. The cookies are available as the
    * "cookies" resolver argument.
@@ -194,14 +195,14 @@ export interface EndpointSchema<
    *
    * TODO: Example use case
    */
-  ctx?: ((c: ContextArg) => Ctx | Promise<Ctx>) | null;
+  ctx?: ((c: ContextArg) => any) | null;
   /**
    * Parses the query string parameters passed into the URL. If parsing fails,
    * `undefined` will be parsed to check for a default value. If that also
    * fails, a 400 bad request error will be sent to the client. The output is
    * available as the "query" resolver argument.
    */
-  query?: Parser<QueryInput, QueryOutput> | null;
+  query?: Parser<Record<string, string | string[]>, any> | null;
   /**
    * Limits the size of posted messages. If a message exceeds the limit, a 413
    * HttpError will be thrown and serialized back to the client. If 0 is
@@ -222,7 +223,7 @@ export interface EndpointSchema<
    * throws when parsing `undefined`, *only* POST will be allowed. The output
    * from parsing is available as the "message" resolver argument.
    */
-  message?: Parser<MessageInput, MessageOutput>;
+  message?: Parser<any, any>;
   /**
    * Resolves an error thrown during Endpoint processing into a Response to
    * serve to the client. If no Response is returned, the error will be
@@ -233,44 +234,35 @@ export interface EndpointSchema<
   resolveError?: ((x: ResolveErrorArg) => any) | null;
 }
 
+type NoInfer<T> = T extends infer S ? S : never;
+
 /**
  * Constructs a new Endpoint handler using the provided schema. The schema
  * properties are also available on the returned Endpoint function.
  */
 export function endpoint<
-  Schema,
-  GroupsOutput = Record<string, string | string[]>,
-  Ctx = undefined,
-  QueryInput extends Record<string, string | string[]> = (
-    Record<string, string | string[]>
-  ),
-  QueryOutput = Record<string, string | string[]>,
-  MessageInput = unknown,
-  MessageOutput = undefined,
+  Schema = {},
+  // GroupsOutput,
+  // Ctx,
+  // QueryInput extends Record<string, string | string[]>,
+  // QueryOutput,
+  // MessageInput,
+  // MessageOutput,
   Resp = undefined,
 >(
-  schema?: EndpointSchema<
-    GroupsOutput,
-    Ctx,
-    QueryInput,
-    QueryOutput,
-    MessageInput,
-    MessageOutput
-  > & Schema | null,
-  resolve?: (x: ResolveArg<
-    GroupsOutput,
-    Ctx,
-    QueryOutput,
-    MessageOutput
-  >) => Resp,
+  resolve: (x: ResolveArg<Exclude<typeof schema, null>>) => Resp,
+  //   typeof schema
+  // ) => Resp,
+  // schema: Schema,
+  schema: Schema | null,
 ): Endpoint<{
   [K in keyof Schema | "resolve"]: (
     K extends "resolve" ? Exclude<typeof resolve, undefined>
     : K extends keyof Schema ? Schema[K]
     : never
-  );
+  )
 }> {
-  const _schema: Exclude<typeof schema, undefined | null> = schema || {} as any;
+  const _schema: Exclude<typeof schema, undefined | null> = schema as any || {} as any;
   const _resolve = resolve || (() => {}) as any;
   const checkMethod = methodChecker(_schema.message);
   const matchPath = pathMatcher({
@@ -348,10 +340,10 @@ export function endpoint<
         conn,
         cookies,
         path,
-        groups: groups as GroupsOutput,
-        ctx: ctx as Ctx,
-        query: query as QueryOutput,
-        message: message as MessageOutput,
+        groups: groups as any,
+        ctx: ctx as any,
+        query: query as any,
+        message: message as any,
         asset,
         redirect,
       });

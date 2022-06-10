@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { http } from "../deps.ts";
-import { endpoint } from "../endpoints.ts";
+import { ContextArg, endpoint } from "../endpoints.ts";
 import {
   assert,
   assertEquals,
@@ -47,40 +47,7 @@ const conn: http.ConnInfo = {
 // }
 
 Deno.test("endpoint + client integration #1", async t => {
-  const end = endpoint({
-    path: "users/:name?",
-    groups: (g) => {
-      if (typeof g.name !== "string") {
-        throw new Error("too many names");
-      }
-      if (g.name.match(/[0-9]/g)) {
-        throw new Error("names don't have numbers");
-      }
-      return { name: g.name };
-    },
-    ctx: (x) => {
-      if (x.path === "/users") {
-        return null;
-      }
-      return { head: "💩", belly: "🍺", legs: "🐓" };
-    },
-    query: (q: { greeting?: "basic" | "fancy" }) => {
-      if (
-        typeof q.greeting === "undefined" ||
-        q.greeting === "basic" ||
-        q.greeting === "fancy"
-      ) {
-        return { greeting: q.greeting };
-      }
-      throw new Error("that greeting is only available after paid upgrade");
-    },
-    message: (m: string | undefined) => {
-      if (typeof m !== "string" && typeof m !== "undefined") {
-        throw new Error("hablo cuerdas");
-      }
-      return m;
-    },
-  }, x => {
+  const end = endpoint(x => {
     const _checkGroups: (typeof x.groups extends {
       name: string;
     } ? true : false) = true;
@@ -101,6 +68,39 @@ Deno.test("endpoint + client integration #1", async t => {
       query: x.query,
       message: x.message,
     };
+  }, {
+    path: "users/:name?",
+    groups: (g: Record<string, string | string[]>) => {
+      if (typeof g.name !== "string") {
+        throw new Error("too many names");
+      }
+      if (g.name.match(/[0-9]/g)) {
+        throw new Error("names don't have numbers");
+      }
+      return { name: g.name };
+    },
+    ctx: (x: ContextArg) => {
+      if (x.path === "/users") {
+        return null;
+      }
+      return { head: "💩", belly: "🍺", legs: "🐓" };
+    },
+    query: (q: { greeting?: "basic" | "fancy" }) => {
+      if (
+        typeof q.greeting === "undefined" ||
+        q.greeting === "basic" ||
+        q.greeting === "fancy"
+      ) {
+        return { greeting: q.greeting };
+      }
+      throw new Error("that greeting is only available after paid upgrade");
+    },
+    message: (m: string | undefined) => {
+      if (typeof m !== "string" && typeof m !== "undefined") {
+        throw new Error("hablo cuerdas");
+      }
+      return m;
+    }
   });
   const endClient = client<typeof end>("http://localhost");
 
