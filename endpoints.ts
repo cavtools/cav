@@ -241,20 +241,13 @@ type NoInfer<T> = T extends infer S ? S : never;
  * properties are also available on the returned Endpoint function.
  */
 export function endpoint<
-  Schema = {},
-  // GroupsOutput,
-  // Ctx,
-  // QueryInput extends Record<string, string | string[]>,
-  // QueryOutput,
-  // MessageInput,
-  // MessageOutput,
-  Resp = undefined,
+  Schema extends EndpointSchema = {},
 >(
-  resolve: (x: ResolveArg<Exclude<typeof schema, null>>) => Resp,
+  resolve: (x: ResolveArg<Exclude<Schema, null>>) => any,
   //   typeof schema
   // ) => Resp,
   // schema: Schema,
-  schema: EndpointSchema & Schema | null,
+  schema: Schema & EndpointSchema | null,
 ): Endpoint<{
   [K in keyof Schema | "resolve"]: (
     K extends "resolve" ? Exclude<typeof resolve, undefined>
