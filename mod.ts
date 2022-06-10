@@ -8,4 +8,5 @@ export * from "./jwt.ts";
 export * from "./parser.ts";
 export * from "./router.ts";
 export * from "./serial.ts";
+export * from "./util.ts";
 export * from "./ws.ts";
