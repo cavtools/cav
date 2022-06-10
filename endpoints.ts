@@ -84,7 +84,7 @@ export interface ContextArg {
 
 /** Arguments available to the Resolve function. */
 export interface ResolveArg<
-  Schema,
+  Schema extends EndpointSchema,
   GroupsOutput = Schema extends { groups: (g: any) => infer G } ? Awaited<G> : Record<string, string | string[]>,
   Ctx = Schema extends { ctx: (x: any) => infer C } ? Awaited<C> : undefined,
   QueryOutput = Schema extends { query: (q: any) => infer Q } ? Awaited<Q> : Record<string, string | string[]>,
@@ -243,11 +243,12 @@ type NoInfer<T> = T extends infer S ? S : never;
 export function endpoint<
   Schema extends EndpointSchema = {},
 >(
+  schema: Schema & EndpointSchema | null,
   resolve: (x: ResolveArg<Exclude<Schema, null>>) => any,
+  // resolve: (x: NoInfer<Schema>) => any,
   //   typeof schema
   // ) => Resp,
   // schema: Schema,
-  schema: Schema & EndpointSchema | null,
 ): Endpoint<{
   [K in keyof Schema | "resolve"]: (
     K extends "resolve" ? Exclude<typeof resolve, undefined>

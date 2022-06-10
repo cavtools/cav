@@ -47,28 +47,7 @@ const conn: http.ConnInfo = {
 // }
 
 Deno.test("endpoint + client integration #1", async t => {
-  const end = endpoint(x => {
-    const _checkGroups: (typeof x.groups extends {
-      name: string;
-    } ? true : false) = true;
-    const _checkCtx: (typeof x.ctx extends null | {
-      head: string;
-      belly: string;
-      legs: string;
-    } ? true : false) = true;
-    const _checkQuery: (typeof x.query extends {
-      greeting?: "basic" | "fancy";
-    } ? true : false) = true;
-    const _checkMessage: (typeof x.message extends (
-      undefined | string
-    ) ? true : false) = true;
-    return {
-      groups: x.groups,
-      ctx: x.ctx,
-      query: x.query,
-      message: x.message,
-    };
-  }, {
+  const end = endpoint({
     path: "users/:name?",
     groups: (g: Record<string, string | string[]>) => {
       if (typeof g.name !== "string") {
@@ -79,7 +58,7 @@ Deno.test("endpoint + client integration #1", async t => {
       }
       return { name: g.name };
     },
-    ctx: (x: ContextArg) => {
+    ctx: (x) => {
       if (x.path === "/users") {
         return null;
       }
@@ -101,6 +80,27 @@ Deno.test("endpoint + client integration #1", async t => {
       }
       return m;
     }
+  }, x => {
+    const _checkGroups: (typeof x.groups extends {
+      name: string;
+    } ? true : false) = true;
+    const _checkCtx: (typeof x.ctx extends null | {
+      head: string;
+      belly: string;
+      legs: string;
+    } ? true : false) = true;
+    const _checkQuery: (typeof x.query extends {
+      greeting?: "basic" | "fancy";
+    } ? true : false) = true;
+    const _checkMessage: (typeof x.message extends (
+      undefined | string
+    ) ? true : false) = true;
+    return {
+      groups: x.groups,
+      ctx: x.ctx,
+      query: x.query,
+      message: x.message,
+    };
   });
   const endClient = client<typeof end>("http://localhost");
 
