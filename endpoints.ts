@@ -254,7 +254,7 @@ export function endpoint<
   //   typeof schema
   // ) => Resp,
   // schema: Schema,
-  schema: Schema | null,
+  schema: EndpointSchema & Schema | null,
 ): Endpoint<{
   [K in keyof Schema | "resolve"]: (
     K extends "resolve" ? Exclude<typeof resolve, undefined>
