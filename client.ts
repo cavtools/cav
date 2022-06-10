@@ -20,7 +20,7 @@ export type Handler = (
   ...a: any[]
 ) => Promise<Response> | Response;
 
-const _cav = Symbol("cav");
+declare const _cav: unique symbol;
 
 /**
  * A server endpoint handler can use this Request type to ferry type information
