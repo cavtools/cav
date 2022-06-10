@@ -236,6 +236,8 @@ export interface EndpointSchema<
 
 type NoInfer<T> = T extends infer S ? S : never;
 
+// FIXME: https://github.com/microsoft/TypeScript/issues/44999 This looks relevant. Here's another: https://github.com/microsoft/TypeScript/issues/45035
+
 /**
  * Constructs a new Endpoint handler using the provided schema. The schema
  * properties are also available on the returned Endpoint function.
@@ -244,7 +246,7 @@ export function endpoint<
   Schema extends EndpointSchema = {},
 >(
   schema: Schema & EndpointSchema | null,
-  resolve: (x: ResolveArg<Exclude<Schema, null>>) => any,
+  resolve: (x: ResolveArg<Exclude<Schema extends infer S ? S : never, null>>) => any,
   // resolve: (x: NoInfer<Schema>) => any,
   //   typeof schema
   // ) => Resp,
