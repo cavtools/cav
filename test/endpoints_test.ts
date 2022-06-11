@@ -28,133 +28,100 @@ const conn: http.ConnInfo = {
   },
 };
 
-// async function assertResponseEquals(res: Response, correct: {
-//   status?: number;
-//   headers?: [string, string][];
-//   body?: unknown;
-//   serializers?: Serializers;
-// }) {
-//   if ("status" in correct) {
-//     assertEquals(res.status, correct.status);
-//   }
-//   if ("headers" in correct) {
-//     assertEquals(Array.from(res.headers.entries()), correct.headers);
-//   }
-//   if ("body" in correct) {
-//     const unpacked = await unpack(res, { serializers: correct.serializers });
-//     assertEquals(unpacked, correct.body);
-//   }
-// }
+Deno.test("endpoint", async t => {
+  await t.step("accepts a schema by itself", async () => {
+    const end = endpoint({ message: (m) => m }, x => x.message);
 
-Deno.test("endpoint + client integration #1", async t => {
-  const end = endpoint(x => {
-    const _checkGroups: (typeof x.groups extends {
-      name: string;
-    } ? true : false) = true;
-    const _checkCtx: (typeof x.ctx extends null | {
-      head: string;
-      belly: string;
-      legs: string;
-    } ? true : false) = true;
-    const _checkQuery: (typeof x.query extends {
-      greeting?: "basic" | "fancy";
-    } ? true : false) = true;
-    const _checkMessage: (typeof x.message extends (
-      undefined | string
-    ) ? true : false) = true;
-    return {
-      groups: x.groups,
-      ctx: x.ctx,
-      query: x.query,
-      message: x.message,
-    };
-  }, {
-    path: "users/:name?",
-    groups: (g: Record<string, string | string[]>) => {
-      if (typeof g.name !== "string") {
-        throw new Error("too many names");
-      }
-      if (g.name.match(/[0-9]/g)) {
-        throw new Error("names don't have numbers");
-      }
-      return { name: g.name };
-    },
-    ctx: (x) => {
-      if (x.path === "/users") {
-        return null;
-      }
-      return { head: "💩", belly: "🍺", legs: "🐓" };
-    },
-    query: (q: { greeting?: "basic" | "fancy" }) => {
-      if (
-        typeof q.greeting === "undefined" ||
-        q.greeting === "basic" ||
-        q.greeting === "fancy"
-      ) {
-        return { greeting: q.greeting };
-      }
-      throw new Error("that greeting is only available after paid upgrade");
-    },
-    message: (m: string | undefined) => {
-      if (typeof m !== "string" && typeof m !== "undefined") {
-        throw new Error("hablo cuerdas");
-      }
-      return m;
-    }
   });
-  // }, x => {
-  //   const _checkGroups: (typeof x.groups extends {
-  //     name: string;
-  //   } ? true : false) = true;
-  //   const _checkCtx: (typeof x.ctx extends null | {
-  //     head: string;
-  //     belly: string;
-  //     legs: string;
-  //   } ? true : false) = true;
-  //   const _checkQuery: (typeof x.query extends {
-  //     greeting?: "basic" | "fancy";
-  //   } ? true : false) = true;
-  //   const _checkMessage: (typeof x.message extends (
-  //     undefined | string
-  //   ) ? true : false) = true;
-  //   return {
-  //     groups: x.groups,
-  //     ctx: x.ctx,
-  //     query: x.query,
-  //     message: x.message,
-  //   };
-  // });
-  const endClient = client<typeof end>("http://localhost");
-
-  const oldFetch = self.fetch;
-  Object.assign(self, {
-    fetch: async (req: Request) => {
-      return await end(req, conn);
-    },
-  });
-
-  const [body1] = await endClient({
-    path: "/users/connor",
-    query: {
-      greeting: "fancy",
-    },
-    message: "Have you ever wondered how Jazz can help you?",
-  });
-  const _checkBody1: (typeof body1 extends {
-    groups: { name: string };
-    ctx: { head: string; belly: string; legs: string; } | null;
-    query: { greeting?: "basic" | "fancy" };
-    message: string | undefined;
-  } ? true : false) = true;
-  assertEquals(body1, {
-    groups: { name: "connor" },
-    ctx: { head: "💩", belly: "🍺", legs: "🐓" },
-    query: { greeting: "fancy" },
-    message: "Have you ever wondered how Jazz can help you?",
-  });
-
-  Object.assign(self, { fetch: oldFetch });
 });
+
+// Deno.test("endpoint + client integration #1", async t => {
+//   const end = endpoint({
+//     path: "users/:name?",
+//     groups: (g) => {
+//       if (typeof g.name !== "string") {
+//         throw new Error("too many names");
+//       }
+//       if (g.name.match(/[0-9]/g)) {
+//         throw new Error("names don't have numbers");
+//       }
+//       return { name: g.name };
+//     },
+//     ctx: (x: ContextArg) => {
+//       if (x.path === "/users") {
+//         return null;
+//       }
+//       return { head: "💩", belly: "🍺", legs: "🐓" };
+//     },
+//     query: (q: { greeting?: "basic" | "fancy" }) => {
+//       if (
+//         typeof q.greeting === "undefined" ||
+//         q.greeting === "basic" ||
+//         q.greeting === "fancy"
+//       ) {
+//         return { greeting: q.greeting };
+//       }
+//       throw new Error("that greeting is only available after paid upgrade");
+//     },
+//     message: (m: string | undefined) => {
+//       if (typeof m !== "string" && typeof m !== "undefined") {
+//         throw new Error("hablo cuerdas");
+//       }
+//       return m;
+//     }
+//   }, x => {
+//     const _checkGroups: (typeof x.groups extends {
+//       name: string;
+//     } ? true : false) = true;
+//     const _checkCtx: (typeof x.ctx extends null | {
+//       head: string;
+//       belly: string;
+//       legs: string;
+//     } ? true : false) = true;
+//     const _checkQuery: (typeof x.query extends {
+//       greeting?: "basic" | "fancy";
+//     } ? true : false) = true;
+//     const _checkMessage: (typeof x.message extends (
+//       undefined | string
+//     ) ? true : false) = true;
+//     return {
+//       groups: x.groups,
+//       ctx: x.ctx,
+//       query: x.query,
+//       message: x.message,
+//     };
+//   });
+//   const endClient = client<typeof end>("http://localhost");
+
+//   const oldFetch = self.fetch;
+//   Object.assign(self, {
+//     fetch: async (req: Request) => {
+//       return await end(req, conn);
+//     },
+//   });
+
+//   const [body1] = await endClient({
+//     path: "/users/connor",
+//     query: {
+//       greeting: "fancy",
+//     },
+//     message: "Have you ever wondered how Jazz can help you?",
+//   });
+//   const _checkBody1: (typeof body1 extends {
+//     groups: { name: string };
+//     ctx: { head: string; belly: string; legs: string; } | null;
+//     query: { greeting?: "basic" | "fancy" };
+//     message: string | undefined;
+//   } ? true : false) = true;
+//   assertEquals(body1, {
+//     groups: { name: "connor" },
+//     ctx: { head: "💩", belly: "🍺", legs: "🐓" },
+//     query: { greeting: "fancy" },
+//     message: "Have you ever wondered how Jazz can help you?",
+//   });
+
+//   Object.assign(self, { fetch: oldFetch });
+// });
 
 // Deno.test("endpoint: request matching", async t => {
 //   await t.step("fallback path", async () => {

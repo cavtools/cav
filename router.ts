@@ -30,6 +30,12 @@ export interface RouterContext {
 
 const _routerContext = Symbol("_routerContext");
 
+/** Record representing query string parameters. */
+export type QueryRecord = Record<string, string | string[]>;
+
+/** Record representing path groups captured during routing. */
+export type GroupsRecord = Record<string, string | string[]>;
+
 /**
  * Hook for getting routing metadata from a Request. If there isn't already a
  * RouterContext associated with the Request, a new one will be generated. The
