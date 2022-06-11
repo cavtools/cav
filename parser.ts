@@ -35,15 +35,14 @@ export type ParserInput<T> = (
 /** Extracts the output type of a given Parser. */
 export type ParserOutput<T> = (
   T extends { _output: infer O } ? O // zod
-    : T extends Parser<unknown, infer O> ? O
+    : T extends Parser<any, infer O> ? O
     : never
 );
 
 /** Normalizes a Parser into a ParserFunction. */
-export function normalizeParser<
-  I = any,
-  O = any,
->(parser: Parser<I, O>): ParserFunction<I, O> {
+export function normalizeParser<I = any, O = any>(
+  parser: Parser<I, O>,
+): ParserFunction<I, O> {
   return (
     typeof parser === "function" ? parser
     : parser.parse

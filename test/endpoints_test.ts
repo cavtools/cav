@@ -1,18 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { http } from "../deps.ts";
-import { ContextArg, endpoint } from "../endpoints.ts";
-import {
-  assert,
-  assertEquals,
-  assertStrictEquals,
-  zod as z,
-} from "./test_deps.ts";
-import { router } from "../router.ts";
-import { client } from "../client.ts";
-import { HttpError, unpack } from "../serial.ts";
-import type { Serializers } from "../serial.ts";
-import type { Endpoint } from "../endpoints.ts";
+import { endpoint } from "../endpoints.ts";
+import { assertEquals } from "./test_deps.ts";
+import type { Endpoint, ResolveArg } from "../endpoints.ts";
+import type { QueryRecord, GroupsRecord } from "../router.ts";
 
 // Doesn't matter
 const conn: http.ConnInfo = {
@@ -28,6 +20,7 @@ const conn: http.ConnInfo = {
   },
 };
 
+// https://2ality.com/2019/07/testing-static-types.html
 type AssertEquals<Check, Correct> = (
   Check extends Correct ? (
     Correct extends Check ? true : never
@@ -35,299 +28,107 @@ type AssertEquals<Check, Correct> = (
   : never
 );
 
-Deno.test("endpoint", async t => {
-  await t.step("no arguments", () => {
+Deno.test("endpoint()", async t => {
+  await t.step("args: none", async () => {
     const end = endpoint();
     const _check: AssertEquals<typeof end, Endpoint<{
       resolve: () => undefined;
     }>> = true;
-    // TODO: Check behavior
+
+    const res1 = await end(new Request("http://localhost"), conn);
+    assertEquals(res1.status, 204);
+    assertEquals(res1.body, null);
+
+    const res2 = await end(new Request("http://localhost/test"), conn);
+    assertEquals(res2.status, 404);
+    assertEquals(await res2.text(), "404 not found");
+
+    const res3 = await end(
+      new Request("http://localhost/", { method: "POST" }),
+      conn,
+    );
+    assertEquals(res3.status, 405);
+    assertEquals(await res3.text(), "405 method not allowed");
+  });
+
+  await t.step("args: schema only", async () => {
+    const end = endpoint({ message: (m: string) => m });
+    const _check: AssertEquals<typeof end, Endpoint<{
+      message: (m: string) => string;
+      resolve: () => undefined;
+    }>> = true;
+
+    const res1 = await end(new Request("http://localhost"), conn);
+    assertEquals(res1.status, 204);
+    assertEquals(res1.body, null);
+
+    const res2 = await end(
+      new Request("http://localhost", { method: "POST" }),
+      conn,
+    );
+    assertEquals(res2.status, 204);
+    assertEquals(res2.body, null);
+
+    const res3 = await end(
+      new Request("http://localhost", {
+        method: "POST",
+        body: "hello world",
+      }),
+      conn,
+    );
+    assertEquals(res3.status, 204);
+    assertEquals(res3.body, null);
+  });
+
+  await t.step("args: resolve only", async () => {
+    const end = endpoint(() => "hello world");
+    const _check: AssertEquals<typeof end, Endpoint<{
+      resolve: () => string;
+    }>> = true;
+
+    const res1 = await end(new Request("http://localhost"), conn);
+    assertEquals(res1.status, 200);
+    assertEquals(await res1.text(), "hello world");
+
+    const res2 = await end(
+      new Request("http://localhost", { method: "POST" }),
+      conn,
+    );
+    assertEquals(res2.status, 405);
+    assertEquals(await res2.text(), "405 method not allowed");
+  });
+
+  await t.step("args: schema + resolve", async () => {
+    const end = endpoint({
+      message: (m: string) => m,
+    }, async x => x.message); // god i hate this syntax
+    const _check: AssertEquals<typeof end, Endpoint<{
+      message: (m: string) => string,
+      resolve: (x: ResolveArg<
+        { message: (m: string) => string },
+        GroupsRecord,
+        undefined,
+        QueryRecord,
+        string
+      >) => Promise<string>;
+    }>> = true;
+
+    const res1 = await end(new Request("http://localhost"), conn);
+    assertEquals(res1.status, 204);
+    assertEquals(res1.body, null);
+
+    const res2 = await end(new Request("http://localhost/test"), conn);
+    assertEquals(res2.status, 404);
+    assertEquals(await res2.text(), "404 not found");
+
+    const res3 = await end(
+      new Request("http://localhost", {
+        method: "POST",
+        body: "foo bar",
+      }),
+      conn,
+    );
+    assertEquals(res3.status, 200);
+    assertEquals(await res3.text(), "foo bar");
   });
 });
-
-// Deno.test("endpoint + client integration #1", async t => {
-//   const end = endpoint({
-//     path: "users/:name?",
-//     groups: (g) => {
-//       if (typeof g.name !== "string") {
-//         throw new Error("too many names");
-//       }
-//       if (g.name.match(/[0-9]/g)) {
-//         throw new Error("names don't have numbers");
-//       }
-//       return { name: g.name };
-//     },
-//     ctx: (x: ContextArg) => {
-//       if (x.path === "/users") {
-//         return null;
-//       }
-//       return { head: "💩", belly: "🍺", legs: "🐓" };
-//     },
-//     query: (q: { greeting?: "basic" | "fancy" }) => {
-//       if (
-//         typeof q.greeting === "undefined" ||
-//         q.greeting === "basic" ||
-//         q.greeting === "fancy"
-//       ) {
-//         return { greeting: q.greeting };
-//       }
-//       throw new Error("that greeting is only available after paid upgrade");
-//     },
-//     message: (m: string | undefined) => {
-//       if (typeof m !== "string" && typeof m !== "undefined") {
-//         throw new Error("hablo cuerdas");
-//       }
-//       return m;
-//     }
-//   }, x => {
-//     const _checkGroups: (typeof x.groups extends {
-//       name: string;
-//     } ? true : false) = true;
-//     const _checkCtx: (typeof x.ctx extends null | {
-//       head: string;
-//       belly: string;
-//       legs: string;
-//     } ? true : false) = true;
-//     const _checkQuery: (typeof x.query extends {
-//       greeting?: "basic" | "fancy";
-//     } ? true : false) = true;
-//     const _checkMessage: (typeof x.message extends (
-//       undefined | string
-//     ) ? true : false) = true;
-//     return {
-//       groups: x.groups,
-//       ctx: x.ctx,
-//       query: x.query,
-//       message: x.message,
-//     };
-//   });
-//   const endClient = client<typeof end>("http://localhost");
-
-//   const oldFetch = self.fetch;
-//   Object.assign(self, {
-//     fetch: async (req: Request) => {
-//       return await end(req, conn);
-//     },
-//   });
-
-//   const [body1] = await endClient({
-//     path: "/users/connor",
-//     query: {
-//       greeting: "fancy",
-//     },
-//     message: "Have you ever wondered how Jazz can help you?",
-//   });
-//   const _checkBody1: (typeof body1 extends {
-//     groups: { name: string };
-//     ctx: { head: string; belly: string; legs: string; } | null;
-//     query: { greeting?: "basic" | "fancy" };
-//     message: string | undefined;
-//   } ? true : false) = true;
-//   assertEquals(body1, {
-//     groups: { name: "connor" },
-//     ctx: { head: "💩", belly: "🍺", legs: "🐓" },
-//     query: { greeting: "fancy" },
-//     message: "Have you ever wondered how Jazz can help you?",
-//   });
-
-//   Object.assign(self, { fetch: oldFetch });
-// });
-
-// Deno.test("endpoint: request matching", async t => {
-//   await t.step("fallback path", async () => {
-//     const end = endpoint();
-//     const req1 = new Request("http://_/test");
-//     const req2 = new Request("http://_");
-//     await assertResponseEquals(await end(req1, conn), {
-//       status: 404,
-//       body: "404 not found",
-//     });
-//     await assertResponseEquals(await end(req2, conn), {
-//       status: 204,
-//       body: undefined,
-//     });
-
-//     const end2 = endpoint(x => x.path);
-//     const req3 = new Request("http://_");
-//     await assertResponseEquals(await end2(req3, conn), { body: "/" });
-//   });
-
-//   await t.step("root path (=== fallback)", async () => {
-//     // Same thing as fallback
-//     const end = endpoint({ path: "/", resolve: x => x.path });
-//     const req1 = new Request("http://_/test");
-//     const req2 = new Request("http://_");
-//     await assertResponseEquals(await end(req1, conn), {
-//       status: 404,
-//       body: "404 not found",
-//     });
-//     await assertResponseEquals(await end(req2, conn), {
-//       status: 200,
-//       body: "/",
-//     });
-//   });
-
-//   await t.step("simple path", async () => {
-//     const end = endpoint({ path: "/hello/world" });
-//     const req1 = new Request("http://_/?yo=whatsup");
-//     const req2 = new Request("http://_/hello/world?hey=ho");
-//     const req3 = new Request("http://_/hello/world/goodbye");
-//     const req4 = new Request("http://_/hello/:world");
-//     await assertResponseEquals(await end(req1, conn), { status: 404 });
-//     await assertResponseEquals(await end(req2, conn), { status: 204 });
-//     await assertResponseEquals(await end(req3, conn), { status: 404 });
-//     await assertResponseEquals(await end(req4, conn), { status: 404 });
-//   });
-
-//   await t.step("complex path", async () => {
-//     const end = endpoint({
-//       path: "/:ids([0-9]+)+/hello",
-//       resolve: x => ({ path: x.path, groups: x.groups }),
-//     });
-//     const req1 = new Request("http://_/1/2/3/hello");
-//     await assertResponseEquals(await end(req1, conn), {
-//       status: 200,
-//       body: { path: "/1/2/3/hello", groups: { ids: "1/2/3" } },
-//     });
-//   });
-
-//   await t.step("wildcard path", async () => {
-//     const end = endpoint({
-//       path: "*",
-//       resolve: x => ({ path: x.path, groups: x.groups }),
-//     });
-//     const req = new Request("http://_/hello/world/1/2?3=4");
-//     await assertResponseEquals(await end(req, conn), {
-//       status: 200,
-//       body: { path: "/hello/world/1/2", groups: {} },
-//     });
-//   });
-
-//   await t.step("^ to use full url", async () => {
-//     const end = endpoint({
-//       path: "^/hello/world",
-//       resolve: x => ({ path: x.path, groups: x.groups }),
-//     });
-//     const rtr = router({
-//       hello: {
-//         world: end,
-//       },
-//     });
-//     const noMatch = new Request("http://_/hello/world/hello/world");
-//     const match = new Request("http://-/hello/world");
-//     await assertResponseEquals(await rtr(noMatch, conn), { status: 404 });
-//     await assertResponseEquals(await rtr(match, conn), {
-//       status: 200,
-//       body: { path: "/hello/world", groups: {} },
-//     });
-//   });
-
-//   await t.step("groups merge with previously captured groups", async () => {
-//     const end = endpoint({
-//       path: "/:a",
-//       resolve: x => x.groups,
-//     });
-//     const rtr = router({
-//       ":a": {
-//         ":b": end,
-//       }
-//     });
-//     const req = new Request("http://-/a/b/c");
-//     await assertResponseEquals(await rtr(req, conn), {
-//       status: 200,
-//       body: { a: ["a", "c"], b: "b" },
-//     });
-//   });
-
-//   await t.step("groups parsing", async () => {
-//     const end = endpoint({
-//       path: "/:a/:c?",
-//       groups: z.object({
-//         a: z.string().array().transform(v => v.map(v2 => parseInt(v2, 10))),
-//         b: z.string().transform(v => parseInt(v, 10)),
-//         c: z.number().optional(),
-//       }).passthrough(),
-//       resolve: x => x.groups,
-//     });
-//     const rtr = router({
-//       ":a": {
-//         ":b": end,
-//       }
-//     });
-
-//     const success = new Request("http://-/1/2/3");
-//     await assertResponseEquals(await rtr(success, conn), {
-//       body: { a: [1, 3], b: 2 },
-//     });
-
-//     // This fails because the captured groups is always a string, the "c" group
-//     // is equal to "4" as a string
-//     const fail = new Request("http://-/1/2/3/4");
-//     await assertResponseEquals(await rtr(fail, conn), { status: 404 });
-//   });
-// });
-
-// Deno.test("endpoint: cookies", async t => {
-//   await t.step("cookies are still set on a request that throws", async () => {
-//     const end = endpoint(x => {
-//       x.cookies.set("hello", "world");
-//       throw new Error();
-//     });
-//     const req = new Request("http://-");
-//     await assertResponseEquals(await end(req, conn), {
-//       status: 500,
-//       headers: [
-//         ["content-type", "text/plain;charset=UTF-8"],
-//         ["set-cookie", "hello=world"],
-//       ],
-//     });
-//   });
-
-//   await t.step("cookies work in ctx", () => {
-//     const end = endpoint({
-//       // ctx: x => {
-//       //   return true;
-//       // },
-//       // query: q => { return true; },
-//       // resolve: x => {
-        
-//       // }
-//       resolve: x => {},
-//     })
-//   });
-// });
-
-// Deno.test("endpoint: context", async t => {
-//   // basic example
-//   // cleanups
-//   // resolveError
-// });
-
-// Deno.test("endpoint: query", async t => {
-//   // none
-//   // success
-//   // failure
-//   // resolveError
-// });
-
-// Deno.test("endpoint: message", async t => {
-//   // maxBodySize
-//   // custom serializers
-//   // HttpErrors
-// });
-
-// Deno.test("endpoint: response serialization", async t => {
-
-// });
-
-// Deno.test("endpoint: error handling", async t => {
-
-// });
-
-// Deno.test("endpoint: canonical redirects", async t => {
-
-// });
-
-// Deno.test("endpoint: schema is assigned to created endpoint", async t => {
-
-// });

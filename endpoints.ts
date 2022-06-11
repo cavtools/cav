@@ -21,26 +21,37 @@ import type { QueryRecord, GroupsRecord } from "./router.ts";
 // probably don't need to exist, but I'm not positive. I should get everything
 // tested before I try to fix these things
 
-/** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<
-  Schema = null,
-> = Schema & ((
-  req: EndpointRequest<(
-    Schema extends { query: Parser } ? ParserInput<Schema["query"]>
-    : Record<string, string | string[]>
-  ), (
-    Schema extends { message: Parser } ? ParserInput<Schema["message"]>
-    : undefined
-  ), (
-    Schema extends { resolve: (x: any) => infer R } ? Awaited<R>
-    : undefined
-  )>,
-  conn: http.ConnInfo,
-) => Promise<Response>);
-
-/** Matches any Context. Useful for type constraints. */
-// deno-lint-ignore no-explicit-any
-// export type AnyContext = Context<any>;
+/** Arguments available to a ResolveError function. */
+export interface ResolveErrorArg {
+  /** The Request being processed. */
+  req: Request;
+  /**
+   * A ResponseInit applied to the Endpoint response after resolving and packing
+   * the value to send to the client. The Headers object is always available.
+   */
+  res: ResponseInit & { headers: Headers };
+  /** new URL(req.url) */
+  url: URL;
+  /** Connection information provided by Deno. */
+  conn: http.ConnInfo;
+  /** The path that matched the Endpoint's path schema option. */
+  path: string;
+  /** The unprocessed query object associated with this request. */
+  query: QueryRecord;
+  /** The unprocoessed path groups object captured during routing. */
+  groups: GroupsRecord;
+  /** The offending error. */
+  error: unknown;
+  /** Returns a Response created using an asset from an assets directory. */
+  asset: (opt: ServeAssetOptions) => Promise<Response>;
+  /**
+   * Returns a redirect Response. If the redirect path doesn't specify an
+   * origin, the origin of the current request is used. If the path starts with
+   * a ".", it is joined with the pathname of the Request url to get the final
+   * redirect path. The default status is 302.
+   */
+  redirect: (to: string, status?: number) => Response;
+}
 
 /** Arguments available to Context functions. */
 export interface ContextArg {
@@ -156,38 +167,6 @@ export interface ResolveArg<
   redirect: (to: string, status?: number) => Response;
 }
 
-/** Arguments available to a ResolveError function. */
-export interface ResolveErrorArg {
-  /** The Request being processed. */
-  req: Request;
-  /**
-   * A ResponseInit applied to the Endpoint response after resolving and packing
-   * the value to send to the client. The Headers object is always available.
-   */
-  res: ResponseInit & { headers: Headers };
-  /** new URL(req.url) */
-  url: URL;
-  /** Connection information provided by Deno. */
-  conn: http.ConnInfo;
-  /** The path that matched the Endpoint's path schema option. */
-  path: string;
-  /** The unprocessed query object associated with this request. */
-  query: QueryRecord;
-  /** The unprocoessed path groups object captured during routing. */
-  groups: GroupsRecord;
-  /** The offending error. */
-  error: unknown;
-  /** Returns a Response created using an asset from an assets directory. */
-  asset: (opt: ServeAssetOptions) => Promise<Response>;
-  /**
-   * Returns a redirect Response. If the redirect path doesn't specify an
-   * origin, the origin of the current request is used. If the path starts with
-   * a ".", it is joined with the pathname of the Request url to get the final
-   * redirect path. The default status is 302.
-   */
-  redirect: (to: string, status?: number) => Response;
-}
-
 /** Options for processing requests, used to construct Endpoints. */
 export interface EndpointSchema {
   /**
@@ -247,7 +226,7 @@ export interface EndpointSchema {
    * throws when parsing `undefined`, *only* POST will be allowed. The output
    * from parsing is available as the "message" resolver argument.
    */
-  message?: Parser<unknown, any>;
+  message?: Parser<any, any>;
   // TODO: When you do the "memory" and "disk" options, change the name of this
   // option to just "error". That way all keys on the schema are a single word
   /**
@@ -259,10 +238,31 @@ export interface EndpointSchema {
   resolveError?: ((x: ResolveErrorArg) => any) | null;
 }
 
+/** Cav Endpoint handler, for responding to requests. */
+export type Endpoint<
+  Schema = null,
+> = Schema & ((
+  req: EndpointRequest<(
+    Schema extends { query: Parser } ? ParserInput<Schema["query"]>
+    : Record<string, string | string[]>
+  ), (
+    Schema extends { message: Parser } ? ParserInput<Schema["message"]>
+    : Schema extends { message?: undefined | null } ? undefined
+    : unknown
+  ), (
+    // Endpoints always have a resolve function (as of now), so no need to check
+    // for null or undefined
+    Schema extends { resolve: (x: any) => infer R } ? Awaited<R>
+    : unknown
+  )>,
+  conn: http.ConnInfo,
+) => Promise<Response>);
+
 /**
  * Constructs a new Endpoint request handler using the provided schema and
  * resolver function. The schema properties will be assigned to the returned
- * endpoint, and the resolver will be set as the "resolve" property.
+ * endpoint function, with the resolve argument available as the "resolve"
+ * property.
  */
 export function endpoint<
   Schema extends EndpointSchema | null,
@@ -279,9 +279,7 @@ export function endpoint<
 }>;
 export function endpoint<
   Resolve extends (x: ResolveArg) => any = () => undefined,
->(
-  resolve?: Resolve,
-): Endpoint<{ resolve: Resolve }>;
+>(resolve?: Resolve): Endpoint<{ resolve: Resolve }>;
 export function endpoint(
   schemaOrResolve?: (
     | EndpointSchema
@@ -343,12 +341,13 @@ export function endpoint(
     } catch {
       return noMatch(new Response("404 not found", { status: 404 }));
     }
-    const options = await checkMethod(req);
-    if (options) {
-      return options;
-    }
 
     try {
+      const options = await checkMethod(req);
+      if (options) {
+        return options;
+      }
+
       const cookies = await cookieJar(req, schema.keys || undefined);
       cleanupTasks.push(() => cookies.setCookies(res.headers));
 
