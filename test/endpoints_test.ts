@@ -30,7 +30,7 @@ const conn: http.ConnInfo = {
 
 Deno.test("endpoint", async t => {
   await t.step("accepts a schema by itself", async () => {
-    const end = endpoint({ message: (m) => m }, x => x.message);
+    const end = endpoint(x => x.message);
 
   });
 });

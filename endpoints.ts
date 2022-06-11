@@ -267,29 +267,29 @@ export interface EndpointSchema {
  * endpoint, and the resolver will be set as the "resolve" property.
  */
 export function endpoint<
-  Schema extends EndpointSchema,
+  Schema extends EndpointSchema | null,
   Resolve extends (x: ResolveArg<Schema>) => any = () => undefined,
 >(
-  schemaOrResolve?: Schema & EndpointSchema,
-  maybeResolve?: Resolve & ((x: ResolveArg<Schema>) => any),
+  schema?: (Schema & EndpointSchema) | null,
+  resolve?: Resolve & ((x: ResolveArg<Schema>) => any),
 ): Endpoint<{
   [K in keyof Schema | "resolve"]: (
     K extends "resolve" ? Resolve
     : K extends keyof Schema ? Schema[K]
     : never
   );
-}> {
-// export function endpoint<Resp = undefined>(
-//   resolve?: ((x: ResolveArg) => Resp),
-// ): Endpoint<{ resolve: Exclude<typeof resolve, undefined> }>;
-// export function endpoint(
-//   schemaOrResolve?: (
-//     | EndpointSchema
-//     | ((x: ResolveArg) => any)
-//     | null
-//   ),
-//   maybeResolve?: (x: ResolveArg) => any,
-// ) {
+}>;
+export function endpoint<Resp = undefined>(
+  resolve?: ((x: ResolveArg) => Resp),
+): Endpoint<{ resolve: Exclude<typeof resolve, undefined> }>;
+export function endpoint(
+  schemaOrResolve?: (
+    | EndpointSchema
+    | ((x: ResolveArg) => any)
+    | null
+  ),
+  maybeResolve?: (x: ResolveArg) => any,
+) {
   // TODO: Throw SyntaxErrors on invalid input
   const schema: EndpointSchema = (
     schemaOrResolve && typeof schemaOrResolve === "object" ? schemaOrResolve
