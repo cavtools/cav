@@ -28,10 +28,20 @@ const conn: http.ConnInfo = {
   },
 };
 
-Deno.test("endpoint", async t => {
-  await t.step("accepts a schema by itself", async () => {
-    const end = endpoint(x => x.message);
+type AssertEquals<Check, Correct> = (
+  Check extends Correct ? (
+    Correct extends Check ? true : never
+  )
+  : never
+);
 
+Deno.test("endpoint", async t => {
+  await t.step("no arguments", () => {
+    const end = endpoint();
+    const _check: AssertEquals<typeof end, Endpoint<{
+      resolve: () => undefined;
+    }>> = true;
+    // TODO: Check behavior
   });
 });
 

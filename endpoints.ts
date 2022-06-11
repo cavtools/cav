@@ -28,10 +28,6 @@ import type { QueryRecord, GroupsRecord } from "./router.ts";
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<
   Schema = null,
-  //   query?: ((...a: any[]) => any) | null;
-  //   message?: ((...a: any[]) => any) | null;
-  //   resolve?: ((...a: any[]) => any) | null;
-  // } = {},
 > = Schema & ((
   req: EndpointRequest<(
     Schema extends { query: Parser<infer Q> } ? Q
@@ -279,9 +275,11 @@ export function endpoint<
     : never
   );
 }>;
-export function endpoint<Resp = undefined>(
-  resolve?: ((x: ResolveArg) => Resp),
-): Endpoint<{ resolve: Exclude<typeof resolve, undefined> }>;
+export function endpoint<
+  Resolve extends (x: ResolveArg) => any = () => undefined,
+>(
+  resolve?: Resolve,
+): Endpoint<{ resolve: Resolve }>;
 export function endpoint(
   schemaOrResolve?: (
     | EndpointSchema
