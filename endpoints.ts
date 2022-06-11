@@ -8,11 +8,7 @@ import { cookieJar } from "./cookies.ts";
 import { webSocket } from "./ws.ts";
 import { normalizeParser } from "./parser.ts";
 import type { EndpointRequest, SocketRequest } from "./client.ts";
-import type {
-  Parser,
-  ParserInput,
-  ParserOutput,
-} from "./parser.ts";
+import type { Parser, ParserInput, ParserOutput } from "./parser.ts";
 import type { CookieJar } from "./cookies.ts";
 import type { Serializers } from "./serial.ts";
 import type { ServeAssetOptions } from "./assets.ts";
@@ -30,13 +26,13 @@ export type Endpoint<
   Schema = null,
 > = Schema & ((
   req: EndpointRequest<(
-    Schema extends { query: Parser<infer Q> } ? Q
+    Schema extends { query: Parser } ? ParserInput<Schema["query"]>
     : Record<string, string | string[]>
   ), (
-    Schema extends { message: Parser<infer M> } ? M
+    Schema extends { message: Parser } ? ParserInput<Schema["message"]>
     : undefined
   ), (
-    Schema extends { resolve: (x: any) => Awaited<infer R> } ? R
+    Schema extends { resolve: (x: any) => infer R } ? Awaited<R>
     : undefined
   )>,
   conn: http.ConnInfo,
@@ -84,8 +80,10 @@ export interface ResolveArg<
   Schema extends EndpointSchema | null = null,
   GroupsOutput = (
     "groups" extends keyof Schema ? (
-      Schema extends { groups: (g: any) => infer G } ? Awaited<G>
-      : Schema extends null | { groups?: undefined | null } ? GroupsRecord
+      Schema extends { groups: Parser } ? (
+        ParserOutput<Schema["groups"]>
+      )
+      : Schema extends { groups?: undefined | null } ? GroupsRecord
       : never
     )
     : GroupsRecord
@@ -93,23 +91,27 @@ export interface ResolveArg<
   Ctx = (
     "ctx" extends keyof Schema ? (
       Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
-      : Schema extends null | { ctx?: undefined | null } ? undefined
+      : Schema extends { ctx?: undefined | null } ? undefined
       : never
     )
     : undefined
   ),
   QueryOutput = (
     "query" extends keyof Schema ? (
-      Schema extends { query: (q: any) => infer Q } ? Awaited<Q>
-      : Schema extends null | { query?: undefined | null; } ? QueryRecord
+      Schema extends { query: Parser } ? (
+        ParserOutput<Schema["query"]>
+      )
+      : Schema extends { query?: undefined | null; } ? QueryRecord
       : never
     )
     : QueryRecord
   ),
   MessageOutput = (
     "message" extends keyof Schema ? (
-      Schema extends { message: (m: any) => infer M } ? Awaited<M>
-      : Schema extends null | { message?: undefined | null } ? undefined
+      Schema extends { message: Parser } ? (
+        ParserOutput<Schema["message"]>
+      )
+      : Schema extends { message?: undefined | null } ? undefined
       : never
     )
     : undefined
