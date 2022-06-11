@@ -17,6 +17,7 @@ import type { CookieJar } from "./cookies.ts";
 import type { Serializers } from "./serial.ts";
 import type { ServeAssetOptions } from "./assets.ts";
 import type { WS } from "./ws.ts";
+import type { QueryRecord, GroupsRecord } from "./router.ts";
 
 // TODO: Several type constraints are more permissive than they should be, for
 // example query parsers should constrain to Parser<Record<string, string |
@@ -26,20 +27,16 @@ import type { WS } from "./ws.ts";
 
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<
-  Schema extends {
-    query?: ((x: any) => any) | null;
-    message?: ((x: any) => any) | null;
-    resolve?: ((x: any) => any) | null;
-  } = {},
+  Schema = null,
 > = Schema & ((
   req: EndpointRequest<(
-    Schema["query"] extends Parser<infer Q> ? Q
+    Schema extends { query: Parser<infer Q> } ? Q
     : Record<string, string | string[]>
   ), (
-    Schema["message"] extends Parser<infer M> ? M
+    Schema extends { message: Parser<infer M> } ? M
     : undefined
   ), (
-    Schema["resolve"] extends (x: any) => Promise<infer R> | infer R ? R
+    Schema extends { resolve: (x: any) => Awaited<infer R> } ? R
     : undefined
   )>,
   conn: http.ConnInfo,
@@ -70,9 +67,9 @@ export interface ContextArg {
   /** The path that matched the Endpoint's path schema option. */
   path: string;
   /** The unprocessed query object associated with this request. */
-  query: Record<string, string | string[]>;
+  query: QueryRecord;
   /** The unprocessed path groups object captured during routing. */
-  groups: Record<string, string | string[]>;
+  groups: GroupsRecord;
   /**
    * When context functions need to run cleanup tasks after the Endpoint has
    * resolved the Response (such as setting cookies, logging performance
@@ -84,11 +81,45 @@ export interface ContextArg {
 
 /** Arguments available to the Resolve function. */
 export interface ResolveArg<
-  GroupsOutput = any,
-  Ctx = any,
-  QueryOutput = any,
-  MessageOutput = any,
+  Schema extends EndpointSchema | null = null,
+  GroupsOutput = (
+    "groups" extends keyof Schema ? (
+      Schema extends { groups: (g: any) => infer G } ? Awaited<G>
+      : Schema extends null | { groups?: undefined | null } ? GroupsRecord
+      : never
+    )
+    : GroupsRecord
+  ),
+  Ctx = (
+    "ctx" extends keyof Schema ? (
+      Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
+      : Schema extends null | { ctx?: undefined | null } ? undefined
+      : never
+    )
+    : undefined
+  ),
+  QueryOutput = (
+    "query" extends keyof Schema ? (
+      Schema extends { query: (q: any) => infer Q } ? Awaited<Q>
+      : Schema extends null | { query?: undefined | null; } ? QueryRecord
+      : never
+    )
+    : QueryRecord
+  ),
+  MessageOutput = (
+    "message" extends keyof Schema ? (
+      Schema extends { message: (m: any) => infer M } ? Awaited<M>
+      : Schema extends null | { message?: undefined | null } ? undefined
+      : never
+    )
+    : undefined
+  ),
 > {
+  /**
+   * The schema used to create this resolver's Endpoint. If no schema was used,
+   * this will be an empty object.
+   */
+  schema: Schema;
   /** The Request being handled. */
   req: Request;
   /**
@@ -139,9 +170,9 @@ export interface ResolveErrorArg {
   /** The path that matched the Endpoint's path schema option. */
   path: string;
   /** The unprocessed query object associated with this request. */
-  query: Record<string, string | string[]>;
+  query: QueryRecord;
   /** The unprocoessed path groups object captured during routing. */
-  groups: Record<string, string | string[]>;
+  groups: GroupsRecord;
   /** The offending error. */
   error: unknown;
   /** Returns a Response created using an asset from an assets directory. */
@@ -155,17 +186,8 @@ export interface ResolveErrorArg {
   redirect: (to: string, status?: number) => Response;
 }
 
-/** Request processing options for constructing Endpoints. */
-export interface EndpointSchema<
-  GroupsOutput = Record<string, string | string[]>,
-  Ctx = unknown,
-  QueryInput extends Record<string, string | string[]> = (
-    Record<string, string | string[]>
-  ),
-  QueryOutput = Record<string, string | string[]>,
-  MessageInput = unknown,
-  MessageOutput = unknown,
-> {
+/** Options for processing requests, used to construct Endpoints. */
+export interface EndpointSchema {
   /**
    * URLPattern string to match against the Request's routed path. If the
    * string starts with '^', the full request path will be used instead. The
@@ -180,7 +202,7 @@ export interface EndpointSchema<
    * the Endpoint won't match with the request and the router will continue
    * looking for matching handlers.
    */
-  groups?: Parser<Record<string, string | string[]>, GroupsOutput> | null;
+  groups?: Parser<GroupsRecord, any> | null;
   /**
    * Keys to use when signing cookies. The cookies are available as the
    * "cookies" resolver argument.
@@ -191,17 +213,18 @@ export interface EndpointSchema<
    * made available to resolvers as the `ctx` property on the resolver
    * arguments. Context handling happens after the Endpoint matched with the
    * Request but before input validation begins.
-   *
-   * TODO: Example use case
    */
-  ctx?: ((c: ContextArg) => Ctx | Promise<Ctx>) | null;
+  ctx?: ((c: ContextArg) => any) | null;
   /**
    * Parses the query string parameters passed into the URL. If parsing fails,
    * `undefined` will be parsed to check for a default value. If that also
    * fails, a 400 bad request error will be sent to the client. The output is
    * available as the "query" resolver argument.
    */
-  query?: Parser<QueryInput, QueryOutput> | null;
+  query?: Parser<QueryRecord, any> | null;
+  // TODO: Maybe split maxBodySize into two options: "memory" and "disk", which
+  // specify the maximum space a request can use in memory and on disk.
+  // "bodySize" wouldn't be general enough to cover both cases
   /**
    * Limits the size of posted messages. If a message exceeds the limit, a 413
    * HttpError will be thrown and serialized back to the client. If 0 is
@@ -222,66 +245,70 @@ export interface EndpointSchema<
    * throws when parsing `undefined`, *only* POST will be allowed. The output
    * from parsing is available as the "message" resolver argument.
    */
-  message?: Parser<MessageInput, MessageOutput>;
+  message?: Parser<unknown, any>;
+  // TODO: When you do the "memory" and "disk" options, change the name of this
+  // option to just "error". That way all keys on the schema are a single word
   /**
-   * Resolves an error thrown during Endpoint processing into a Response to
-   * serve to the client. If no Response is returned, the error will be
-   * serialized if it's an HttpError, or a 500 error will be serialized
-   * instead if it isn't. If a different error is re-thrown, that error will
-   * be serialized instead.
+   * If specified, an error thrown during request processing will be passed into
+   * this function, which can return a value to send back to the client instead
+   * of the error. If an error is re-thrown, that error will be serialized to
+   * the client instead of the original error.
    */
   resolveError?: ((x: ResolveErrorArg) => any) | null;
 }
 
 /**
- * Constructs a new Endpoint handler using the provided schema. The schema
- * properties are also available on the returned Endpoint function.
+ * Constructs a new Endpoint request handler using the provided schema and
+ * resolver function. The schema properties will be assigned to the returned
+ * endpoint, and the resolver will be set as the "resolve" property.
  */
 export function endpoint<
-  Schema,
-  GroupsOutput = Record<string, string | string[]>,
-  Ctx = undefined,
-  QueryInput extends Record<string, string | string[]> = (
-    Record<string, string | string[]>
-  ),
-  QueryOutput = Record<string, string | string[]>,
-  MessageInput = unknown,
-  MessageOutput = undefined,
-  Resp = undefined,
+  Schema extends EndpointSchema | null,
+  Resolve extends (x: ResolveArg<Schema>) => any = () => undefined,
 >(
-  schema?: EndpointSchema<
-    GroupsOutput,
-    Ctx,
-    QueryInput,
-    QueryOutput,
-    MessageInput,
-    MessageOutput
-  > & Schema | null,
-  resolve?: (x: ResolveArg<
-    GroupsOutput,
-    Ctx,
-    QueryOutput,
-    MessageOutput
-  >) => Resp,
+  schema?: (Schema & EndpointSchema) | null,
+  resolve?: Resolve & ((x: ResolveArg<Schema>) => any),
 ): Endpoint<{
   [K in keyof Schema | "resolve"]: (
-    K extends "resolve" ? Exclude<typeof resolve, undefined>
+    K extends "resolve" ? Resolve
     : K extends keyof Schema ? Schema[K]
     : never
   );
-}> {
-  const _schema: Exclude<typeof schema, undefined | null> = schema || {} as any;
-  const _resolve = resolve || (() => {}) as any;
-  const checkMethod = methodChecker(_schema.message);
+}>;
+export function endpoint<
+  Resolve extends (x: ResolveArg) => any = () => undefined,
+>(
+  resolve?: Resolve,
+): Endpoint<{ resolve: Resolve }>;
+export function endpoint(
+  schemaOrResolve?: (
+    | EndpointSchema
+    | ((x: ResolveArg) => any)
+    | null
+  ),
+  maybeResolve?: (x: ResolveArg) => any,
+) {
+  // TODO: Throw SyntaxErrors on invalid input
+  const schema: EndpointSchema = (
+    schemaOrResolve && typeof schemaOrResolve === "object" ? schemaOrResolve
+    : {}
+  );
+  const resolve: (x: ResolveArg) => any = (
+    typeof schemaOrResolve === "function" ? schemaOrResolve
+    : typeof maybeResolve === "function" ? maybeResolve
+    : () => {}
+  );
+
+  const checkMethod = methodChecker(schema.message);
   const matchPath = pathMatcher({
-    path: _schema.path,
-    groups: _schema.groups,
+    path: schema.path,
+    groups: schema.groups,
   });
   const parseInput = inputParser({
-    query: _schema.query,
-    message: _schema.message,
-    maxBodySize: _schema.maxBodySize,
-    serializers: _schema.serializers,
+    query: schema.query,
+    message: schema.message,
+    maxBodySize: schema.maxBodySize,
+    serializers: schema.serializers,
   });
 
   const handler = async (req: Request, conn: http.ConnInfo) => {
@@ -320,12 +347,12 @@ export function endpoint<
     }
 
     try {
-      const cookies = await cookieJar(req, _schema.keys || undefined);
+      const cookies = await cookieJar(req, schema.keys || undefined);
       cleanupTasks.push(() => cookies.setCookies(res.headers));
 
       let ctx: unknown = undefined;
-      if (_schema.ctx) {
-        ctx = await _schema.ctx({
+      if (schema.ctx) {
+        ctx = await schema.ctx({
           req,
           res,
           url,
@@ -341,28 +368,29 @@ export function endpoint<
       }
 
       const { query, message } = await parseInput(req);
-      output = await _resolve({
+      output = await resolve({
+        schema: schema as any,
         req,
         res,
         url,
         conn,
         cookies,
         path,
-        groups: groups as GroupsOutput,
-        ctx: ctx as Ctx,
-        query: query as QueryOutput,
-        message: message as MessageOutput,
+        groups: groups as any,
+        ctx: ctx as any,
+        query: query as any,
+        message: message as any,
         asset,
         redirect,
       });
     } catch (err) {
       error = err;
       // Check to see if the resolveError function can handle it
-      if (_schema.resolveError) {
+      if (schema.resolveError) {
         // If it rethrows, use the newly thrown error instead. If it returns
         // something, that thing should be packed into a Response
         try {
-          output = await _schema.resolveError({
+          output = await schema.resolveError({
             req,
             res,
             url,
@@ -400,7 +428,7 @@ export function endpoint<
 
     const response = packResponse(output, {
       ...res,
-      serializers: _schema.serializers || undefined,
+      serializers: schema.serializers || undefined,
     });
     if (req.method === "HEAD") {
       return new Response(null, {
@@ -412,7 +440,7 @@ export function endpoint<
     return response;
   };
 
-  return Object.assign(handler, { ..._schema, resolve: _resolve }) as any;
+  return Object.assign(handler, { ...schema, resolve }) as any;
 }
 
 /**
