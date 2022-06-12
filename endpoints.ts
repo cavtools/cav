@@ -86,57 +86,75 @@ export interface ContextArg {
   cleanup: (fn: () => Promise<void> | void) => void;
 }
 
-/** Arguments available to the Resolve function. */
-export interface ResolveArg<
-  Schema extends EndpointSchema | null = null,
-  GroupsOutput = (
-    "groups" extends keyof Schema ? (
-      Schema extends { groups: Parser } ? (
-        ParserOutput<Schema["groups"]>
-      )
-      : Schema extends { groups?: undefined | null } ? GroupsRecord
-      : never
+/**
+ * Type utility for extracting the output of a "groups" parser on an
+ * EndpointSchema or SocketSchema.
+ */
+export type GroupsOutput<Schema extends EndpointSchema | null> = (
+  "groups" extends keyof Schema ? (
+    Schema extends { groups: Parser } ? (
+      ParserOutput<Schema["groups"]>
     )
-    : GroupsRecord
-  ),
-  Ctx = (
-    "ctx" extends keyof Schema ? (
-      Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
-      : Schema extends { ctx?: undefined | null } ? undefined
-      : never
+    : Schema extends { groups?: undefined | null } ? GroupsRecord
+    : never
+  )
+  : GroupsRecord
+);
+
+/**
+ * Type utility for extracting the output of a "query" parser on an
+ * EndpointSchema or SocketSchema.
+ */
+export type QueryOutput<Schema extends EndpointSchema | null> = (
+  "query" extends keyof Schema ? (
+    Schema extends { query: Parser } ? (
+      ParserOutput<Schema["query"]>
     )
-    : undefined
-  ),
-  QueryOutput = (
-    "query" extends keyof Schema ? (
-      Schema extends { query: Parser } ? (
-        ParserOutput<Schema["query"]>
-      )
-      : Schema extends { query?: undefined | null; } ? QueryRecord
-      : never
+    : Schema extends { query?: undefined | null; } ? QueryRecord
+    : never
+  )
+  : QueryRecord
+);
+
+/**
+ * Type utility for extracting the output of a "ctx" function on an
+ * EndpointSchema or SocketSchema.
+ */
+export type CtxOutput<Schema extends EndpointSchema | null> = (
+  "ctx" extends keyof Schema ? (
+    Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
+    : Schema extends { ctx?: undefined | null } ? undefined
+    : never
+  )
+  : undefined
+);
+
+/**
+ * Type utility for extracting the output of a "message" parser on an
+ * EndpointSchema or SocketSchema.
+ */
+export type MessageOutput<Schema extends EndpointSchema | null> = (
+  "message" extends keyof Schema ? (
+    Schema extends { message: Parser } ? (
+      ParserOutput<Schema["message"]>
     )
-    : QueryRecord
-  ),
-  MessageOutput = (
-    "message" extends keyof Schema ? (
-      Schema extends { message: Parser } ? (
-        ParserOutput<Schema["message"]>
-      )
-      : Schema extends { message?: undefined | null } ? undefined
-      : never
-    )
-    : undefined
-  ),
-> {
+    : Schema extends { message?: undefined | null } ? undefined
+    : never
+  )
+  : undefined
+);
+
+/** Arguments available to the resolve function of an endpoint. */
+export interface ResolveArg<Schema extends EndpointSchema | null = EndpointSchema | null> {
   /**
-   * The schema used to create this resolver's Endpoint. If no schema was used,
+   * The schema used to create this resolver's endpoint. If no schema was used,
    * this will be an empty object.
    */
   schema: Schema;
   /** The Request being handled. */
   req: Request;
   /**
-   * A ResponseInit applied to the Endpoint response after resolving and packing
+   * A ResponseInit applied to the endpoint response after resolving and packing
    * the value to send to the client. The Headers object is always available.
    */
   res: ResponseInit & { headers: Headers };
@@ -144,18 +162,18 @@ export interface ResolveArg<
   url: URL;
   /** Connection information provided by Deno. */
   conn: http.ConnInfo;
-  /** The CookieJar created after the Endpoint matched with the Request. */
+  /** The CookieJar created after the endpoint matched with the Request. */
   cookies: CookieJar;
-  /** The path that matched the Endpoint's `path` schema option. */
+  /** The path that matched the endpoint's `path` schema option. */
   path: string;
   /** The parsed path groups captured while routing the request. */
-  groups: GroupsOutput;
-  /** The Context created after the Endpoint matched the Request. */
-  ctx: Ctx;
+  groups: GroupsOutput<Schema>;
+  /** The context created after the endpoint matched the Request. */
+  ctx: CtxOutput<Schema>;
   /** The parsed query string parameters. */
-  query: QueryOutput;
+  query: QueryOutput<Schema>;
   /** The parsed Request body, if any. */
-  message: MessageOutput;
+  message: MessageOutput<Schema>;
   /** Returns a Response created using an asset from an assets directory. */
   asset: (opt: ServeAssetOptions) => Promise<Response>;
   /**
@@ -180,7 +198,7 @@ export interface EndpointSchema {
   /**
    * Parses any path groups captured during routing. The result is available
    * as the "groups" resolver argument. If an error is thrown during parsing,
-   * the Endpoint won't match with the request and the router will continue
+   * the endpoint won't match with the request and the router will continue
    * looking for matching handlers.
    */
   groups?: Parser<GroupsRecord, any> | null;
@@ -190,9 +208,9 @@ export interface EndpointSchema {
    */
   keys?: [string, ...string[]] | null;
   /**
-   * Factory function Endpoints can use to create a custom context, which is
+   * Factory function endpoints can use to create a custom context, which is
    * made available to resolvers as the `ctx` property on the resolver
-   * arguments. Context handling happens after the Endpoint matched with the
+   * arguments. Context handling happens after the endpoint matched with the
    * Request but before input validation begins.
    */
   ctx?: ((c: ContextArg) => any) | null;
@@ -226,7 +244,7 @@ export interface EndpointSchema {
    * throws when parsing `undefined`, *only* POST will be allowed. The output
    * from parsing is available as the "message" resolver argument.
    */
-  message?: Parser<any, any>;
+  message?: Parser<any, any> | null;
   // TODO: When you do the "memory" and "disk" options, change the name of this
   // option to just "error". That way all keys on the schema are a single word
   /**
@@ -239,9 +257,9 @@ export interface EndpointSchema {
 }
 
 /** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<
-  Schema = null,
-> = Schema & ((
+export type Endpoint<Schema = null> = (
+  Schema extends null ? {} : Schema
+) & ((
   req: EndpointRequest<(
     Schema extends { query: Parser } ? ParserInput<Schema["query"]>
     : Record<string, string | string[]>
@@ -655,266 +673,160 @@ function inputParser(opt: {
   };
 }
 
-// /** Initializer options for creating an `assets()` endpoint. */
-// export type AssetsInit = Omit<ServeAssetOptions, "path">;
+/** Initializer options for creating an `assets()` endpoint. */
+export type AssetsInit = Omit<ServeAssetOptions, "path">;
 
-// /**
-//  * Creates an Endpoint for serving static assets. The routed path is used to
-//  * find the asset to serve inside the assets directory.
-//  */
-// export function assets(init?: AssetsInit) {
-//   // Note that this is a no-op in production
-//   prepareAssets({
-//     cwd: init?.cwd,
-//     dir: init?.dir,
-//     watch: true,
-//   });
+/**
+ * Creates an Endpoint for serving static assets. The routed path is used to
+ * find the asset to serve from inside the assets directory specified.
+ */
+export function assets(init?: AssetsInit) {
+  // Note that this is a no-op in production
+  prepareAssets({
+    cwd: init?.cwd,
+    dir: init?.dir,
+    watch: true,
+  });
 
-//   return endpoint({
-//     path: "*" as const,
-//     resolve: x => x.asset({
-//       ...init,
-//       path: x.path,
-//     }),
-//   });
-// }
+  return endpoint({ path: "*" as const }, x => {
+    return x.asset({ ...init, path: x.path });
+  });
+}
 
-// /**
-//  * Creates an Endpoint that always redirects. If the redirect path doesn't
-//  * specify an origin, the origin of the current request is used. If the path
-//  * starts with a ".", it's joined with the pathname of the Request url to get
-//  * the final redirect path. The default status is 302.
-//  */
-// export function redirect(to: string, status?: number) {
-//   return endpoint({
-//     path: "*" as const,
-//     resolve: x => x.redirect(to, status || 302),
-//   });
-// }
+/**
+ * Creates an Endpoint that always redirects. The "path" schema option is "/",
+ * i.e. the whole request path should have been consumed by the containing
+ * router(s) before the request reaches a redirect endpoint. If the redirect
+ * path doesn't specify an origin, the origin of the request is used. If the
+ * path starts with a ".", it's joined with the pathname of the Request url to
+ * get the final redirect path. The default status is 302.
+ */
+export function redirect(to: string, status?: number) {
+  return endpoint(x => x.redirect(to, status || 302));
+}
 
-// /** Cav endpoint handler for connecting web sockets. */
-// export type Socket<S extends SocketSchema = SocketSchema> = S & ((
-//   req: SocketRequest<
-//     "query" extends keyof S ? ParserInput<S["query"]> : unknown,
-//     "send" extends keyof S ? S["send"] : unknown,
-//     "message" extends keyof S ? ParserInput<S["message"]> : unknown
-//   >,
-//   conn: http.ConnInfo,
-// ) => Promise<Response>);
+/** Schema options for creating a `socket()` handler. */
+export interface SocketSchema extends Omit<EndpointSchema, "maxBodySize"> {
+  /**
+   * The type of message this Socket expects to send to a connected client. The
+   * value of this property doesn't matter, it's only used for the type.
+   */
+  send?: any;
+}
 
-// /** Schema options for creating a `socket()` handler. */
-// export interface SocketSchema<
-//   Groups extends AnyParser | null = AnyParser | null,
-//   Ctx extends AnyContext | null = AnyContext | null,
-//   Query extends AnyParser | null = AnyParser | null,
-//   Message extends AnyParser | null = AnyParser | null,
-//   Send = unknown,
-// > {
-//   /**
-//    * URLPattern string to match against the Request's routed path. If the string
-//    * starts with '^', the full request path will be used instead. The full
-//    * URLPattern syntax is supported. Any captured path groups will be merged
-//    * into the path groups captured during routing. The matched path is available
-//    * as the "path" setup argument.
-//    */
-//   path?: string | null;
-//   /**
-//    * Parses any path groups captured during routing. The result is available as
-//    * the "groups" setup argument. If an error is thrown during parsing, the
-//    * Endpoint won't match with the request and the router will continue looking
-//    * for matching handlers.
-//    */
-//   groups?: Groups;
-//   /**
-//    * Keys to use when signing cookies. The cookies are available as the
-//    * "cookies" setup argument.
-//    */
-//   keys?: [string, ...string[]] | null;
-//   /**
-//    * Serializers to use when serializing and deserializing socket messages.
-//    */
-//   serializers?: Serializers | null;
-//   /**
-//    * Factory function Sockets can use to create a custom context, which
-//    * is made available to socket setups as the `ctx` property on the resolver
-//    * arguments. Context handling happens after the Socket matched with the
-//    * Request but before query validation begins.
-//    */
-//   ctx?: Ctx;
-//   /**
-//    * Parses the query string parameters passed into the URL. If parsing fails,
-//    * `undefined` will be parsed to check for a default value. If that also
-//    * fails, a 400 bad request error will be sent to the client. The output is
-//    * available as the "query" setup argument.
-//    */
-//   query?: Query;
-//   /**
-//    * The type of message this Socket expects to send to a connected client. The
-//    * value of this property doesn't matter, it's only used for the type.
-//    */
-//   send?: Send;
-//   /**
-//    * Parses received messages. If an error occurs during parsing, the error will
-//    * be serialized back to the client who will receive it as an error event.
-//    */
-//   message?: Message;
-//   /**
-//    * Function responsible for setting up the WS instance after matching with the
-//    * Request.
-//    */
-//   setup?: SocketSetup<Groups, Ctx, Query, Message, Send>;
-//   /**
-//    * Resolves an error thrown during request processing into a Response to serve
-//    * to the client. If no Response is returned, the error will be serialized if
-//    * it's an HttpError, or a 500 error will be serialized instead if it isn't.
-//    * If a different error is re-thrown, that error will be serialized instead.
-//    */
-//   resolveError?: ResolveError | null;
-// }
+/** Cav endpoint handler for connecting web sockets. */
+export type Socket<Schema = null> = (
+  Schema extends null ? {} : Schema
+) & ((
+  req: SocketRequest<(
+    Schema extends { query: Parser } ? ParserInput<Schema["query"]>
+    : Record<string, string | string[]>
+  ), (
+    "send" extends keyof Schema ? Schema["send"] : unknown
+  ), (
+    Schema extends { message: Parser } ? ParserInput<Schema["message"]>
+    : Schema extends { message?: undefined | null } ? undefined
+    : unknown
+  )>,
+  conn: http.ConnInfo,
+) => Promise<Response>);
 
-// /** Matches any SocketSchema. Useful for type constraints. */
-// export type AnySocketSchema = SocketSchema<
-//   AnyParser | null,
-//   AnyContext | null,
-//   AnyParser | null,
-//   AnyParser | null,
-//   // deno-lint-ignore no-explicit-any
-//   any
-// >;
+  // /**
+  //  * Function responsible for setting up the WS instance after matching with the
+  //  * Request.
+  //  */
+  //  setup?: SocketSetup<Groups, Ctx, Query, Message, Send>;
 
-// /**
-//  * Function responsible for setting up the WS instance after matching with the
-//  * Request.
-//  */
-// export type SocketSetup<
-//   Groups extends AnyParser | null = AnyParser,
-//   Ctx extends AnyContext | null = AnyContext,
-//   Query extends AnyParser | null = AnyParser,
-//   Message extends AnyParser | null = AnyParser,
-//   Send = unknown,
-// > = (x: SocketSetupArg<
-//   Groups,
-//   Ctx,
-//   Query,
-//   Message,
-//   Send
-// >) => Promise<void> | void;
+/**
+ * Type utility for extracting the type of message a socket expects to send from
+ * a SocketSchema.
+ */
+export type SendType<Schema extends SocketSchema | null> = (
+  Schema extends { send: infer S } ? S
+  : unknown
+);
 
-// /** Arguments available for the SocketSetup function. */
-// export interface SocketSetupArg<
-//   Groups extends AnyParser | null = AnyParser,
-//   Ctx extends AnyContext | null = AnyContext,
-//   Query extends AnyParser | null = AnyParser,
-//   Message extends AnyParser | null = AnyParser,
-//   Send = unknown,
-// > {
-//   /** The Request being handled. */
-//   req: Request;
-//   /**
-//    * A ResponseInit applied to the Endpoint response after resolving and packing
-//    * the value to send to the client. The Headers object is always available.
-//    */
-//   res: ResponseInit & { headers: Headers };
-//   /** new URL(req.url) */
-//   url: URL;
-//   /** Connection information provided by Deno. */
-//   conn: http.ConnInfo;
-//   /** The CookieJar created after the Endpoint matched with the Request. */
-//   cookies: CookieJar;
-//   /** The path that matched the Endpoint's `path` schema option. */
-//   path: string;
-//   /** The parsed path groups captured while routing the request. */
-//   groups: (
-//     Groups extends AnyParser ? ParserOutput<Groups>
-//     : Record<string, string>
-//   );
-//   /** The Context created after the Endpoint matched the Request. */
-//   ctx: Ctx extends Context<infer C> ? C : undefined;
-//   /** The parsed query string parameters. */
-//   query: (
-//     Query extends AnyParser ? ParserOutput<Query>
-//     : Record<string, string | string[]>
-//   );
-//   /** The web socket instance. Use this to set up the event listeners. */
-//   ws: WS<Send, Message extends Parser ? ParserOutput<Message> : unknown>;
-// }
+/** Arguments available to the setup function of a socket endpoint. */
+export interface SocketSetupArg<
+  Schema extends SocketSchema | null = SocketSchema | null,
+> extends Omit<ResolveArg<Schema>, "message" | "asset" | "redirect"> {
+  ws: WS<SendType<Schema>, MessageOutput<Schema>>;
+}
 
-// /**
-//  * Creates an Endpoint for connecting web sockets. There is no Resolve function,
-//  * the socket Response object is returned automatically. Use the `setup`
-//  * function to set up the socket.
-//  */
-// export function socket<
-//   Schema extends SocketSchema<Groups, Ctx, Query, Message, Send>,
-//   Groups extends AnyParser | null = null,
-//   Ctx extends AnyContext | null = null,
-//   Query extends AnyParser | null = null,
-//   Message extends AnyParser | null = null,
-//   Send = unknown,
-// >(
-//   schema: Schema & SocketSchema<Groups, Ctx, Query, Message, Send>,
-// ): Socket<Schema>;
-// // Unfortunately, this shortened syntax that's available when there's only a
-// // setup function doesn't alleviate the need for the "send" property on a
-// // SocketSchema. Without partial type inference, there would be no easy way to
-// // specify the type of the send without an extra (unused) send property  
-// // There's a ticket tracking the progress of the partial type inference that
-// // might fix this problem, but it doesn't look like the solutions would
-// // necessarily be as easy as this shortened syntax  
-// // https://github.com/microsoft/TypeScript/issues/26242
-// export function socket<Send = unknown>(
-//   setup: SocketSetup<AnyParser, null, AnyParser, AnyParser, Send>,
-// ): Socket<{ setup: SocketSetup<AnyParser, null, AnyParser, AnyParser, Send> }>;
-// export function socket(
-//   schemaOrFn: (
-//     SocketSchema | SocketSetup<AnyParser, null, AnyParser, AnyParser, unknown>
-//   ),
-// ): Socket {
-//   const schema = (
-//     typeof schemaOrFn === "function" ? { setup: schemaOrFn }
-//     : schemaOrFn
-//   );
+/**
+ * Constructs a new Socket request handler using the provided schema and setup
+ * function. The schema properties will be assigned to the returned socket
+ * endpoint function, with the setup argument available as the "setup" property.
+ */
+export function socket<
+  Schema extends SocketSchema | null,
+  Setup extends (x: SocketSetupArg<Schema>) => Promise<void> | void = (
+    () => void
+  ),
+>(
+  schema?: (Schema & SocketSchema) | null,
+  setup?: Setup & ((x: SocketSetupArg<Schema>) => Promise<void> | void),
+): Socket<{
+  [K in keyof Schema | "setup"]: (
+    K extends "setup" ? Setup
+    : K extends keyof Schema ? Schema[K]
+    : never
+  );
+}>;
+export function socket<
+  Setup extends (x: SocketSetupArg) => Promise<void> | void = () => void,
+>(setup?: Setup): Socket<{ setup: Setup }>;
+export function socket(
+  schemaOrSetup?: (
+    | SocketSchema
+    | ((x: SocketSetupArg) => Promise<void> | void)
+    | null
+  ),
+  maybeSetup?: (x: SocketSetupArg) => Promise<void> | void,
+) {
+  const schema: SocketSchema = (
+    schemaOrSetup && typeof schemaOrSetup === "object" ? schemaOrSetup
+    : {}
+  );
+  const setup: (x: SocketSetupArg) => Promise<void> | void = (
+    typeof schemaOrSetup === "function" ? schemaOrSetup
+    : typeof maybeSetup === "function" ? maybeSetup
+    : () => {}
+  );
 
-//   // Pull the message parser out before forwarding the schema to the endpoint
-//   // factory, it doesn't work the same way. Then remember to re-assign the
-//   // message to the returned handler
-//   const { message } = schema;
-//   delete schema.message;
+  const parseMessage = normalizeParser(schema.message || ((m) => m));
 
-//   const parseMessage = (
-//     typeof message === "function" ? message
-//     : message ? message.parse
-//     : undefined
-//   );
+  const handler = endpoint({
+    ...schema,
+    message: null, // !important
+  }, async x => {
+    const { socket, response } = Deno.upgradeWebSocket(x.req);
 
-//   const handler = endpoint({
-//     ...schema,
-//     resolve: async x => {
-//       const { socket, response } = Deno.upgradeWebSocket(x.req);
+    const ws = webSocket(socket, {
+      message: async (input: unknown) => {
+        // This is wrapped so that incoming message parsing errors get
+        // serialized back to the client, which will trigger an 
+        try {
+          return await parseMessage(input);
+        } catch (err) {
+          ws.send(new HttpError("400 bad request", {
+            status: 400,
+            expose: err,
+          }));
+        }
+      },
+      serializers: schema.serializers,
+    });
+    
+    if (setup) {
+      await setup({ ...x, schema, ws });
+    }
 
-//       const ws = webSocket(socket, {
-//         message: parseMessage && (async (input: unknown) => {
-//           // This is wrapped so that incoming message parsing errors get
-//           // serialized back to the client, which will trigger an 
-//           try {
-//             return await parseMessage(input);
-//           } catch (err) {
-//             ws.send(new HttpError("400 bad request", {
-//               status: 400,
-//               expose: err,
-//             }));
-//           }
-//         }),
-//         serializers: schema.serializers,
-//       });
-      
-//       if (schema.setup) {
-//         await schema.setup({ ...x, ws });
-//       }
+    return response;
+  });
 
-//       return response;
-//     },
-//   });
-
-//   return Object.assign(handler, { message }) as Socket;
-// }
+  // Don't forget that the message parser won't be set on the handler yet
+  // because we overwrote it when constructing the endpoint, so it needs to be
+  // manually re-assigned after construction
+  return Object.assign(handler, { message: schema.message }) as Socket;
+}

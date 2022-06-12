@@ -7,6 +7,10 @@ import type {
   Handler,
 } from "./client.ts";
 
+// TODO: Optimization idea: For nested objects, instead of creating a new
+// router, create multiple URL patterns so that fewer functions get called when
+// routing a request. i.e. "/foo/bar" is fewer functions than foo: { bar: end }
+
 /**
  * Metadata object for caching and tracking information about how a Request has
  * been routed so far in the handling process.
