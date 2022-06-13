@@ -1,16 +1,15 @@
 # Cav
 
-Cav is a freelancer's web framework, made for [Deno](https://deno.land). It
-touts a craft-brewed development flow, combining many powerful features of
-TypeScript and Deno to help solo devs do more with less. Guiding principles:
+Cav is a freelancer's web framework, made for [Deno](https://deno.land). Guiding
+principles:
 
-- Full stack
 - Modular, maintainable server definitions
 - Isomorphic client integration
 - Automatic end-to-end typesafety
 - Use The Platform
 
-**Status:** New, active, almost fully tested, and not yet ready for production.
+**Status:** WIP, active, almost fully tested, and definitely not ready for
+production.
 
 ## Goals
 
