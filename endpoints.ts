@@ -272,9 +272,15 @@ export type Endpoint<Schema = unknown> = Schema & ((
 ) => Promise<Response>);
 
 // I'm using this type to know when the resolve/setup function wasn't specified,
-// so that the output doesn't include it on the schema
+// so that the output doesn't include it on the schema. I tried a few different
+// methods and this was the first one that worked without problems
 declare const _omitted: unique symbol;
-type Omitted = typeof _omitted
+type Omitted = typeof _omitted;
+
+const test: unknown = null;
+if (test instanceof HttpError) {
+  const err = test;
+}
 
 /**
  * Constructs a new Endpoint request handler using the provided schema and
@@ -290,7 +296,8 @@ export function endpoint<
   resolve?: Resolve & ((x: ResolveArg<Schema>) => any),
 ): Endpoint<{
   [K in keyof Schema | "resolve" as (
-    K extends "resolve" ? (Resolve extends () => Omitted ? never : K) : K
+    K extends "resolve" ? (Resolve extends () => Omitted ? never : K)
+    : K
   )]: (
     K extends "resolve" ? Resolve
     : K extends keyof Schema ? Schema[K]
@@ -298,9 +305,9 @@ export function endpoint<
   );
 }>;
 export function endpoint<
-  Resolve extends ((x: ResolveArg<{}>) => any) | null = null,
+  Resolve extends (x: ResolveArg<{}>, ...a: any[]) => any = () => Omitted,
 >(resolve?: Resolve & ((x: ResolveArg<{}>) => any)): Endpoint<
-  Resolve extends null ? {} : { resolve: Resolve }
+  Resolve extends () => Omitted ? {} : { resolve: Resolve }
 >;
 export function endpoint(
   schemaOrResolve?: (
@@ -438,7 +445,7 @@ export function endpoint(
       await task();
     }
 
-    if (error && error instanceof HttpError) {
+    if (error instanceof HttpError) {
       res.status = error.status;
       output = error.expose ? error : error.message;
     } else if (error) {
@@ -758,17 +765,14 @@ export interface SocketSetupArg<
  */
 export function socket<
   Schema extends SocketSchema | null,
-  Setup extends (x: SocketSetupArg<Schema>) => Promise<void> | void = (
-    () => void
-  ),
+  Setup extends ((x: SocketSetupArg<Schema>) => any) = () => Omitted,
 >(
   schema?: (Schema & SocketSchema) | null,
   setup?: Setup & ((x: SocketSetupArg<Schema>) => Promise<void> | void),
 ): Socket<{
   [K in keyof Schema | "setup" as (
-    K extends "setup" ? (
-      Setup extends () => void ? never
-    )
+    K extends "setup" ? (Setup extends () => Omitted ? never : K)
+    : K
   )]: (
     K extends "setup" ? Setup
     : K extends keyof Schema ? Schema[K]
@@ -776,8 +780,11 @@ export function socket<
   );
 }>;
 export function socket<
-  Setup extends (x: SocketSetupArg) => Promise<void> | void = () => void,
->(setup?: Setup): Socket<{ setup: Setup }>;
+  Setup extends ((x: SocketSetupArg<{}>) => any) = () => Omitted,
+>(setup?: Setup): Socket<
+  Setup extends () => Omitted ? {}
+  : { setup: Setup }
+>;
 export function socket(
   schemaOrSetup?: (
     | SocketSchema

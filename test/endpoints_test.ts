@@ -188,8 +188,7 @@ Deno.test("redirect()", async t => {
   await t.step("args: local redirect with ../", async () => {
     const redir = redirect("../hello/world");
     const _check: AssertEquals<typeof redir, Endpoint<{
-      // path: "/"; // This is the default
-      resolve: (x: ResolveArg) => Response;
+      resolve: (x: ResolveArg<{}>) => Response;
     }>> = true;
 
     // The redirect utility for endpoints uses the full url path when joining
@@ -271,9 +270,7 @@ Deno.test("redirect()", async t => {
 Deno.test("socket()", async t => {
   t.step("args: none", async () => {
     const sock = socket();
-    const _check: AssertEquals<typeof sock, Socket<{
-      setup: () => void;
-    }>> = true;
+    const _check: AssertEquals<typeof sock, Socket<{}>> = true;
   });
 
   t.step("args: schema only", async () => {
