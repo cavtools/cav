@@ -1,11 +1,11 @@
 # Cav
 
-Cav is a freelancer's web framework, made for [Deno](https://deno.land). Guiding
-principles:
+Cav is web framework made for [Deno](https://deno.land). Guiding principles:
 
 - Modular, maintainable server definitions
-- Isomorphic client integration
+- No-fuss data serialization
 - Automatic end-to-end typesafety
+- Isomorphic client
 - Use The Platform
 
 **Status:** WIP, active, almost fully tested, and definitely not ready for
