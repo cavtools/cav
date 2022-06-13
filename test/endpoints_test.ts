@@ -1,11 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { http, path } from "../deps.ts";
-import { endpoint, assets, redirect } from "../endpoints.ts";
+import { endpoint, assets, redirect, socket } from "../endpoints.ts";
 import { assertEquals } from "./test_deps.ts";
 import { router } from "../router.ts";
-import type { Endpoint, ResolveArg } from "../endpoints.ts";
-import type { QueryRecord, GroupsRecord } from "../router.ts";
+import type { Endpoint, ResolveArg, Socket } from "../endpoints.ts";
 
 // Doesn't matter
 const conn: http.ConnInfo = {
@@ -32,9 +31,7 @@ type AssertEquals<Check, Correct> = (
 Deno.test("endpoint()", async t => {
   await t.step("args: none", async () => {
     const end = endpoint();
-    const _check: AssertEquals<typeof end, Endpoint<{
-      resolve: () => undefined;
-    }>> = true;
+    const _check: AssertEquals<typeof end, Endpoint<{}>> = true;
 
     const res1 = await end(new Request("http://localhost"), conn);
     assertEquals(res1.status, 204);
@@ -56,7 +53,6 @@ Deno.test("endpoint()", async t => {
     const end = endpoint({ message: (m: string) => m });
     const _check: AssertEquals<typeof end, Endpoint<{
       message: (m: string) => string;
-      resolve: () => undefined;
     }>> = true;
 
     const res1 = await end(new Request("http://localhost"), conn);
@@ -135,7 +131,7 @@ Deno.test("assets()", async t => {
 
   await t.step("args: no options", async () => {
     Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
-    const ass = assets();
+    const ass = assets(); // can't help myself
     const _check: AssertEquals<typeof ass, Endpoint<{
       path: "*";
       resolve: (
@@ -191,6 +187,10 @@ Deno.test("assets()", async t => {
 Deno.test("redirect()", async t => {
   await t.step("args: local redirect with ../", async () => {
     const redir = redirect("../hello/world");
+    const _check: AssertEquals<typeof redir, Endpoint<{
+      // path: "/"; // This is the default
+      resolve: (x: ResolveArg) => Response;
+    }>> = true;
 
     // The redirect utility for endpoints uses the full url path when joining
     // for local redirects, but the path schema option for redirects is always
@@ -265,5 +265,30 @@ Deno.test("redirect()", async t => {
     const res1 = await rtr(new Request("http://_/foo/bar"), conn);
     assertEquals(res1.status, 301);
     assertEquals(res1.headers.get("location"), "http://_/hello/world");
+  });
+});
+
+Deno.test("socket()", async t => {
+  t.step("args: none", async () => {
+    const sock = socket();
+    const _check: AssertEquals<typeof sock, Socket<{
+      setup: () => void;
+    }>> = true;
+  });
+
+  t.step("args: schema only", async () => {
+
+  });
+
+  t.step("args: setup only", async () => {
+
+  });
+
+  t.step("args: schema + setup", async () => {
+
+  });
+
+  t.step("426 without upgrade header", async () => {
+    
   });
 });

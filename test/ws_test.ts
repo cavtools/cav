@@ -8,6 +8,8 @@ import {
 import { webSocket } from "../ws.ts";
 import type { WSMessageListener } from "../ws.ts";
 
+// TODO: When the server sends back an HttpError message, trigger an error event
+
 const echoServer = new http.Server({
   port: 8080,
   handler: (req) => {

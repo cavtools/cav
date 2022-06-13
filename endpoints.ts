@@ -15,176 +15,6 @@ import type { ServeAssetOptions } from "./assets.ts";
 import type { WS } from "./ws.ts";
 import type { QueryRecord, GroupsRecord } from "./router.ts";
 
-// TODO: Several type constraints are more permissive than they should be, for
-// example query parsers should constrain to Parser<Record<string, string |
-// string[]>>. Further, the Any types (like AnyParser, AnyEndpointSchema, etc.)
-// probably don't need to exist, but I'm not positive. I should get everything
-// tested before I try to fix these things
-
-/** Arguments available to a ResolveError function. */
-export interface ResolveErrorArg {
-  /** The Request being processed. */
-  req: Request;
-  /**
-   * A ResponseInit applied to the Endpoint response after resolving and packing
-   * the value to send to the client. The Headers object is always available.
-   */
-  res: ResponseInit & { headers: Headers };
-  /** new URL(req.url) */
-  url: URL;
-  /** Connection information provided by Deno. */
-  conn: http.ConnInfo;
-  /** The path that matched the Endpoint's path schema option. */
-  path: string;
-  /** The unprocessed query object associated with this request. */
-  query: QueryRecord;
-  /** The unprocoessed path groups object captured during routing. */
-  groups: GroupsRecord;
-  /** The offending error. */
-  error: unknown;
-  /** Returns a Response created using an asset from an assets directory. */
-  asset: (opt: ServeAssetOptions) => Promise<Response>;
-  /**
-   * Returns a redirect Response. If the redirect path doesn't specify an
-   * origin, the origin of the current request is used. If the path starts with
-   * a ".", it is joined with the pathname of the Request url to get the final
-   * redirect path. The default status is 302.
-   */
-  redirect: (to: string, status?: number) => Response;
-}
-
-/** Arguments available to Context functions. */
-export interface ContextArg {
-  /** The Request being handled. */
-  req: Request;
-  /**
-   * A ResponseInit applied to the Endpoint's resolved value when packing it
-   * into a Response. The Headers are always available.
-   */
-  res: ResponseInit & { headers: Headers };
-  /** new URL(req.url) */
-  url: URL;
-  /** The Deno-provided ConnInfo describing the connection for the request. */
-  conn: http.ConnInfo;
-  /**
-   * The CookieJar for this Request/Response pair, created after the Endpoint
-   * matched with the Request.
-   */
-  cookies: CookieJar;
-  /** The path that matched the Endpoint's path schema option. */
-  path: string;
-  /** The unprocessed query object associated with this request. */
-  query: QueryRecord;
-  /** The unprocessed path groups object captured during routing. */
-  groups: GroupsRecord;
-  /**
-   * When context functions need to run cleanup tasks after the Endpoint has
-   * resolved the Response (such as setting cookies, logging performance
-   * metrics, etc.), they can use this registration function to do so. Cleanup
-   * functions are executed in stack order (last in first out).
-   */
-  cleanup: (fn: () => Promise<void> | void) => void;
-}
-
-/**
- * Type utility for extracting the output of a "groups" parser on an
- * EndpointSchema or SocketSchema.
- */
-export type GroupsOutput<Schema extends EndpointSchema | null> = (
-  "groups" extends keyof Schema ? (
-    Schema extends { groups: Parser } ? (
-      ParserOutput<Schema["groups"]>
-    )
-    : Schema extends { groups?: undefined | null } ? GroupsRecord
-    : never
-  )
-  : GroupsRecord
-);
-
-/**
- * Type utility for extracting the output of a "query" parser on an
- * EndpointSchema or SocketSchema.
- */
-export type QueryOutput<Schema extends EndpointSchema | null> = (
-  "query" extends keyof Schema ? (
-    Schema extends { query: Parser } ? (
-      ParserOutput<Schema["query"]>
-    )
-    : Schema extends { query?: undefined | null; } ? QueryRecord
-    : never
-  )
-  : QueryRecord
-);
-
-/**
- * Type utility for extracting the output of a "ctx" function on an
- * EndpointSchema or SocketSchema.
- */
-export type CtxOutput<Schema extends EndpointSchema | null> = (
-  "ctx" extends keyof Schema ? (
-    Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
-    : Schema extends { ctx?: undefined | null } ? undefined
-    : never
-  )
-  : undefined
-);
-
-/**
- * Type utility for extracting the output of a "message" parser on an
- * EndpointSchema or SocketSchema.
- */
-export type MessageOutput<Schema extends EndpointSchema | null> = (
-  "message" extends keyof Schema ? (
-    Schema extends { message: Parser } ? (
-      ParserOutput<Schema["message"]>
-    )
-    : Schema extends { message?: undefined | null } ? undefined
-    : never
-  )
-  : undefined
-);
-
-/** Arguments available to the resolve function of an endpoint. */
-export interface ResolveArg<Schema extends EndpointSchema | null = EndpointSchema | null> {
-  /**
-   * The schema used to create this resolver's endpoint. If no schema was used,
-   * this will be an empty object.
-   */
-  schema: Schema;
-  /** The Request being handled. */
-  req: Request;
-  /**
-   * A ResponseInit applied to the endpoint response after resolving and packing
-   * the value to send to the client. The Headers object is always available.
-   */
-  res: ResponseInit & { headers: Headers };
-  /** new URL(req.url) */
-  url: URL;
-  /** Connection information provided by Deno. */
-  conn: http.ConnInfo;
-  /** The CookieJar created after the endpoint matched with the Request. */
-  cookies: CookieJar;
-  /** The path that matched the endpoint's `path` schema option. */
-  path: string;
-  /** The parsed path groups captured while routing the request. */
-  groups: GroupsOutput<Schema>;
-  /** The context created after the endpoint matched the Request. */
-  ctx: CtxOutput<Schema>;
-  /** The parsed query string parameters. */
-  query: QueryOutput<Schema>;
-  /** The parsed Request body, if any. */
-  message: MessageOutput<Schema>;
-  /** Returns a Response created using an asset from an assets directory. */
-  asset: (opt: ServeAssetOptions) => Promise<Response>;
-  /**
-   * Returns a redirect Response. If the redirect path doesn't specify an
-   * origin, the origin of the current request is used. If the path starts with
-   * a ".", it is joined with the pathname of the Request url to get the final
-   * redirect path. The default status is 302.
-   */
-  redirect: (to: string, status?: number) => Response;
-}
-
 /** Options for processing requests, used to construct Endpoints. */
 export interface EndpointSchema {
   /**
@@ -256,25 +86,195 @@ export interface EndpointSchema {
   resolveError?: ((x: ResolveErrorArg) => any) | null;
 }
 
+/** Arguments available to Context functions. */
+export interface ContextArg {
+  /** The Request being handled. */
+  req: Request;
+  /**
+   * A ResponseInit applied to the Endpoint's resolved value when packing it
+   * into a Response. The Headers are always available.
+   */
+  res: ResponseInit & { headers: Headers };
+  /** new URL(req.url) */
+  url: URL;
+  /** The Deno-provided ConnInfo describing the connection for the request. */
+  conn: http.ConnInfo;
+  /**
+   * The CookieJar for this Request/Response pair, created after the Endpoint
+   * matched with the Request.
+   */
+  cookies: CookieJar;
+  /** The path that matched the Endpoint's path schema option. */
+  path: string;
+  /** The unprocessed query object associated with this request. */
+  query: QueryRecord;
+  /** The unprocessed path groups object captured during routing. */
+  groups: GroupsRecord;
+  /**
+   * When context functions need to run cleanup tasks after the Endpoint has
+   * resolved the Response (such as setting cookies, logging performance
+   * metrics, etc.), they can use this registration function to do so. Cleanup
+   * functions are executed in stack order (last in first out).
+   */
+  cleanup: (fn: () => Promise<void> | void) => void;
+}
+
+/** Arguments available to a ResolveError function. */
+export interface ResolveErrorArg {
+  /** The Request being processed. */
+  req: Request;
+  /**
+   * A ResponseInit applied to the Endpoint response after resolving and packing
+   * the value to send to the client. The Headers object is always available.
+   */
+  res: ResponseInit & { headers: Headers };
+  /** new URL(req.url) */
+  url: URL;
+  /** Connection information provided by Deno. */
+  conn: http.ConnInfo;
+  /** The path that matched the Endpoint's path schema option. */
+  path: string;
+  /** The unprocessed query object associated with this request. */
+  query: QueryRecord;
+  /** The unprocoessed path groups object captured during routing. */
+  groups: GroupsRecord;
+  /** The offending error. */
+  error: unknown;
+  /** Returns a Response created using an asset from an assets directory. */
+  asset: (opt: ServeAssetOptions) => Promise<Response>;
+  /**
+   * Returns a redirect Response. If the redirect path doesn't specify an
+   * origin, the origin of the current request is used. If the path starts with
+   * a ".", it is joined with the pathname of the Request url to get the final
+   * redirect path. The default status is 302.
+   */
+  redirect: (to: string, status?: number) => Response;
+}
+
+/**
+ * Type utility for extracting the output of a "groups" parser on an
+ * EndpointSchema or SocketSchema.
+ */
+export type GroupsOutput<Schema> = (
+  "groups" extends keyof Schema ? (
+    Schema extends { groups: Parser } ? (
+      ParserOutput<Schema["groups"]>
+    )
+    : Schema extends { groups?: undefined | null } ? GroupsRecord
+    : never
+  )
+  : Schema extends Record<string, unknown> ? GroupsRecord
+  : unknown
+);
+
+/**
+ * Type utility for extracting the output of a "ctx" function on an
+ * EndpointSchema or SocketSchema.
+ */
+ export type CtxOutput<Schema> = (
+  "ctx" extends keyof Schema ? (
+    Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
+    : Schema extends { ctx?: undefined | null } ? undefined
+    : never
+  )
+  : Schema extends Record<string, unknown> ? undefined
+  : unknown
+);
+
+/**
+ * Type utility for extracting the output of a "query" parser on an
+ * EndpointSchema or SocketSchema.
+ */
+export type QueryOutput<Schema> = (
+  "query" extends keyof Schema ? (
+    Schema extends { query: Parser } ? (
+      ParserOutput<Schema["query"]>
+    )
+    : Schema extends { query?: undefined | null; } ? QueryRecord
+    : never
+  )
+  : Schema extends Record<string, unknown> ? QueryRecord
+  : unknown
+);
+
+/**
+ * Type utility for extracting the output of a "message" parser on an
+ * EndpointSchema or SocketSchema.
+ */
+export type MessageOutput<Schema> = (
+  "message" extends keyof Schema ? (
+    Schema extends { message: Parser } ? (
+      ParserOutput<Schema["message"]>
+    )
+    : Schema extends { message?: undefined | null } ? undefined
+    : never
+  )
+  : Schema extends Record<string, unknown> ? undefined
+  : unknown
+);
+
+/** Arguments available to the resolve function of an endpoint. */
+export interface ResolveArg<Schema = unknown> {
+  /**
+   * The schema used to create this resolver's endpoint. If no schema was used,
+   * this will be an empty object.
+   */
+  schema: Schema;
+  /** The Request being handled. */
+  req: Request;
+  /**
+   * A ResponseInit applied to the endpoint response after resolving and packing
+   * the value to send to the client. The Headers object is always available.
+   */
+  res: ResponseInit & { headers: Headers };
+  /** new URL(req.url) */
+  url: URL;
+  /** Connection information provided by Deno. */
+  conn: http.ConnInfo;
+  /** The CookieJar created after the endpoint matched with the Request. */
+  cookies: CookieJar;
+  /** The path that matched the endpoint's `path` schema option. */
+  path: string;
+  /** The parsed path groups captured while routing the request. */
+  groups: GroupsOutput<Schema>;
+  /** The context created after the endpoint matched the Request. */
+  ctx: CtxOutput<Schema>;
+  /** The parsed query string parameters. */
+  query: QueryOutput<Schema>;
+  /** The parsed Request body, if any. */
+  message: MessageOutput<Schema>;
+  /** Returns a Response created using an asset from an assets directory. */
+  asset: (opt: ServeAssetOptions) => Promise<Response>;
+  /**
+   * Returns a redirect Response. If the redirect path doesn't specify an
+   * origin, the origin of the current request is used. If the path starts with
+   * a ".", it is joined with the pathname of the Request url to get the final
+   * redirect path. The default status is 302.
+   */
+  redirect: (to: string, status?: number) => Response;
+}
+
 /** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<Schema = null> = (
-  Schema extends null ? {} : Schema
-) & ((
+export type Endpoint<Schema = unknown> = Schema & ((
   req: EndpointRequest<(
     Schema extends { query: Parser } ? ParserInput<Schema["query"]>
-    : Record<string, string | string[]>
+    : QueryRecord
   ), (
     Schema extends { message: Parser } ? ParserInput<Schema["message"]>
-    : Schema extends { message?: undefined | null } ? undefined
+    : Schema extends Record<string, unknown> ? undefined
     : unknown
   ), (
-    // Endpoints always have a resolve function (as of now), so no need to check
-    // for null or undefined
     Schema extends { resolve: (x: any) => infer R } ? Awaited<R>
+    : Schema extends Record<string, unknown> ? undefined
     : unknown
   )>,
   conn: http.ConnInfo,
 ) => Promise<Response>);
+
+// I'm using this type to know when the resolve/setup function wasn't specified,
+// so that the output doesn't include it on the schema
+declare const _omitted: unique symbol;
+type Omitted = typeof _omitted
 
 /**
  * Constructs a new Endpoint request handler using the provided schema and
@@ -283,21 +283,25 @@ export type Endpoint<Schema = null> = (
  * property.
  */
 export function endpoint<
-  Schema extends EndpointSchema | null,
-  Resolve extends (x: ResolveArg<Schema>) => any = () => undefined,
+  Schema extends EndpointSchema = {},
+  Resolve extends (x: ResolveArg<Schema>) => any = () => Omitted,
 >(
   schema?: (Schema & EndpointSchema) | null,
   resolve?: Resolve & ((x: ResolveArg<Schema>) => any),
 ): Endpoint<{
-  [K in keyof Schema | "resolve"]: (
+  [K in keyof Schema | "resolve" as (
+    K extends "resolve" ? (Resolve extends () => Omitted ? never : K) : K
+  )]: (
     K extends "resolve" ? Resolve
     : K extends keyof Schema ? Schema[K]
     : never
   );
 }>;
 export function endpoint<
-  Resolve extends (x: ResolveArg) => any = () => undefined,
->(resolve?: Resolve): Endpoint<{ resolve: Resolve }>;
+  Resolve extends ((x: ResolveArg<{}>) => any) | null = null,
+>(resolve?: Resolve & ((x: ResolveArg<{}>) => any)): Endpoint<
+  Resolve extends null ? {} : { resolve: Resolve }
+>;
 export function endpoint(
   schemaOrResolve?: (
     | EndpointSchema
@@ -731,12 +735,6 @@ export type Socket<Schema = null> = (
   conn: http.ConnInfo,
 ) => Promise<Response>);
 
-  // /**
-  //  * Function responsible for setting up the WS instance after matching with the
-  //  * Request.
-  //  */
-  //  setup?: SocketSetup<Groups, Ctx, Query, Message, Send>;
-
 /**
  * Type utility for extracting the type of message a socket expects to send from
  * a SocketSchema.
@@ -767,7 +765,11 @@ export function socket<
   schema?: (Schema & SocketSchema) | null,
   setup?: Setup & ((x: SocketSetupArg<Schema>) => Promise<void> | void),
 ): Socket<{
-  [K in keyof Schema | "setup"]: (
+  [K in keyof Schema | "setup" as (
+    K extends "setup" ? (
+      Setup extends () => void ? never
+    )
+  )]: (
     K extends "setup" ? Setup
     : K extends keyof Schema ? Schema[K]
     : never
@@ -800,7 +802,14 @@ export function socket(
     ...schema,
     message: null, // !important
   }, async x => {
-    const { socket, response } = Deno.upgradeWebSocket(x.req);
+    let socket: WebSocket;
+    let response: Response;
+    try {
+      ({ socket, response } = Deno.upgradeWebSocket(x.req));
+    } catch {
+      x.res.headers.set("upgrade", "websocket");
+      throw new HttpError("426 upgrade required", { status: 426 });
+    }
 
     const ws = webSocket(socket, {
       message: async (input: unknown) => {
