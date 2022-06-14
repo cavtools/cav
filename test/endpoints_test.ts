@@ -1,9 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { http, path } from "../deps.ts";
+import { path } from "../deps.ts";
 import { endpoint, assets, redirect, socket } from "../endpoints.ts";
 import { assertEquals } from "./test_deps.ts";
 import { router } from "../router.ts";
+import type { http } from "../deps.ts";
 import type { Router } from "../router.ts";
 import type { Endpoint, Socket, ResolveArg, SetupArg } from "../endpoints.ts";
 
@@ -181,13 +182,14 @@ Deno.test("assets()", async t => {
     Deno.chdir(originalCwd);
   });
 
-  // 404s
-  // Non-index file
-  // File with assumed .html extension
-  // Rebased index from inside directory
-  // Empty directories
-  // mime-type for non-html files
-  // http ranges for retrieving partial content
+  // TODO: Each of the endpoint options, individually
+  // TODO: 404s
+  // TODO: Non-index file
+  // TODO: File with assumed .html extension
+  // TODO: Rebased index from inside directory
+  // TODO: Empty directories
+  // TODO: mime-type for non-html files
+  // TODO: http ranges for retrieving partial content
 });
 
 Deno.test("redirect()", async t => {
@@ -387,5 +389,5 @@ Deno.test("socket()", async t => {
     assertEquals(await res1.text(), "426 upgrade required");
   });
 
-  // Integration test with client
+  // TODO: Integration test with client
 });

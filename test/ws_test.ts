@@ -13,30 +13,35 @@ import type { WSMessageListener } from "../ws.ts";
 const echoServer = new http.Server({
   port: 8080,
   handler: (req) => {
-    const { socket, response } = Deno.upgradeWebSocket(req, {
-      protocol: "json",
-    });
-    
-    // I need the URL to be sent back in one of the tests for client_test.ts
-    if (req.url.indexOf("send-back-url=true") !== -1) {
-      socket.onopen = () => {
-        // This is the raw socket, no serialization is done. Wrap the url in
-        // quotes so it gets deserialized as a string
-        socket.send('"' + req.url + '"');
-      };
-    }
-    socket.onmessage = (ev) => {
-      // Sockets need to be closed from the server or async processes will leak.
-      // The socket will be closed when a "close" string is sent as a message;
-      // that message isn't echoed. The extra quotes are needed because the data
-      // is sent as JSON
-      if (ev.data === "\"close\"") {
-        socket.close();
-        return;
+    try {
+      const  { socket, response } = Deno.upgradeWebSocket(req, {
+        protocol: "json",
+      });
+      
+      // I need the URL to be sent back in one of the tests for client_test.ts
+      if (req.url.indexOf("send-back-url=true") !== -1) {
+        socket.onopen = () => {
+          // This is the raw socket, no serialization is done. Wrap the url in
+          // quotes so it gets deserialized as a string
+          socket.send('"' + req.url + '"');
+        };
       }
-      socket.send(ev.data);
-    };
-    return response;
+      socket.onmessage = (ev) => {
+        // Sockets need to be closed from the server or async processes will leak.
+        // The socket will be closed when a "close" string is sent as a message;
+        // that message isn't echoed. The extra quotes are needed because the data
+        // is sent as JSON
+        if (ev.data === "\"close\"") {
+          socket.close();
+          return;
+        }
+        socket.send(ev.data);
+      };
+      return response;
+    } catch (err) {
+      console.log(err);
+      throw err;
+    }
   },
 });
 echoServer.listenAndServe();
@@ -58,7 +63,7 @@ Deno.test("echo", async () =>  {
 });
 
 Deno.test("echo with WebSocket as input", async () => {
-  const input = new WebSocket("ws://localhost:8080");
+  const input = new WebSocket("ws://localhost:8080", "json");
   const message = await new Promise((resolve, reject) => {
     let message: unknown = null;
     const socket = webSocket(input);

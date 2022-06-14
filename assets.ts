@@ -59,12 +59,25 @@ export async function serveAsset(
   req: Request,
   opt: ServeAssetOptions,
 ): Promise<Response> {
+  // If the request path ends in /index.html, redirect to the version without
+  // the /index.html  
+  // REVIEW: I feel like I might be missing some edge cases where this behavior
+  // is undesireable, due to the fact the path option and the requested path
+  // might not be the same
+  const url = new URL(req.url);
+  if (url.pathname.endsWith("/index.html")) {
+    url.pathname = path.dirname(url.pathname);
+    return Response.redirect(url.href, 302);
+  }
+
   const cwd = parseCwd(opt.cwd || ".");
   const dir = opt.dir || "assets";
   const filePath = opt.path;
 
   // NOTE: This is a no-op in production, and calling it multiple times with the
-  // watch option should be safe. Slight overhead
+  // watch option should be safe. Slight overhead  
+  // TODO: Benchmark the overhead to see if it's worth rethinking this (doubt
+  // it)
   prepareAssets({
     cwd,
     dir,
@@ -175,7 +188,7 @@ const watchingAssets = new Set<string>();
  * - Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder (recursive)
  *   into an adjacent file with the same name plus a .js suffix
  * - Optionally uses a filesystem watcher to rebundle whenever a change is made
- *   to a bundle file or one of its local dependencies.
+ *   to a _bundle file or one of its local dependencies.
  *
  * When the watch option is `true`, any errors encountered during bundling will
  * be logged and suppressed, and the `prepareAssets()` call will start a file
