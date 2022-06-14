@@ -1,6 +1,7 @@
 # Cav
 
-Cav is web framework made for [Deno](https://deno.land). Guiding principles:
+Cav is a solo developer's web framework, made for [Deno](https://deno.land).
+Guiding principles:
 
 - Modular, maintainable server definitions
 - No-fuss data serialization
@@ -8,19 +9,18 @@ Cav is web framework made for [Deno](https://deno.land). Guiding principles:
 - Isomorphic client
 - Use The Platform
 
-**Status:** WIP, active, almost fully tested, and definitely not ready for
-production.
+**Status:** WIP, active, almost tested, and definitely not ready for production.
 
 ## Goals
 
 - Learn as much as possible about backend web frameworks, by writing one from
   ~~scratch~~ Deno
   - [x] Zero third-party dependencies
-- It should come with everything a solo developer would need to build a modern
-  web app (minus the database)
+- It should come with everything a modern web server might need, without relying
+  on third-party services (minus the database)
   - [x] Routing
   - [x] Static asset serving
-  - [x] (Signed) cookies and JWTs
+  - [x] Signed cookies and JWTs
   - [x] Web sockets
   - [x] Form and JSON parsing / validation
   - [x] De/serialization of most data types, including Files, Dates, Maps, etc.
@@ -63,7 +63,8 @@ production.
   [devalue](https://github.com/Rich-Harris/devalue) /
   [json-dry](https://github.com/11ways/json-dry)
 
-## Notes
+<!-- This should be a blog post or something. -->
+<!-- ## Notes
 
 Links and thoughts related to Cav's architecture.
 
@@ -105,7 +106,7 @@ Links and thoughts related to Cav's architecture.
     regarding this pattern, and there's several projects mentioned in the HN
     comments on this post that work with similar concepts. TypeScript makes
     implementing this pretty simple, and Cav is just one person's subjective
-    take on what it can look like.
+    take on what it can look like. -->
 
 ## Dedication
 
