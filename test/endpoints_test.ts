@@ -186,6 +186,9 @@ Deno.test("assets()", async t => {
   // Non-index file
   // File with assumed .html extension
   // Rebased index from inside directory
+  // Empty directories
+  // mime-type for non-html files
+  // http ranges for retrieving partial content
 });
 
 Deno.test("redirect()", async t => {
@@ -204,7 +207,7 @@ Deno.test("redirect()", async t => {
 
     const res1 = await rtr(new Request("http://_/foo/bar"), conn);
     assertEquals(res1.status, 302);
-    assertEquals(res1.headers.get("location"), "http://_/foo/hello/world");
+    assertEquals(res1.headers.get("location"), "http://_/hello/world");
 
     const res2 = await redir(new Request("http://_/foo/bar"), conn);
     assertEquals(res2.status, 404);
@@ -220,7 +223,7 @@ Deno.test("redirect()", async t => {
 
     const res1 = await rtr(new Request("http://_/foo/bar"), conn);
     assertEquals(res1.status, 301);
-    assertEquals(res1.headers.get("location"), "http://_/foo/bar/hello/world");
+    assertEquals(res1.headers.get("location"), "http://_/foo/hello/world");
     
     const res2 = await redir(new Request("http://_/foo/bar"), conn);
     assertEquals(res2.status, 404);
@@ -233,15 +236,15 @@ Deno.test("redirect()", async t => {
 
     // Fun note: If you go to "https://cav.bar/" in your url bar, Firefox will
     // automatically remove the trailing slash. However, the URL constructor
-    // automatically adds the root trailing slash. Fun how everyone has a
-    // different opinion about this lol. I'm more of a no-slash person (it's
-    // just another thing to remember and think about, better off without them
-    // imo), which is why Cav takes a few extra steps to remove trailing slashes
-    // from URLs, including rebasing index files from non-root directories
+    // automatically adds the root trailing slash. I'm more of a no-slash
+    // person, which is why Cav takes a few extra steps to remove trailing
+    // slashes from URLs, including rebasing index files from non-root
+    // asset directories
     assertEquals(res1.headers.get("location"), "https://cav.bar/");
   });
 
   await t.step("args: local redirect with no leading ./ or ../", async () => {
+    // A leading "/" is assumed
     const redir = redirect("hello/world");
     const rtr = router({
       foo: {
