@@ -60,7 +60,7 @@ import type { Serializers } from "./serial.ts";
   /**
    * Register an event listener for the "message" event, triggered whenever a
    * message is received from the connected party. The message received is
-   * deserialized to the event's "message" property.
+   * deserialized before the listener is called.
    */
   on(type: "message", cb: WSMessageListener<Receive>): void;
   /**
@@ -139,7 +139,7 @@ export function webSocket<
 ): WS<Send, Receive> {
   type AnyListener = (...a: unknown[]) => unknown;
 
-  const raw = typeof input === "string" ? new WebSocket(input) : input;
+  const raw = typeof input === "string" ? new WebSocket(input, "json") : input;
 
   const listeners = {
     open: new Set<AnyListener>(),

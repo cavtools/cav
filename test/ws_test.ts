@@ -13,7 +13,10 @@ import type { WSMessageListener } from "../ws.ts";
 const echoServer = new http.Server({
   port: 8080,
   handler: (req) => {
-    const { socket, response } = Deno.upgradeWebSocket(req);
+    const { socket, response } = Deno.upgradeWebSocket(req, {
+      protocol: "json",
+    });
+    
     // I need the URL to be sent back in one of the tests for client_test.ts
     if (req.url.indexOf("send-back-url=true") !== -1) {
       socket.onopen = () => {

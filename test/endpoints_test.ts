@@ -4,7 +4,8 @@ import { http, path } from "../deps.ts";
 import { endpoint, assets, redirect, socket } from "../endpoints.ts";
 import { assertEquals } from "./test_deps.ts";
 import { router } from "../router.ts";
-import type { Endpoint, ResolveArg, Socket } from "../endpoints.ts";
+import type { Router } from "../router.ts";
+import type { Endpoint, Socket, ResolveArg, SetupArg } from "../endpoints.ts";
 
 // Doesn't matter
 const conn: http.ConnInfo = {
@@ -124,6 +125,8 @@ Deno.test("endpoint()", async t => {
     assertEquals(res3.status, 200);
     assertEquals(await res3.text(), "foo bar");
   });
+
+  // Integration test
 });
 
 Deno.test("assets()", async t => {
@@ -217,7 +220,7 @@ Deno.test("redirect()", async t => {
     const rtr = router({
       foo: {
         bar: redir,
-      }
+      },
     });
 
     const res1 = await rtr(new Request("http://_/foo/bar"), conn);
@@ -270,25 +273,119 @@ Deno.test("redirect()", async t => {
   });
 });
 
+// Helpful:
+// https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
 Deno.test("socket()", async t => {
-  t.step("args: none", async () => {
+  const clientHeaders = {
+    upgrade: "websocket",
+    connection: "Upgrade",
+    "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+    "sec-websocket-version": "13",
+    "sec-websocket-protocol": "json",
+  };
+
+  const assertSocketResponse = (res: Response) => {
+    assertEquals(res.status, 101);
+    assertEquals(res.headers.get("upgrade"), "websocket");
+    assertEquals(res.headers.get("connection"), "Upgrade");
+    assertEquals(res.headers.get("sec-websocket-protocol"), "json");
+    assertEquals(res.body, null);
+  };
+
+  await t.step("args: none", async () => {
     const sock = socket();
     const _check: AssertEquals<typeof sock, Socket<{}>> = true;
+
+    const res1 = await sock(new Request("http://_", {
+      headers: clientHeaders,
+    }), conn);
+    assertSocketResponse(res1);
   });
 
-  t.step("args: schema only", async () => {
+  await t.step("args: schema only", async () => {
+    const sock = socket({ path: "/test" });
+    const _check: AssertEquals<typeof sock, Socket<{ path: string }>> = true;
 
+    const res1 = await sock(new Request("http://_/test", {
+      headers: clientHeaders,
+    }), conn);
+    assertSocketResponse(res1);
+
+    const res2 = await sock(new Request("http://_", {
+      headers: clientHeaders,
+    }), conn);
+    assertEquals(res2.status, 404);
   });
 
-  t.step("args: setup only", async () => {
+  await t.step("args: setup only", async () => {
+    const sock = socket(({ ws }) => {
+      ws.onopen = () => {};
+      ws.on("close", () => {});
+    });
+    const _check: AssertEquals<typeof sock, Socket<{
+      setup: (x: SetupArg<{}>) => void;
+    }>> = true;
 
+    const res1 = await sock(new Request("http://_", {
+      headers: clientHeaders,
+    }), conn);
+    assertSocketResponse(res1);
   });
 
-  t.step("args: schema + setup", async () => {
+  await t.step("args: schema + setup", async () => {
+    let lastTest = "";
+    const sock = socket({
+      query: (q) => {
+        if (typeof q.test !== "string") {
+          throw new Error("missing test query");
+        }
+        return { test: q.test };
+      },
+    }, x => {
+      lastTest = x.query.test;
+      x.ws.on("open", () => {});
+      x.ws.onclose = () => {};
+    });
 
+    const res1 = await sock(new Request("http://_/?test=hello", {
+      headers: clientHeaders,
+    }), conn);
+    assertSocketResponse(res1);
+    assertEquals(lastTest, "hello");
+
+    const res2 = await sock(new Request("http://_", {
+      headers: clientHeaders,
+    }), conn);
+    assertEquals(res2.status, 400);
+    assertEquals(lastTest, "hello");
   });
 
-  t.step("426 without upgrade header", async () => {
-    
+  await t.step("nested inside a router", async () => {
+    const sock = socket();
+    const rtr = router({
+      nested: sock,
+    });
+    const _check: AssertEquals<typeof rtr, Router<{
+      nested: Socket<{}>;
+    }>> = true;
+
+    const res1 = await rtr(new Request("http://_/nested", {
+      headers: clientHeaders,
+    }), conn);
+    assertSocketResponse(res1);
+
+    const res2 = await rtr(new Request("http://_/nested/again", {
+      headers: clientHeaders,
+    }), conn);
+    assertEquals(res2.status, 404);
   });
+
+  await t.step("426 without upgrade header", async () => {
+    const sock = socket();
+    const res1 = await sock(new Request("http://_"), conn);
+    assertEquals(res1.status, 426);
+    assertEquals(await res1.text(), "426 upgrade required");
+  });
+
+  // Integration test with client
 });

@@ -349,8 +349,10 @@ export function endpoint(
     // Utilities
     const asset = (opt: ServeAssetOptions) => serveAsset(req, opt);
     const redirect = (to: string, status?: number) => {
-      if (to.startsWith(".")) {
-        to = stdPath.join(url.pathname, to);
+      if (to.startsWith("./")) {
+        to = stdPath.join(url.pathname, "..", to);
+      } else if (to.startsWith("../")) {
+        to = stdPath.join(url.pathname, "../..", to);
       }
       const u = new URL(to, url.origin);
       return Response.redirect(u.href, status || 302);
@@ -752,9 +754,7 @@ export type SendType<Schema extends SocketSchema | null> = (
 );
 
 /** Arguments available to the setup function of a socket endpoint. */
-export interface SocketSetupArg<
-  Schema extends SocketSchema | null = SocketSchema | null,
-> extends Omit<ResolveArg<Schema>, "message" | "asset" | "redirect"> {
+export interface SetupArg<Schema = unknown> extends Omit<ResolveArg<Schema>, "message" | "asset" | "redirect"> {
   ws: WS<SendType<Schema>, MessageOutput<Schema>>;
 }
 
@@ -765,10 +765,10 @@ export interface SocketSetupArg<
  */
 export function socket<
   Schema extends SocketSchema | null,
-  Setup extends ((x: SocketSetupArg<Schema>) => any) = () => Omitted,
+  Setup extends ((x: SetupArg<Schema>) => any) = () => Omitted,
 >(
   schema?: (Schema & SocketSchema) | null,
-  setup?: Setup & ((x: SocketSetupArg<Schema>) => Promise<void> | void),
+  setup?: Setup & ((x: SetupArg<Schema>) => Promise<void> | void),
 ): Socket<{
   [K in keyof Schema | "setup" as (
     K extends "setup" ? (Setup extends () => Omitted ? never : K)
@@ -780,7 +780,7 @@ export function socket<
   );
 }>;
 export function socket<
-  Setup extends ((x: SocketSetupArg<{}>) => any) = () => Omitted,
+  Setup extends (x: SetupArg<{}>) => any = () => Omitted,
 >(setup?: Setup): Socket<
   Setup extends () => Omitted ? {}
   : { setup: Setup }
@@ -788,16 +788,16 @@ export function socket<
 export function socket(
   schemaOrSetup?: (
     | SocketSchema
-    | ((x: SocketSetupArg) => Promise<void> | void)
+    | ((x: SetupArg) => Promise<void> | void)
     | null
   ),
-  maybeSetup?: (x: SocketSetupArg) => Promise<void> | void,
+  maybeSetup?: (x: SetupArg) => Promise<void> | void,
 ) {
   const schema: SocketSchema = (
     schemaOrSetup && typeof schemaOrSetup === "object" ? schemaOrSetup
     : {}
   );
-  const setup: (x: SocketSetupArg) => Promise<void> | void = (
+  const setup: (x: SetupArg) => Promise<void> | void = (
     typeof schemaOrSetup === "function" ? schemaOrSetup
     : typeof maybeSetup === "function" ? maybeSetup
     : () => {}
@@ -812,7 +812,9 @@ export function socket(
     let socket: WebSocket;
     let response: Response;
     try {
-      ({ socket, response } = Deno.upgradeWebSocket(x.req));
+      ({ socket, response } = Deno.upgradeWebSocket(x.req, {
+        protocol: "json"
+      }));
     } catch {
       x.res.headers.set("upgrade", "websocket");
       throw new HttpError("426 upgrade required", { status: 426 });
