@@ -5,13 +5,31 @@ import { serveAsset, prepareAssets } from "../assets.ts";
 import { assertEquals } from "./test_deps.ts";
 import { didMatch } from "../router.ts";
 
-function chdir(which: "root" | "test") {
+// Used in endpoints_test.ts
+export function chdir(which: "root" | "test") {
   const testDir = path.dirname(path.fromFileUrl(import.meta.url));
   if (which === "test") {
     Deno.chdir(testDir);
     return;
   }
   Deno.chdir(path.join(testDir, ".."));
+}
+
+// Used in endpoints_test.ts
+export async function cleanAssets() {
+  chdir("test");
+  const files = [
+    "root_bundle.tsx.js",
+    "assets/bundle.ts.js",
+    "assets/bundle.tsx.js",
+  ];
+  for (const f of files) {
+    try {
+      await Deno.remove(path.join("./assets", f));
+    } catch {
+      // continue
+    }
+  }
 }
 
 Deno.test("serveAsset()", async t => {
@@ -132,49 +150,33 @@ Deno.test("serveAsset()", async t => {
 });
 
 Deno.test("prepareAssets()", async t => {
-  const clear = async () => {
-    chdir("test");
-    const files = [
-      "root_bundle.tsx.js",
-      "assets/bundle.ts.js",
-      "assets/bundle.tsx.js",
-    ];
-    for (const f of files) {
-      try {
-        await Deno.remove(path.join("./assets", f));
-      } catch {
-        // continue
-      }
-    }
-  };
-
   await t.step("no arguments", async () => {
     chdir("test");
-    await clear();
+    await cleanAssets();
 
     await prepareAssets();
     await Deno.stat("./assets/root_bundle.tsx.js");
     await Deno.stat("./assets/assets/bundle.ts.js");
     await Deno.stat("./assets/assets/bundle.tsx.js");
 
-    await clear();
+    await cleanAssets();
   });
 
   await t.step("cwd", async () => {
     chdir("root");
-    await clear();
+    await cleanAssets();
 
     await prepareAssets({ cwd: import.meta.url });
     await Deno.stat("./assets/root_bundle.tsx.js");
     await Deno.stat("./assets/assets/bundle.ts.js");
     await Deno.stat("./assets/assets/bundle.tsx.js");
 
-    await clear();
+    await cleanAssets();
   });
 
   await t.step("doesn't bundle unsuffixed ts(x) files", async () => {
     chdir("test");
-    await clear();
+    await cleanAssets();
 
     await prepareAssets();
     const check = [
@@ -190,7 +192,7 @@ Deno.test("prepareAssets()", async t => {
       throw new Error(`It bundled ${c} when it shouldn't have`);
     }
 
-    await clear();
+    await cleanAssets();
   });
 
   await t.step("ignoreErrors", async () => {

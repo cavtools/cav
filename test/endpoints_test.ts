@@ -5,6 +5,7 @@ import { endpoint, assets, redirect, socket } from "../endpoints.ts";
 import { assertEquals } from "./test_deps.ts";
 import { router } from "../router.ts";
 import { unwatchAssets } from "../assets.ts";
+import { chdir, cleanAssets } from "./assets_test.ts";
 import type { http } from "../deps.ts";
 import type { Router } from "../router.ts";
 import type { Endpoint, Socket, ResolveArg, SetupArg } from "../endpoints.ts";
@@ -132,10 +133,9 @@ Deno.test("endpoint()", async t => {
 });
 
 Deno.test("assets()", async t => {
-  const originalCwd = Deno.cwd();
-
   await t.step("args: no options", async () => {
-    Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
+    chdir("test");
+    await cleanAssets();
 
     // assets() with no options starts an asset watcher by default. The assets
     // dir needs to be unwatched when this test is over or it'll fail. Do that
@@ -163,45 +163,42 @@ Deno.test("assets()", async t => {
     await res2.text();
 
     unwatchAssets();
-    Deno.chdir(originalCwd);
+    await cleanAssets();
   });
 
   await t.step("args: cwd set to directory", async () => {
-    Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
+    chdir("test");
     const ass = assets({
       cwd: "./assets",
-      noPrep: true,
+      noPrep: true, // no need to cleanAssets when this is specified
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(res1.status, 200);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
-    Deno.chdir(originalCwd);
   });
 
   await t.step("args: cwd set to current file", async () => {
-    Deno.chdir(path.join(path.fromFileUrl(import.meta.url), "../..")); // root
+    chdir("root");
     const ass = assets({
       cwd: import.meta.url,
       noPrep: true,
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/index.html</h1>");
-    Deno.chdir(originalCwd);
   });
 
   await t.step("args: dir", async () => {
-    Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
+    chdir("test");
     const ass = assets({
       dir: "./assets/assets",
       noPrep: true,
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
-    Deno.chdir(originalCwd);
   });
 
   await t.step("args: cwd + dir", async () => {
-    Deno.chdir(path.join(path.fromFileUrl(import.meta.url), "../..")); // root
+    chdir("root");
     const ass = assets({
       cwd: import.meta.url,
       dir: "./assets/assets",
@@ -209,7 +206,6 @@ Deno.test("assets()", async t => {
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
-    Deno.chdir(originalCwd);
   });
 
   // TODO: Each of the endpoint options, individually
