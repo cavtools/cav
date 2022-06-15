@@ -186,114 +186,119 @@ export async function serveAsset(
   }
 }
 
-const watchingAssets = new Set<string>();
+async function findModules(dir: string) {
+  const modules: string[] = [];
+  for await (const entry of Deno.readDir(dir)) {
+    if (entry.isFile && (
+      entry.name === "bundle.ts" ||
+      entry.name === "bundle.tsx" ||
+      entry.name.endsWith("_bundle.ts") ||
+      entry.name.endsWith("_bundle.tsx")
+    )) {
+      modules.push(path.join(dir, entry.name));
+    } else if (entry.isDirectory) {
+      modules.push(...(await findModules(path.join(dir, entry.name))));
+    }
+  }
 
-/**
- * Asset preparation procedure that does the following:
- *
- * - Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder (recursive)
- *   into an adjacent file with the same name plus a .js suffix
- * - Optionally uses a filesystem watcher to rebundle whenever a change is made
- *   to a _bundle file or one of its local dependencies.
- *
- * When the watch option is `true`, any errors encountered during bundling will
- * be logged and suppressed, and the `prepareAssets()` call will start a file
- * system watching event loop that re-triggers asset preparation whenever a file
- * changes inside the assets directory. It will return immediately after the
- * initial prep.
- *
- * If the --unstable or --allow-write permissions are not available, this
- * function silently does nothing. i.e. In production, you can safely omit those
- * flags and still call this function; no errors will be thrown.
- */
-export async function prepareAssets(opt: {
+  return modules;
+}
+
+/** Writes the output to `${input}.js`. */
+async function bundle(input: string) {
+  const output = input + ".js";
+
+  const js = (await emit.bundle(input, {
+    allowRemote: true,
+    type: "module",
+  })).code;
+
+  await Deno.writeTextFile(output, js);
+}
+
+/** Options for `prepareAssets()` and `watchAssets()`. */
+export interface PrepareAssetsOptions {
   /**
    * Sets the current working directory when looking for the assets folder. If a
    * file:// path is provided, the parent folder of the path is used. This is
    * useful if you want to serve assets relative to the current file using
    * `import.meta.url`. Default: `"."`
    */
-  cwd?: string;
-  /**
-   * The path of the assets directory relative to the cwd. This pattern
-   * encourages keeping public asset files separated from application source
-   * code, so that code isn't processed by mistake. Default: `"assets"`
-   */
-  dir?: string;
-  /**
-   * By default, any errors encountered during bundling will bubble up and the
-   * preparation procedure will only happen one time. If this option is `true`,
-   * errors will be logged and then suppressed, and a file system watcher will
-   * be set up to re-prepare the assets directory any time its contents are
-   * modified. The `prepareAssets()` function will return immediately after the
-   * initial loop, and the watcher will continue running in a disjoint event
-   * loop. It's safe to `prepareAssets({ watch: true })` multiple times for the
-   * same assets directory; subsequent calls will be no-ops.
-   */
-  watch?: boolean;
-}) {
-  const cwd = parseCwd(opt.cwd || ".");
-  const dir = opt.dir || "assets";
+   cwd?: string;
+   /**
+    * The path of the assets directory relative to the cwd. This pattern
+    * encourages keeping public asset files separated from application source
+    * code, so that code isn't processed by mistake. Default: `"assets"`
+    */
+   dir?: string;
+   /**
+    * If this is true, any errors that occur will be silently suppressed.
+    */
+   ignoreErrors?: boolean;
+   /**
+    * If this is true, any console warnings that would've occurred will be
+    * suppressed.
+    */
+   // ignoreWarnings?: boolean;
+}
+
+/**
+ * Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder into an
+ * adjacent file with the same name plus a .js suffix, recursively. The bundles
+ * will be compiled with `lib`s targeting the browser.
+ *
+ * The path to the assets directory is specified with the optional `cwd` and
+ * `dir` options. The default is `{ cwd: ".", dir: "assets" }`. (Tip:
+ * `import.meta.url` can be specified as a `cwd`.)
+ *
+ * If the --unstable or --allow-write permissions are not available, an error
+ * will be thrown. If the `ignoreErrors` option is true, the error will be
+ * suppressed.
+ */
+export async function prepareAssets(opt?: PrepareAssetsOptions) {
+  const cwd = parseCwd(opt?.cwd || ".");
+  const dir = opt?.dir || "assets";
   const assets = path.join(cwd, dir);
 
-  if (
-    // @ts-ignore: emit won't compile without "--unstable"
-    typeof Deno.emit === "undefined" ||
-    (opt.watch && watchingAssets.has(assets)) ||
-    (await Deno.permissions.query({
-      name: "write",
-      path: assets,
-    })).state !== "granted"
-  ) {
+  try {
+    const check = await Deno.stat(assets);
+    if (!check.isDirectory) {
+      throw new Error(`path given is not a directory: ${assets}`);
+    }
+
+    const modules = await findModules(assets);
+    for (const m of modules) {
+      await bundle(m);
+    }
+  } catch (err) {
+    if (!opt?.ignoreErrors) {
+      throw err;
+    }
+  }
+}
+
+const watchingAssets = new Set<string>();
+
+/**
+ * Prepares the assets directory using `prepareAssets()` and watches it for
+ * changes to the ts(x) bundles or their dependencies. When a change occurs, the
+ * bundles will be rebuilt. 
+ *
+ * The path to the assets directory is specified with the optional `cwd` and
+ * `dir` options. The default is `{ cwd: ".", dir: "assets" }`. (Tip:
+ * `import.meta.url` can be specified as a `cwd`.)
+ *
+ * If the --unstable or --allow-write permissions are not available, an error
+ * will be thrown. If the `ignoreErrors` option is true, the error will be
+ * suppressed.
+ */
+ export async function watchAssets(opt?: PrepareAssetsOptions) {
+  const cwd = parseCwd(opt?.cwd || ".");
+  const dir = opt?.dir || "assets";
+  const assets = path.join(cwd, dir);
+  if (watchingAssets.has(assets)) {
     return;
   }
-
-  const check = await Deno.stat(assets);
-  if (!check.isDirectory) {
-    throw new Error(`path given is not a directory: ${assets}`);
-  }
-
-  const modules: string[] = [];
-  const findModules = async (dir: string) => {
-    for await (const entry of Deno.readDir(dir)) {
-      if (
-        entry.isFile &&
-          (
-            entry.name.endsWith("_bundle.ts") ||
-            entry.name.endsWith("_bundle.tsx")
-          ) ||
-        (
-          entry.name === "bundle.ts" ||
-          entry.name === "bundle.tsx"
-        )
-      ) {
-        modules.push(path.join(dir, entry.name));
-      } else if (entry.isDirectory) {
-        await findModules(path.join(dir, entry.name));
-      }
-    }
-  };
-  await findModules(dir);
-
-  const bundle = async (input: string) => {
-    const output = input + ".js";
-
-    // @ts-ignore: Bypass error when --unstable isn't specified
-    const js = (await Deno.emit(input, {
-      bundle: "module",
-      check: false,
-      compilerOptions: {
-        lib: [
-          "dom",
-          "dom.iterable",
-          "dom.asynciterable",
-          "esnext",
-        ],
-      },
-    })).files["deno:///bundle.js"];
-
-    await Deno.writeTextFile(output, js);
-  };
 
   const isFile = async (path: string) => {
     try {
@@ -305,17 +310,26 @@ export async function prepareAssets(opt: {
   };
 
   const watching = new Set<string>();
-  const watch = async (input: string) => {
+  const watch = async (input: string, skipBundle?: boolean) => {
     input = path.resolve(input);
-    if (watching.has(input)) {
-      return;
-    }
-
     if (!await isFile(input)) {
       watching.delete(input);
       return;
     }
+    if (watching.has(input)) {
+      return;
+    }
     watching.add(input);
+
+    if (!skipBundle) {
+      try {
+        await bundle(input);
+      } catch (e) {
+        console.warn("Failed to bundle", input, "-", e);
+        watching.delete(input);
+        return;
+      }
+    }
 
     let inputGraph: graph.ModuleGraph;
     try {
@@ -323,51 +337,47 @@ export async function prepareAssets(opt: {
         path.toFileUrl(input).href,
       );
     } catch (e) {
-      console.error("Failed to graph", input, "-", e);
+      console.warn("Failed to graph", input, "-", e);
       watching.delete(input);
       return;
     }
 
+    // Wait for a change in the module or one of its dependencies
     const deps = inputGraph.modules
       .filter((m) => m.specifier.startsWith("file://"))
       .map((m) => path.fromFileUrl(m.specifier));
-
-    try {
-      await bundle(input);
-    } catch (e) {
-      console.error("Failed to bundle", input, "-", e);
-    }
-
     for await (const _ of Deno.watchFs(deps)) {
       break;
     }
 
-    if (!await isFile(input)) {
-      watching.delete(input);
-      return;
-    }
-
+    // Delete it first to skip the redundancy check at the beginning and force a
+    // rebundle
     watching.delete(input);
-    watch(input); // Don't await
+
+    // Keep watching if it's still a file
+    if (await isFile(input)) {
+      watch(input); // Don't await
+    }
   };
 
-  if (opt.watch) {
-    watchingAssets.add(dir);
-  }
-
-  for (const m of modules) {
-    if (!opt.watch) {
-      await bundle(m);
-    } else {
-      watch(m); // Don't await
+  try {
+    await prepareAssets({ ...opt, ignoreErrors: false });
+  } catch (err) {
+    if (!opt?.ignoreErrors) {
+      throw err;
     }
-  }
-
-  if (!opt.watch) {
     return;
   }
 
-  // The disjoint fsevent loop. Wrapped in an IIFE so it doesn't block
+  watchingAssets.add(assets);
+  const modules = await findModules(assets);
+  for (const m of modules) {
+    // The true skips the initial bundling since prepareAssets just did it
+    watch(m, true); // Don't await
+  }
+
+  // The disjoint fsevent loop that watches for new files being added. Wrapped
+  // in an IIFE so it doesn't block
   (async () => {
     for await (const event of Deno.watchFs(dir)) {
       if (event.kind === "create" || event.kind === "modify") {
