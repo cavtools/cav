@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { http, path as stdPath } from "./deps.ts";
-import { prepareAssets, serveAsset } from "./assets.ts";
+import { watchAssets, serveAsset } from "./assets.ts";
 import { routerContext, noMatch } from "./router.ts";
 import { HttpError, packResponse, unpack } from "./serial.ts";
 import { cookieJar } from "./cookies.ts";
@@ -687,19 +687,30 @@ function inputParser(opt: {
 }
 
 /** Initializer options for creating an `assets()` endpoint. */
-export type AssetsInit = Omit<ServeAssetOptions, "path">;
+export interface AssetsInit extends Omit<ServeAssetOptions, "path"> {
+  /** If true, turns off asset preparation. */
+  dontPrepare?: boolean;
+};
 
 /**
- * Creates an Endpoint for serving static assets. The routed path is used to
- * find the asset to serve from inside the assets directory specified.
+ * Creates an Endpoint for serving static assets. The routed request path will
+ * be used to find the asset to serve from inside the assets directory
+ * specified.
+ *
+ * The calculated assets directory will be prepared and watched using
+ * `watchAssets()` unless the `dontPrepare` option is `true`. If the
+ * `--unstable` flag wasn't used or the `--allow-write` permission isn't
+ * available for the directory, asset preparation will fail silently.
  */
 export function assets(init?: AssetsInit) {
   // Note that this is a no-op in production
-  prepareAssets({
-    cwd: init?.cwd,
-    dir: init?.dir,
-    watch: true,
-  });
+  if (!init?.dontPrepare) {
+    watchAssets({
+      cwd: init?.cwd,
+      dir: init?.dir,
+      ignoreErrors: true,
+    });
+  }
 
   return endpoint({ path: "*" as const }, x => {
     return x.asset({ ...init, path: x.path });
