@@ -130,3 +130,100 @@ Deno.test("serveAsset()", async t => {
 
   // TODO: https://github.com/connorlogin/cav/issues/36
 });
+
+Deno.test("prepareAssets()", async t => {
+  const clear = async () => {
+    chdir("test");
+    const files = [
+      "root_bundle.tsx.js",
+      "assets/bundle.ts.js",
+      "assets/bundle.tsx.js",
+    ];
+    for (const f of files) {
+      try {
+        await Deno.remove(path.join("./assets", f));
+      } catch {
+        // continue
+      }
+    }
+  };
+
+  await t.step("no arguments", async () => {
+    chdir("test");
+    await clear();
+
+    await prepareAssets();
+    await Deno.stat("./assets/root_bundle.tsx.js");
+    await Deno.stat("./assets/assets/bundle.ts.js");
+    await Deno.stat("./assets/assets/bundle.tsx.js");
+
+    await clear();
+  });
+
+  await t.step("cwd", async () => {
+    chdir("root");
+    await clear();
+
+    await prepareAssets({ cwd: import.meta.url });
+    await Deno.stat("./assets/root_bundle.tsx.js");
+    await Deno.stat("./assets/assets/bundle.ts.js");
+    await Deno.stat("./assets/assets/bundle.tsx.js");
+
+    await clear();
+  });
+
+  await t.step("doesn't bundle unsuffixed ts(x) files", async () => {
+    chdir("test");
+    await clear();
+
+    await prepareAssets();
+    const check = [
+      "./assets/ts.ts.js",
+      "./assets/tsx.tsx.js",
+    ];
+    for (const c of check) {
+      try {
+        await Deno.stat(c);
+      } catch {
+        continue;
+      }
+      throw new Error(`It bundled ${c} when it shouldn't have`);
+    }
+
+    await clear();
+  });
+
+  await t.step("ignoreErrors", async () => {
+    
+  });
+
+  // TODO: await t.step("ignoreWarnings", async () => {
+
+  // });
+});
+
+Deno.test("watchAssets()", async t => {
+  await t.step("no arguments (assets dir)", async () => {
+    
+  });
+
+  await t.step("cwd", async () => {
+
+  });
+
+  await t.step("dir", async () => {
+
+  });
+
+  await t.step("cwd + dir", async () => {
+
+  });
+
+  await t.step("ignoreErrors", async () => {
+
+  });
+
+  // TODO: await t.step("ignoreWarnings", async () => {
+
+  // });
+});
