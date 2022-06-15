@@ -2,7 +2,7 @@
 
 // TODO: Add option for source maps for prepared bundles
 
-import { fileServer, graph, path } from "./deps.ts";
+import { fileServer, graph, path, emit } from "./deps.ts";
 import { HttpError } from "./serial.ts";
 import { noMatch } from "./router.ts";
 
@@ -73,16 +73,6 @@ export async function serveAsset(
   const cwd = parseCwd(opt.cwd || ".");
   const dir = opt.dir || "assets";
   const filePath = opt.path;
-
-  // NOTE: This is a no-op in production, and calling it multiple times with the
-  // watch option should be safe. Slight overhead  
-  // TODO: Benchmark the overhead to see if it's worth rethinking this (doubt
-  // it)
-  prepareAssets({
-    cwd,
-    dir,
-    watch: true,
-  });
 
   const process = async (filePath: string) => {
     filePath = path.join(
