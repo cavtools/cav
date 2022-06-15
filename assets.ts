@@ -143,12 +143,18 @@ export async function serveAsset(
     // REVIEW: Still not sure if rebasing index files is a good idea or not
 
     const url = new URL(req.url);
-    if (!p.wasAutoIndexed || url.pathname.endsWith("/")) {
+    if (
+      !p.wasAutoIndexed || // It wasn't an index file from a nested directory
+      !originalResponse.body || // It was a 304 response
+      url.pathname.endsWith("/") // It didn't come from a router
+    ) {
       return originalResponse;
     }
 
+    // This is where nested folder index.html relative link rebasing happens
+
     const basename = path.basename(url.pathname);
-    let content = await Deno.readTextFile(servePath);
+    let content = await originalResponse.text();
 
     content = content.replaceAll(htmlRelativeLinks, (match, group) => {
       const newGroup = group.replace(
