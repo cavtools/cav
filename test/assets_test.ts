@@ -225,6 +225,10 @@ Deno.test("watchAssets()", async t => {
 
   });
 
+  await t.step("fail silently with insufficient permissions", async () => {
+    
+  });
+
   // TODO: await t.step("ignoreWarnings", async () => {
 
   // });

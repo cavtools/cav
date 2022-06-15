@@ -1,6 +1,5 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { path } from "../deps.ts";
 import { endpoint, assets, redirect, socket } from "../endpoints.ts";
 import { assertEquals } from "./test_deps.ts";
 import { router } from "../router.ts";
@@ -206,6 +205,10 @@ Deno.test("assets()", async t => {
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
+  });
+
+  await t.step("watcher fails silently", async () => {
+    throw new Error("TODO");
   });
 
   // TODO: Each of the endpoint options, individually
