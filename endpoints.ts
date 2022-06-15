@@ -689,7 +689,7 @@ function inputParser(opt: {
 /** Initializer options for creating an `assets()` endpoint. */
 export interface AssetsInit extends Omit<ServeAssetOptions, "path"> {
   /** If true, turns off asset preparation. */
-  dontPrepare?: boolean;
+  noPrep?: boolean;
 };
 
 /**
@@ -698,17 +698,16 @@ export interface AssetsInit extends Omit<ServeAssetOptions, "path"> {
  * specified.
  *
  * The calculated assets directory will be prepared and watched using
- * `watchAssets()` unless the `dontPrepare` option is `true`. If the
+ * `watchAssets()` unless the `noPrep` option is `true`. If the
  * `--unstable` flag wasn't used or the `--allow-write` permission isn't
  * available for the directory, asset preparation will fail silently.
  */
 export function assets(init?: AssetsInit) {
   // Note that this is a no-op in production
-  if (!init?.dontPrepare) {
-    watchAssets({
+  if (!init?.noPrep) {
+    watchAssets({ // Don't await
       cwd: init?.cwd,
       dir: init?.dir,
-      ignoreErrors: true,
     });
   }
 

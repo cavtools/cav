@@ -4,6 +4,7 @@ import { path } from "../deps.ts";
 import { endpoint, assets, redirect, socket } from "../endpoints.ts";
 import { assertEquals } from "./test_deps.ts";
 import { router } from "../router.ts";
+import { unwatchAssets } from "../assets.ts";
 import type { http } from "../deps.ts";
 import type { Router } from "../router.ts";
 import type { Endpoint, Socket, ResolveArg, SetupArg } from "../endpoints.ts";
@@ -135,13 +136,22 @@ Deno.test("assets()", async t => {
 
   await t.step("args: no options", async () => {
     Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
-    const ass = assets();
+
+    // assets() with no options starts an asset watcher by default. The assets
+    // dir needs to be unwatched when this test is over or it'll fail. Do that
+    // at the end
+    const ass = assets();    
     const _check: AssertEquals<typeof ass, Endpoint<{
       path: "*";
       resolve: (
         x: ResolveArg<{ path: "*" }>,
       ) => Promise<Response>;
     }>> = true;
+
+    // This delay is needed because watchAssets() does an initial prep loop
+    // before watching the file system, and the promise it returns isn't awaited
+    // when its used inside assets()
+    await new Promise(r => setTimeout(r, 100));
 
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(res1.status, 200);
@@ -150,8 +160,9 @@ Deno.test("assets()", async t => {
 
     const res2 = await ass(new Request("http://_/root_bundle.tsx.js"), conn);
     assertEquals(res2.status, 200);
-    assertEquals(res2.headers.get("content-type"), "application/javascript");
+    await res2.text();
 
+    unwatchAssets();
     Deno.chdir(originalCwd);
   });
 
@@ -159,7 +170,7 @@ Deno.test("assets()", async t => {
     Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
     const ass = assets({
       cwd: "./assets",
-      dontPrepare: true,
+      noPrep: true,
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(res1.status, 200);
@@ -171,7 +182,7 @@ Deno.test("assets()", async t => {
     Deno.chdir(path.join(path.fromFileUrl(import.meta.url), "../..")); // root
     const ass = assets({
       cwd: import.meta.url,
-      dontPrepare: true,
+      noPrep: true,
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/index.html</h1>");
@@ -182,7 +193,7 @@ Deno.test("assets()", async t => {
     Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
     const ass = assets({
       dir: "./assets/assets",
-      dontPrepare: true,
+      noPrep: true,
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
@@ -194,7 +205,7 @@ Deno.test("assets()", async t => {
     const ass = assets({
       cwd: import.meta.url,
       dir: "./assets/assets",
-      dontPrepare: true,
+      noPrep: true,
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
@@ -209,7 +220,7 @@ Deno.test("assets()", async t => {
   // TODO: Empty directories
   // TODO: mime-type for non-html files
   // TODO: http ranges for retrieving partial content
-  // TODO: dontPrepare: false
+  // TODO: noPrep: false
 });
 
 Deno.test("redirect()", async t => {

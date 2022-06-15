@@ -190,7 +190,6 @@ async function findModules(dir: string) {
       modules.push(...(await findModules(path.join(dir, entry.name))));
     }
   }
-
   return modules;
 }
 
@@ -224,7 +223,7 @@ export interface PrepareAssetsOptions {
    /**
     * If this is true, any errors that occur will be silently suppressed.
     */
-   ignoreErrors?: boolean;
+  //  ignoreErrors?: boolean;
    /**
     * If this is true, any console warnings that would've occurred will be
     * suppressed.
@@ -250,29 +249,50 @@ export async function prepareAssets(opt?: PrepareAssetsOptions) {
   const dir = opt?.dir || "assets";
   const assets = path.join(cwd, dir);
 
-  try {
-    const check = await Deno.stat(assets);
-    if (!check.isDirectory) {
-      throw new Error(`path given is not a directory: ${assets}`);
-    }
+  const check = await Deno.stat(assets);
+  if (!check.isDirectory) {
+    throw new Error(`path given is not a directory: ${assets}`);
+  }
 
-    const modules = await findModules(assets);
-    for (const m of modules) {
-      await bundle(m);
-    }
-  } catch (err) {
-    if (!opt?.ignoreErrors) {
-      throw err;
-    }
+  const modules = await findModules(assets);
+  for (const m of modules) {
+    await bundle(m);
   }
 }
 
-const watchingAssets = new Set<string>();
+interface CloseableFsWatcher extends AsyncIterable<Deno.FsEvent | "close"> {
+  close: () => void;
+}
+
+function closableFsWatcher(paths: string | string[]) {
+  const fsWatcher = Deno.watchFs(paths);
+  const fsIter = fsWatcher[Symbol.asyncIterator]();
+  let closeWatcher = () => {};
+  const closeWatcherPromise = new Promise<{ value: "close" }>(res => {
+    closeWatcher = () => res({ value: "close" });
+  });
+  
+  return {
+    [Symbol.asyncIterator]: () => ({
+      next: () => Promise.race([fsIter.next(), closeWatcherPromise]),
+    }),
+    close: () => {
+      fsWatcher.close();
+      closeWatcher();
+    },
+  };
+}
+
+interface Watcher {
+  root: CloseableFsWatcher;
+  files: Map<string, CloseableFsWatcher>;
+}
+
+const watching = new Map<string, Watcher>();
 
 /**
- * Prepares the assets directory using `prepareAssets()` and watches it for
- * changes to the ts(x) bundles or their dependencies. When a change occurs, the
- * bundles will be rebuilt. 
+ * Prepares the assets directory and watches it for changes to the ts(x) bundles
+ * or their dependencies. When a change occurs, the bundles will be rebuilt. 
  *
  * The path to the assets directory is specified with the optional `cwd` and
  * `dir` options. The default is `{ cwd: ".", dir: "assets" }`. (Tip:
@@ -286,37 +306,27 @@ const watchingAssets = new Set<string>();
   const cwd = parseCwd(opt?.cwd || ".");
   const dir = opt?.dir || "assets";
   const assets = path.join(cwd, dir);
-  if (watchingAssets.has(assets)) {
+  if (watching.has(assets)) {
     return;
   }
 
-  const isFile = async (path: string) => {
-    try {
-      const check = await Deno.stat(path);
-      return check.isFile;
-    } catch {
-      return false;
-    }
+  const watcher: Watcher = {
+    root: closableFsWatcher(assets),
+    files: new Map<string, CloseableFsWatcher>(),
   };
+  watching.set(assets, watcher);
 
-  const watching = new Set<string>();
   const watch = async (input: string, skipBundle?: boolean) => {
     input = path.resolve(input);
-    if (!await isFile(input)) {
-      watching.delete(input);
+    if (watcher.files.has(input)) {
       return;
     }
-    if (watching.has(input)) {
-      return;
-    }
-    watching.add(input);
 
     if (!skipBundle) {
       try {
         await bundle(input);
       } catch (e) {
         console.warn("Failed to bundle", input, "-", e);
-        watching.delete(input);
         return;
       }
     }
@@ -328,55 +338,71 @@ const watchingAssets = new Set<string>();
       );
     } catch (e) {
       console.warn("Failed to graph", input, "-", e);
-      watching.delete(input);
       return;
     }
 
-    // Wait for a change in the module or one of its dependencies
     const deps = inputGraph.modules
       .filter((m) => m.specifier.startsWith("file://"))
       .map((m) => path.fromFileUrl(m.specifier));
-    for await (const _ of Deno.watchFs(deps)) {
+
+    const fsw = closableFsWatcher(deps);
+    watcher.files.set(input, fsw);
+
+    let closed = false;
+    for await (const evt of fsw) {
+      if (evt === "close") {
+        closed = true;
+      }
       break;
     }
-
-    // Delete it first to skip the redundancy check at the beginning and force a
-    // rebundle
-    watching.delete(input);
-
-    // Keep watching if it's still a file
-    if (await isFile(input)) {
+    watcher.files.delete(input);
+    if (!closed) {
       watch(input); // Don't await
     }
   };
 
   try {
-    await prepareAssets({ ...opt, ignoreErrors: false });
-  } catch (err) {
-    if (!opt?.ignoreErrors) {
-      throw err;
+    await prepareAssets({ ...opt });
+    const modules = await findModules(assets);
+    for (const m of modules) {
+      // The true skips the initial bundling since prepareAssets just did it
+      watch(m, true); // Don't await
     }
-    return;
+  } catch (err) {
+    watcher.root.close();
+    watching.delete(assets);
+    throw err;
   }
 
-  watchingAssets.add(assets);
-  const modules = await findModules(assets);
-  for (const m of modules) {
-    // The true skips the initial bundling since prepareAssets just did it
-    watch(m, true); // Don't await
-  }
-
-  // The disjoint fsevent loop that watches for new files being added. Wrapped
-  // in an IIFE so it doesn't block
-  (async () => {
-    for await (const event of Deno.watchFs(dir)) {
-      if (event.kind === "create" || event.kind === "modify") {
-        for (const p of event.paths) {
-          if (p.endsWith("_bundle.ts") || p.endsWith("_bundle.tsx")) {
-            watch(p); // Don't await
-          }
+  for await (const event of watcher.root) {
+    if (event === "close") {
+      break;
+    }
+    if (event.kind === "create" || event.kind === "modify") {
+      for (const p of event.paths) {
+        if (p.endsWith("_bundle.ts") || p.endsWith("_bundle.tsx")) {
+          watch(p); // Don't await
         }
       }
     }
-  })();
+  }
+}
+
+/**
+ * Stops watching an assets directory that was prepared with `watchAssets()`. If
+ * the directory wasn't being watched, this is a no-op.
+ */
+export function unwatchAssets(opt?: PrepareAssetsOptions) {
+  const cwd = parseCwd(opt?.cwd || ".");
+  const dir = opt?.dir || "assets";
+  const assets = path.join(cwd, dir);
+  const watcher = watching.get(assets);
+  if (watcher) {
+    watcher.root.close();
+    for (const [k, v] of watcher.files.entries()) {
+      v.close();
+      watcher.files.delete(k);
+    }
+    watching.delete(assets);
+  }
 }
