@@ -135,23 +135,32 @@ Deno.test("assets()", async t => {
 
   await t.step("args: no options", async () => {
     Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
-    const ass = assets(); // can't help myself
+    const ass = assets();
     const _check: AssertEquals<typeof ass, Endpoint<{
       path: "*";
       resolve: (
         x: ResolveArg<{ path: "*" }>,
       ) => Promise<Response>;
     }>> = true;
+
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(res1.status, 200);
     assertEquals(res1.headers.get("content-type"), "text/html");
     assertEquals(await res1.text(), "<h1>assets/index.html</h1>");
+
+    const res2 = await ass(new Request("http://_/root_bundle.tsx.js"), conn);
+    assertEquals(res2.status, 200);
+    assertEquals(res2.headers.get("content-type"), "application/javascript");
+
     Deno.chdir(originalCwd);
   });
 
   await t.step("args: cwd set to directory", async () => {
     Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
-    const ass = assets({ cwd: "./assets"});
+    const ass = assets({
+      cwd: "./assets",
+      dontPrepare: true,
+    });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(res1.status, 200);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
@@ -160,7 +169,10 @@ Deno.test("assets()", async t => {
 
   await t.step("args: cwd set to current file", async () => {
     Deno.chdir(path.join(path.fromFileUrl(import.meta.url), "../..")); // root
-    const ass = assets({ cwd: import.meta.url });
+    const ass = assets({
+      cwd: import.meta.url,
+      dontPrepare: true,
+    });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/index.html</h1>");
     Deno.chdir(originalCwd);
@@ -168,7 +180,10 @@ Deno.test("assets()", async t => {
 
   await t.step("args: dir", async () => {
     Deno.chdir(path.dirname(path.fromFileUrl(import.meta.url))); // test
-    const ass = assets({ dir: "./assets/assets" });
+    const ass = assets({
+      dir: "./assets/assets",
+      dontPrepare: true,
+    });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
     Deno.chdir(originalCwd);
@@ -176,7 +191,11 @@ Deno.test("assets()", async t => {
 
   await t.step("args: cwd + dir", async () => {
     Deno.chdir(path.join(path.fromFileUrl(import.meta.url), "../..")); // root
-    const ass = assets({ cwd: import.meta.url, dir: "./assets/assets" });
+    const ass = assets({
+      cwd: import.meta.url,
+      dir: "./assets/assets",
+      dontPrepare: true,
+    });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
     Deno.chdir(originalCwd);
@@ -190,6 +209,7 @@ Deno.test("assets()", async t => {
   // TODO: Empty directories
   // TODO: mime-type for non-html files
   // TODO: http ranges for retrieving partial content
+  // TODO: dontPrepare: false
 });
 
 Deno.test("redirect()", async t => {
