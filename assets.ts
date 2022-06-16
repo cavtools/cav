@@ -211,8 +211,7 @@ async function bundle(input: string) {
 
 /**
  * Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder into an
- * adjacent file with the same name plus a .js suffix, recursively. The bundles
- * will be compiled with `lib`s targeting the browser.
+ * adjacent file with the same name plus a .js suffix, recursively.
  *
  * The path to the assets directory is specified with the optional `cwd` and
  * `dir` options. The default is `{ cwd: ".", dir: "assets" }`. (Tip:

@@ -95,9 +95,7 @@ export type Serializers = Record<string, AnySerializer | null>;
 /**
  * Determines if the object is a plain object or not. This also checks for
  * prototype poisoning; it returns false whenever the prototype of an input
- * object was poisoned before JSON.parsing it. See
- * https://book.hacktricks.xyz/pentesting-web/deserialization/nodejs-proto-prototype-pollution
- * for more information on prototype poisoning.
+ * object was poisoned before JSON.parsing it.
  */
 export function isPojo(obj: unknown): obj is Record<string | symbol, unknown> {
   return (
