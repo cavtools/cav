@@ -6,21 +6,25 @@ import { fileServer, graph, path, emit } from "./deps.ts";
 import { HttpError } from "./serial.ts";
 import { noMatch } from "./router.ts";
 
-/** Options controlling how assets are found and served. */
-export interface ServeAssetOptions {
+/** Object denoting the location of an assets directory. */
+export interface AssetsLocation {
   /**
-   * Sets the current working directory when looking for the asset directory. If
-   * a file:// path is provided, the parent folder of the path is used. This is
+   * Sets the current working directory when looking for the assets folder. If a
+   * file:// path is provided, the parent folder of the path is used. This is
    * useful if you want to serve assets relative to the current file using
    * `import.meta.url`. Default: `"."`
    */
-  cwd?: string;
-  /**
-   * The directory to serve assets from inside the cwd. This pattern encourages
-   * keeping public asset files separated from source code, so that code isn't
-   * served by mistake. Default: `"assets"`
-   */
-  dir?: string;
+   cwd?: string;
+   /**
+    * The path of the assets directory relative to the cwd. This pattern
+    * encourages keeping public asset files separated from application source
+    * code, so that code isn't processed by mistake. Default: `"assets"`
+    */
+   dir?: string;
+}
+
+/** Options controlling how assets are found and served. */
+export interface ServeAssetOptions extends AssetsLocation {
   /**
    * Path of the file to serve relative to the assets folder. (Required)
    */
@@ -205,32 +209,6 @@ async function bundle(input: string) {
   await Deno.writeTextFile(output, js);
 }
 
-/** Options for `prepareAssets()` and `watchAssets()`. */
-export interface PrepareAssetsOptions {
-  /**
-   * Sets the current working directory when looking for the assets folder. If a
-   * file:// path is provided, the parent folder of the path is used. This is
-   * useful if you want to serve assets relative to the current file using
-   * `import.meta.url`. Default: `"."`
-   */
-   cwd?: string;
-   /**
-    * The path of the assets directory relative to the cwd. This pattern
-    * encourages keeping public asset files separated from application source
-    * code, so that code isn't processed by mistake. Default: `"assets"`
-    */
-   dir?: string;
-   /**
-    * If this is true, any errors that occur will be silently suppressed.
-    */
-  //  ignoreErrors?: boolean;
-   /**
-    * If this is true, any console warnings that would've occurred will be
-    * suppressed.
-    */
-   // ignoreWarnings?: boolean;
-}
-
 /**
  * Bundles every bundle.ts(x) or *_bundle.ts(x) file in the folder into an
  * adjacent file with the same name plus a .js suffix, recursively. The bundles
@@ -244,9 +222,9 @@ export interface PrepareAssetsOptions {
  * will be thrown. If the `ignoreErrors` option is true, the error will be
  * suppressed.
  */
-export async function prepareAssets(opt?: PrepareAssetsOptions) {
-  const cwd = parseCwd(opt?.cwd || ".");
-  const dir = opt?.dir || "assets";
+export async function prepareAssets(loc?: AssetsLocation) {
+  const cwd = parseCwd(loc?.cwd || ".");
+  const dir = loc?.dir || "assets";
   const assets = path.join(cwd, dir);
 
   const check = await Deno.stat(assets);
@@ -290,6 +268,16 @@ interface Watcher {
 
 const watching = new Map<string, Watcher>();
 
+/** Options for the `watchAssets()` function. */
+export interface WatchAssetsOptions extends AssetsLocation {
+  /**
+   * If this is true and an error occurs during the initial asset preparation
+   * loop (due to insufficient permissions, for example), the error will be
+   * suppressed and asset watching will fail silently.
+   */
+  failSilently?: boolean;
+}
+
 /**
  * Prepares the assets directory and watches it for changes to the ts(x) bundles
  * or their dependencies. When a change occurs, the bundles will be rebuilt. 
@@ -302,7 +290,7 @@ const watching = new Map<string, Watcher>();
  * will be thrown. If the `ignoreErrors` option is true, the error will be
  * suppressed.
  */
- export async function watchAssets(opt?: PrepareAssetsOptions) {
+ export async function watchAssets(opt?: WatchAssetsOptions) {
   const cwd = parseCwd(opt?.cwd || ".");
   const dir = opt?.dir || "assets";
   const assets = path.join(cwd, dir);
@@ -371,30 +359,53 @@ const watching = new Map<string, Watcher>();
   } catch (err) {
     watcher.root.close();
     watching.delete(assets);
-    throw err;
+    if (opt?.failSilently) {
+      return;
+    } else {
+      throw err;
+    }
   }
 
-  for await (const event of watcher.root) {
-    if (event === "close") {
-      break;
-    }
-    if (event.kind === "create" || event.kind === "modify") {
-      for (const p of event.paths) {
-        if (p.endsWith("_bundle.ts") || p.endsWith("_bundle.tsx")) {
-          watch(p); // Don't await
+  // Disjoint fs event loop. When the watchAssets function is awaited, the
+  // promise it returns will be resolved after the initial preparation is
+  // complete
+  (async () => {
+    for await (const event of watcher.root) {
+      if (event === "close") {
+        break;
+      }
+      if (event.kind === "create" || event.kind === "modify") {
+        for (const p of event.paths) {
+          if (p.endsWith("_bundle.ts") || p.endsWith("_bundle.tsx")) {
+            watch(p); // Don't await
+          }
         }
       }
     }
-  }
+  })();
 }
 
 /**
  * Stops watching an assets directory that was prepared with `watchAssets()`. If
- * the directory wasn't being watched, this is a no-op.
+ * the directory wasn't being watched, this is a no-op. If no location object is
+ * provided, all watched directories will be unwatched. If an empty object is
+ * provided, "./assets" will be unwatched.
  */
-export function unwatchAssets(opt?: PrepareAssetsOptions) {
-  const cwd = parseCwd(opt?.cwd || ".");
-  const dir = opt?.dir || "assets";
+export function unwatchAssets(loc?: AssetsLocation) {
+  if (!loc) {
+    for (const [k, v] of watching.entries()) {
+      v.root.close();
+      for (const [k2, v2] of v.files.entries()) {
+        v2.close();
+        v.files.delete(k2);
+      }
+      watching.delete(k);
+    }
+    return;
+  }
+
+  const cwd = parseCwd(loc.cwd || ".");
+  const dir = loc.dir || "assets";
   const assets = path.join(cwd, dir);
   const watcher = watching.get(assets);
   if (watcher) {

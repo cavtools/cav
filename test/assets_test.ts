@@ -1,7 +1,12 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { path } from "../deps.ts";
-import { serveAsset, prepareAssets } from "../assets.ts";
+import {
+  serveAsset,
+  prepareAssets,
+  watchAssets,
+  unwatchAssets,
+} from "../assets.ts";
 import { assertEquals } from "./test_deps.ts";
 import { didMatch } from "../router.ts";
 
@@ -194,42 +199,4 @@ Deno.test("prepareAssets()", async t => {
 
     await cleanAssets();
   });
-
-  await t.step("ignoreErrors", async () => {
-    
-  });
-
-  // TODO: await t.step("ignoreWarnings", async () => {
-
-  // });
-});
-
-Deno.test("watchAssets()", async t => {
-  await t.step("no arguments (assets dir)", async () => {
-    
-  });
-
-  await t.step("cwd", async () => {
-
-  });
-
-  await t.step("dir", async () => {
-
-  });
-
-  await t.step("cwd + dir", async () => {
-
-  });
-
-  await t.step("ignoreErrors", async () => {
-
-  });
-
-  await t.step("fail silently with insufficient permissions", async () => {
-    
-  });
-
-  // TODO: await t.step("ignoreWarnings", async () => {
-
-  // });
 });

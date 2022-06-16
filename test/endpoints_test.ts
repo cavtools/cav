@@ -149,7 +149,7 @@ Deno.test("assets()", async t => {
 
     // This delay is needed because watchAssets() does an initial prep loop
     // before watching the file system, and the promise it returns isn't awaited
-    // when its used inside assets()
+    // when its called inside assets()
     await new Promise(r => setTimeout(r, 100));
 
     const res1 = await ass(new Request("http://_"), conn);
@@ -205,10 +205,6 @@ Deno.test("assets()", async t => {
     });
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(await res1.text(), "<h1>assets/assets/index.html</h1>");
-  });
-
-  await t.step("watcher fails silently", async () => {
-    throw new Error("TODO");
   });
 
   // TODO: Each of the endpoint options, individually

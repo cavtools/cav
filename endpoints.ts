@@ -698,16 +698,18 @@ export interface AssetsInit extends Omit<ServeAssetOptions, "path"> {
  * specified.
  *
  * The calculated assets directory will be prepared and watched using
- * `watchAssets()` unless the `noPrep` option is `true`. If the
- * `--unstable` flag wasn't used or the `--allow-write` permission isn't
- * available for the directory, asset preparation will fail silently.
+ * `watchAssets()` unless the `noPrep` option is `true`. If the the
+ * `--allow-write` permission isn't available for the directory, asset watching
+ * will fail silently.
  */
 export function assets(init?: AssetsInit) {
-  // Note that this is a no-op in production
+  // Note that this is a no-op in production (without --allow-write) due to
+  // failSilently
   if (!init?.noPrep) {
     watchAssets({ // Don't await
       cwd: init?.cwd,
       dir: init?.dir,
+      failSilently: true,
     });
   }
 
