@@ -38,6 +38,20 @@ export async function cleanAssets() {
 }
 
 Deno.test("serveAsset()", async t => {
+  await t.step("always 404s for files that start with .", async () => {
+    chdir("test");
+    const req1 = new Request("http://_/.template.html");
+    const res1 = await serveAsset(req1);
+    assertEquals(res1.status, 404);
+  });
+
+  await t.step("skips special serving rules with explicit path", async () => {
+    chdir("test");
+    const req1 = new Request("http://_/.template.html");
+    const res1 = await serveAsset(req1, { path: "/.template.html" });
+    assertEquals(res1.status, 200);
+  });
+
   await t.step("path (root index file)", async () => {
     chdir("test");
     const req = new Request("http://_");
@@ -92,22 +106,14 @@ Deno.test("serveAsset()", async t => {
     assertEquals(res1.status, 404);
   });
 
-  await t.step("redirect /index.html requests", async () => {
-    chdir("test");
-    const req = new Request("http://_/index.html");
-    const res1 = await serveAsset(req, { path: "/index.html" });
-    assertEquals(res1.status, 302);
-    assertEquals(res1.headers.get("location"), "http://_/");
-  });
-
-  await t.step("always 404 for .ts and .tsx files", async () => {
+  await t.step("requests to .ts(x) files without explicit path", async () => {
     chdir("test");
     let req = new Request("http://_/ts.ts");
-    const res1 = await serveAsset(req, { path: "/ts.ts" });
+    const res1 = await serveAsset(req);
     assertEquals(res1.status, 404);
 
     req = new Request("http://_/tsx.tsx");
-    const res2 = await serveAsset(req, { path: "/tsx.tsx" });
+    const res2 = await serveAsset(req);
     assertEquals(res2.status, 404);
   });
 
@@ -117,29 +123,29 @@ Deno.test("serveAsset()", async t => {
     chdir("test");
 
     let req = new Request("http://_");
-    const res1 = await serveAsset(req, { path: "/" });
+    const res1 = await serveAsset(req);
     await res1.text(); // The bodies need to be consumed or the test will fail
     assertEquals(res1.headers.get("content-type"), "text/html");
 
     req = new Request("http://_/cool-plant.jpg");
-    const res2 = await serveAsset(req, { path: "/cool-plant.jpg" });
+    const res2 = await serveAsset(req);
     await res2.text();
     assertEquals(res2.headers.get("content-type"), "image/jpeg");
 
     req = new Request("http://_/css.css");
-    const res3 = await serveAsset(req, { path: "/css.css" });
+    const res3 = await serveAsset(req);
     await res3.text();
     assertEquals(res3.headers.get("content-type"), "text/css");
 
     req = new Request("http://_/js.js");
-    const res4 = await serveAsset(req, { path: "/js.js" });
+    const res4 = await serveAsset(req);
     await res4.text();
     assertEquals(res4.headers.get("content-type"), "application/javascript");
   });
 
   await t.step("etag", async () => {
     let req = new Request("http://_/cool-plant.jpg");
-    const res1 = await serveAsset(req, { path: "/cool-plant.jpg" });
+    const res1 = await serveAsset(req);
     await res1.text();
     const etag = res1.headers.get("etag")!;
     assertEquals(typeof etag, "string");
@@ -147,7 +153,7 @@ Deno.test("serveAsset()", async t => {
     req = new Request("http://_/cool-plant.jpg", {
       headers: { "if-none-match": etag },
     });
-    const res2 = await serveAsset(req, { path: "/cool-plant.jpg" });
+    const res2 = await serveAsset(req);
     assertEquals(res2.status, 304);
   });
 

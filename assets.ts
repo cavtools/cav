@@ -1,10 +1,12 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-// TODO: Add option for source maps for prepared bundles
+// TODO: Add option for source maps for prepared bundles  
+// TODO: Allow specifying paths to bundle explicitly in addition to
+// _bundle.ts(x)
 
 import { fileServer, graph, path, emit } from "./deps.ts";
 import { HttpError } from "./serial.ts";
-import { noMatch } from "./router.ts";
+import { routerContext, noMatch } from "./router.ts";
 
 /** Object denoting the location of an assets directory. */
 export interface AssetsLocation {
@@ -26,9 +28,13 @@ export interface AssetsLocation {
 /** Options controlling how assets are found and served. */
 export interface ServeAssetOptions extends AssetsLocation {
   /**
-   * Path of the file to serve relative to the assets folder. (Required)
+   * The path of the file to serve inside the assets directory. If this isn't
+   * provided, the routed path from the RouterContext associated with the
+   * request will be used, and special asset serving rules will be applied such
+   * as always returning 404 for requests to a filename that starts with a "."
+   * or appending ".js" to requests for ".ts(x)" files.
    */
-  path: string;
+  path?: string;
 }
 
 // When a requested path without a trailing slash resolves to a directory and
@@ -61,36 +67,36 @@ function parseCwd(cwd: string): string {
  */
 export async function serveAsset(
   req: Request,
-  opt: ServeAssetOptions,
+  opt?: ServeAssetOptions,
 ): Promise<Response> {
-  // If the request path ends in /index.html, redirect to the version without
-  // the /index.html  
-  // REVIEW: I feel like I might be missing some edge cases where this behavior
-  // is undesireable, due to the fact the path option and the requested path
-  // might not be the same
-  const url = new URL(req.url);
-  if (url.pathname.endsWith("/index.html")) {
-    url.pathname = path.dirname(url.pathname);
-    return Response.redirect(url.href, 302);
+  const ctx = routerContext(req);
+  const url = ctx.url;
+  let pathname = opt?.path || ctx.path;
+
+  // Special rules for serving files. To opt out, specify the path directly on
+  // the options
+  if (!opt?.path) {
+    if (path.basename(pathname).startsWith(".")) {
+      return noMatch(new Response("404 not found", { status: 404 }));
+    }
+
+    if (pathname.endsWith(".ts") || pathname.endsWith(".tsx")) {
+      pathname = pathname + ".js";
+    }
   }
 
-  const cwd = parseCwd(opt.cwd || ".");
-  const dir = opt.dir || "assets";
-  const filePath = opt.path;
+  const cwd = parseCwd(opt?.cwd || ".");
+  const dir = opt?.dir || "assets";
 
-  const process = async (filePath: string) => {
-    filePath = path.join(
+  try {
+    let filePath = path.join(
       cwd,
       dir,
-      path.join("/", filePath),
+      path.join("/", pathname),
     );
 
     let fileInfo: Deno.FileInfo | null = null;
     try {
-      if (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) {
-        throw new Error(".ts and .tsx files are always ignored");
-      }
-
       fileInfo = await Deno.stat(filePath);
     } catch {
       try {
@@ -125,27 +131,15 @@ export async function serveAsset(
       throw new HttpError("404 not found", { status: 404 });
     }
 
-    return { servePath: filePath, wasAutoIndexed };
-  };
-
-  let servePath = "";
-  try {
-    const p = await process(filePath);
-    servePath = p.servePath;
-    const originalResponse = await fileServer.serveFile(req, servePath);
-
-    // REVIEW: Still not sure if rebasing index files is a good idea or not
-
-    const url = new URL(req.url);
+    const originalResponse = await fileServer.serveFile(req, filePath);
     if (
-      !p.wasAutoIndexed || // It wasn't an index file from a nested directory
-      !originalResponse.body || // It was a 304 response
-      url.pathname.endsWith("/") // It didn't come from a router
+      !wasAutoIndexed || // It wasn't an index file from a nested directory
+      !originalResponse.body // It was a 304 response
     ) {
       return originalResponse;
     }
 
-    // This is where nested folder index.html relative link rebasing happens
+    // Index relative link rebasing for index.html files inside nested folders
 
     const basename = path.basename(url.pathname);
     let content = await originalResponse.text();
@@ -157,8 +151,8 @@ export async function serveAsset(
           m.replace(
             g,
             (
-              // TODO: This isn't complete. Make a note in the docs about trailing
-              // slashes
+              // TODO: This isn't complete. Make a note in the docs about
+              // trailing slashes
               g.startsWith("./")
                 ? `./${basename}/${g.slice(2)}`
                 : g.startsWith("../")

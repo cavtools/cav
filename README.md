@@ -6,7 +6,6 @@ Guiding principles:
 - Modular, maintainable server definitions
 - No-fuss data serialization
 - Automatic end-to-end typesafety
-- Isomorphic client
 - Use The Platform
 
 **Status:** WIP, active, almost tested, and definitely not ready for production.

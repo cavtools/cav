@@ -141,7 +141,7 @@ export interface ResolveErrorArg {
   /** The offending error. */
   error: unknown;
   /** Returns a Response created using an asset from an assets directory. */
-  asset: (opt: ServeAssetOptions) => Promise<Response>;
+  asset: (opt?: ServeAssetOptions) => Promise<Response>;
   /**
    * Returns a redirect Response. If the redirect path doesn't specify an
    * origin, the origin of the current request is used. If the path starts with
@@ -244,7 +244,7 @@ export interface ResolveArg<Schema = unknown> {
   /** The parsed Request body, if any. */
   message: MessageOutput<Schema>;
   /** Returns a Response created using an asset from an assets directory. */
-  asset: (opt: ServeAssetOptions) => Promise<Response>;
+  asset: (opt?: ServeAssetOptions) => Promise<Response>;
   /**
    * Returns a redirect Response. If the redirect path doesn't specify an
    * origin, the origin of the current request is used. If the path starts with
@@ -347,7 +347,7 @@ export function endpoint(
     }
 
     // Utilities
-    const asset = (opt: ServeAssetOptions) => serveAsset(req, opt);
+    const asset = (opt?: ServeAssetOptions) => serveAsset(req, opt);
     const redirect = (to: string, status?: number) => {
       if (to.startsWith("./")) {
         to = stdPath.join(url.pathname, "..", to);
@@ -431,7 +431,7 @@ export function endpoint(
             path: routerCtx.path,
             query: routerCtx.query,
             groups: routerCtx.groups,
-            asset: (opt: ServeAssetOptions) => serveAsset(req, opt),
+            asset: (opt?: ServeAssetOptions) => serveAsset(req, opt),
             redirect,
           });
           error = null;
@@ -714,7 +714,7 @@ export function assets(init?: AssetsInit) {
   }
 
   return endpoint({ path: "*" as const }, x => {
-    return x.asset({ ...init, path: x.path });
+    return x.asset(init);
   });
 }
 
