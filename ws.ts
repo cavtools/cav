@@ -1,15 +1,16 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-import { HttpError, serialize, deserialize } from "./serial.ts";
+import { serialize, deserialize } from "./serial.ts";
 import { normalizeParser } from "./parser.ts";
 import type { Parser } from "./parser.ts";
-import type { Serializers } from "./serial.ts";
+
+// TODO: When a socket event is cancelled, stop calling listeners
 
 /**
  * Isomorphic WebSocket interface with JSON serialization and typed messages.
  */
- export interface WS<Send = unknown, Receive = unknown> {
+ export interface WS<Send = any, Recv = any> {
   /**
    * The raw WebSocket instance.
    */
@@ -39,7 +40,7 @@ import type { Serializers } from "./serial.ts";
    * from the connected party. The message received is deserialized to the
    * event's "message" property.
    */
-  onmessage?: WSMessageListener;
+  onmessage?: WSMessageListener<Recv>;
   /**
    * Listener for the "error" event, triggered when the connection has been
    * closed due to an error or when received/sent data couldn't be
@@ -62,7 +63,7 @@ import type { Serializers } from "./serial.ts";
    * message is received from the connected party. The message received is
    * deserialized before the listener is called.
    */
-  on(type: "message", cb: WSMessageListener<Receive>): void;
+  on(type: "message", cb: WSMessageListener<Recv>): void;
   /**
    * Register an event listener for the "error" event, triggered when the
    * connection has been closed due to an error or when an error is thrown
@@ -93,36 +94,28 @@ export type WSCloseListener = (ev: CloseEvent) => void;
  * Listener for a web socket's "message" event. The message is deserialized from
  * the event data.
  */
-export type WSMessageListener<Message = unknown> = (
-  (message: Message, ev: MessageEvent) => void
+export type WSMessageListener<Recv = any> = (
+  (recv: Recv, ev: MessageEvent) => void
 );
 
 /** Listener for a web socket's "error" event. */
-export type WSErrorListener = (
-  err: Error | null,
-  ev: Event | ErrorEvent,
-) => void;
+export type WSErrorListener = (ev: Event | ErrorEvent) => void;
 
 /**
  * Type that matches any socket. Useful for type constraints.
  */
 // deno-lint-ignore no-explicit-any
-export type AnySocket = WS<any, any>;
+// export type AnySocket = WS<any, any>;
 
 /** Initializer options for the `webSocket()` function. */
-export interface WSInit<Receive = unknown> {
+export interface WSInit<Recv = any> {
   /**
    * For parsing received messages before calling any registered message
    * listeners. If this is omitted, messages will be passed through to listeners
-   * without parsing, typed as `unknown`. If this parser returns undefined, no
+   * without parsing, typed as `any`. If this parser returns undefined, no
    * message event will be triggered.
    */
-  message?: Parser<unknown, Receive> | null;
-  /**
-   * Additional serializers to use when serializing and deserializing
-   * sent/received messages.
-   */
-  serializers?: Serializers | null;
+  recv?: Parser<any, Recv> | null;
 }
 
 /**
@@ -131,13 +124,13 @@ export interface WSInit<Receive = unknown> {
  * with the given URL.
  */
 export function webSocket<
-  Send = unknown,
-  Receive = unknown,
+  Send = any,
+  Recv = any,
 >(
   input: WebSocket | string,
-  init?: WSInit<Receive>,
-): WS<Send, Receive> {
-  type AnyListener = (...a: unknown[]) => unknown;
+  init?: WSInit<Recv>,
+): WS<Send, Recv> {
+  type AnyListener = (...a: any[]) => any;
 
   const raw = typeof input === "string" ? new WebSocket(input, "json") : input;
 
@@ -148,11 +141,7 @@ export function webSocket<
     error: new Set<AnyListener>(),
   };
 
-  // REVIEW: Currently, the listeners are executed in an async try/catch in
-  // order to catch errors that occur in the listeners themselves and log them
-  // instead of letting them bubble. I remember there being a global error
-  // handler in the works for cases like this, maybe this isn't necessary?
-  const trigger = (type: keyof typeof listeners, ...args: unknown[]) => {
+  const trigger = (type: keyof typeof listeners, ...args: any[]) => {
     if (ws[`on${type}`]) {
       (ws[`on${type}`] as AnyListener)(...args);
     }
@@ -161,20 +150,20 @@ export function webSocket<
     }
   };
   
-  const ws: WS<Send, Receive> = {
+  const ws: WS<Send, Recv> = {
     raw,
     send: (data) => {
       try {
-        raw.send(JSON.stringify(serialize(data, init?.serializers)));
+        raw.send(JSON.stringify(serialize(data)));
       } catch (err) {
-        trigger("error", err);
+        console.error("Failed to send message:", err);
       }
     },
     close: (code, reason) => {
       raw.close(code, reason);
     },
     on: (type, cb) => {
-      listeners[type].add(cb as (...a: unknown[]) => unknown);
+      listeners[type].add(cb as (...a: any[]) => any);
     },
     off: (type, cb: (ev: Event | Error) => void) => {
       if (!type && !cb) {
@@ -194,6 +183,7 @@ export function webSocket<
 
   raw.addEventListener("open", ev => trigger("open", ev));
   raw.addEventListener("close", ev => trigger("close", ev));
+  raw.addEventListener("error", ev => trigger("error", ev));
 
   const decoder = new TextDecoder();
   raw.addEventListener("message", async ev => {
@@ -201,7 +191,7 @@ export function webSocket<
       return;
     }
 
-    let message: Receive;
+    let recv: Recv;
     try {
       if (
         typeof ev.data !== "string" &&
@@ -210,43 +200,22 @@ export function webSocket<
       ) {
         throw new Error(`Invalid data received: ${ev.data}`);
       }
-  
-      message = deserialize(
-        JSON.parse(
-          typeof ev.data === "string"
-            ? ev.data
-            : ArrayBuffer.isView(ev.data)
-            ? decoder.decode(ev.data)
-            : await ev.data.text(), // Blob
-        ),
-        init?.serializers,
-      );
-  
-      if (init?.message) {
-        const parseMessage = normalizeParser(init.message);
-        message = await parseMessage(message) as Receive;
+
+      recv = deserialize(JSON.parse(
+        typeof ev.data === "string" ? ev.data
+        : ArrayBuffer.isView(ev.data) ? decoder.decode(ev.data)
+        : await ev.data.text() // Blob
+      ));
+
+      if (init?.recv) {
+        const parseRecv = normalizeParser(init.recv);
+        recv = await parseRecv(recv) as Recv;
       }
     } catch (err) {
-      trigger("error", err, null);
+      console.error("Socket message failed to parse:", err);
       return;
     }
-
-    if (message instanceof HttpError) {
-      trigger("error", message, null);
-      return;
-    }
-
-    if (typeof message === "undefined") {
-      return;
-    }
-
-    trigger("message", message, ev);
-  });
-
-  raw.addEventListener("error", (ev) => {
-    const evt = ev as ErrorEvent;
-    const err = evt.message ? new Error(evt.message) : null;
-    trigger("error", err, ev);
+    trigger("message", recv, ev);
   });
 
   return ws;

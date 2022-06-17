@@ -6,15 +6,14 @@
   "configurations": [
     {
       "request": "launch",
-      "name": "Test file",
+      "name": "Launch Program",
       "type": "pwa-node",
       "program": "${file}",
       "cwd": "${workspaceFolder}",
       "runtimeExecutable": "deno",
       "runtimeArgs": [
-        "test",
-        "--unstable",
-        "--inspect-brk",
+        "run",
+        "--inspect",
         "--allow-all"
       ],
       "attachSimplePort": 9229

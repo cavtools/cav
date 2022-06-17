@@ -1,95 +1,61 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { http } from "./deps.ts";
+import { http, path } from "./deps.ts";
+import { createEtagHash, should304 } from "./_etag.ts";
+import { context } from "./context.ts";
+import type { ParamRecord } from "./context.ts";
 import type {
   RouterShape,
   RouterRequest,
   Handler,
 } from "./client.ts";
 
-// TODO: Optimization idea: For nested objects, instead of creating a new
-// router, create multiple URL patterns so that fewer functions get called when
-// routing a request. i.e. "/foo/bar" is fewer functions than foo: { bar: end }
-
-/**
- * Metadata object for caching and tracking information about how a Request has
- * been routed so far in the handling process.
- */
-export interface RouterContext {
-  /** new URL(req.url) */
-  url: URL;
-  /** The current, unrouted portion of the requested path. */
-  path: string;
-  /** The raw query string parameters, as an object. */
-  query: Record<string, string | string[]>;
-  /** The path groups captured during the routing process so far. */
-  groups: Record<string, string | string[]>;
-  /**
-   * If this isn't null, this Response should be returned as soon as possible in
-   * the routing process. It means the path requested wasn't canonical, and this
-   * 302 Response will redirect the client to the canonical URL instead.
-   */
-  redirect: Response | null;
-}
-
-const _routerContext = Symbol("_routerContext");
-
-/** Record representing query string parameters. */
-export type QueryRecord = Record<string, string | string[]>;
-
-/** Record representing path groups captured during routing. */
-export type GroupsRecord = Record<string, string | string[]>;
-
-/**
- * Hook for getting routing metadata from a Request. If there isn't already a
- * RouterContext associated with the Request, a new one will be generated. The
- * same RouterContext object is returned on every subsequent call to
- * `routerContext()` with this Request.
- *
- * Use this to get information about how the Request has been routed so far, if
- * at all. Routers read and modify this context internally and Endpoints read
- * from it when determining whether to respond to the Request or not (404).
- */
-export function routerContext(request: Request): RouterContext {
-  const req = request as Request & { [_routerContext]?: RouterContext };
-  if (req[_routerContext]) {
-    return req[_routerContext]!;
+// I was using URLPatterns in the router, but because of how the E2E typesafety
+// works in Cav, it's much easier to use a simpler router syntax while still
+// allowing Endpoints to use the full URLPattern syntax. People won't like this
+// but it saves a lot of work and prevents a lot of edge cases that would create
+// behavior that looks correct and compiles correctly, but shouldn't
+function matchPattern(pattern: string[], ctxPath: string[]): {
+  param: ParamRecord;
+  nextPath: string[];
+} | null {
+  // The empty pattern only matches an empty path
+  if (!pattern.length && ctxPath.length) {
+    return null;
   }
 
-  const url = new URL(req.url);
-  const path = `/${url.pathname.split("/").filter((p) => !!p).join("/")}`;
-  let redirect: Response | null = null;
-  if (path !== url.pathname) {
-    url.pathname = path;
-    redirect = Response.redirect(url.href, 302);
+  // The wildcard route forwards its path
+  if (pattern.length === 1 && pattern[0] === "*") {
+    return {
+      param: {},
+      nextPath: ctxPath,
+    };
   }
 
-  const query: Record<string, string | string[]> = {};
-  for (const [k, v] of url.searchParams.entries()) {
-    const old = query[k];
-    if (typeof old === "string") {
-      query[k] = [old, v];
-    } else if (Array.isArray(old)) {
-      query[k] = [...old, v];
+  if (pattern.length > ctxPath.length) {
+    return null;
+  }
+
+  const param: ParamRecord = {};
+  let i = 0;
+  for (; i < pattern.length; i++) {
+    if (pattern[i].startsWith(":")) {
+      param[pattern[i].slice(1)] = ctxPath[i];
     } else {
-      query[k] = v;
+      const p = decodeURIComponent(pattern[i]);
+      const s = decodeURIComponent(ctxPath[i]);
+      if (p !== s) {
+        return null;
+      }
     }
   }
 
-  const ctx: RouterContext = {
-    url,
-    path,
-    groups: {},
-    query,
-    redirect,
-  };
-  Object.assign(req, { [_routerContext]: ctx });
-  return ctx;
+  return { param, nextPath: ctxPath.slice(i) };
 }
 
 /** Cav Router handlers, for routing requests. */
 // deno-lint-ignore ban-types
-export type Router<S extends RouterShape = {}>  = S & ((
+export type Router<S extends RouterShape = {}> = S & ((
   req: RouterRequest<S>,
   conn: http.ConnInfo,
 ) => Promise<Response>);
@@ -98,72 +64,133 @@ export type Router<S extends RouterShape = {}>  = S & ((
  * Constructs a new Router handler using the provided routes. The route
  * properties are also available on the returned Router function.
  */
-export function router<S extends RouterShape>(routes: S): Router<S> {
+export function router<S extends RouterShape>(
+  routes: S & {
+    // Type errors whenever an invalid path is used on a router
+    [K in keyof S]: (
+      K extends (
+        // Duplicate slashes
+        | `${string}//${string}`
+        // Leading/trailing slashes
+        | `/${string}`
+        | `${string}/`
+        // '.' or '..' as path segments
+        | `../${string}`
+        | `./${string}`
+        | `${string}/..`
+        | `${string}/.`
+        | `${string}/../${string}`
+        | `${string}/./${string}`
+        // Asterisks that aren't the fallback wildcard route
+        | `${string}*/${string}`
+        | `${string}/*${string}`
+      ) ? never
+      : S[K]
+    );
+  },
+): Router<S> {
   const shape: Record<string, Handler | Handler[]> = {};
-  for (let [k, v] of Object.entries(routes)) {
-    if (!v) {
+  for (let [k, v] of Object.entries(routes as RouterShape)) {
+    if (typeof v === "undefined" || v === null) {
       continue;
     }
 
-    k = k.split("/").filter(k2 => !!k2).join("/");
-    const old = shape[k];
+    if (typeof v === "string") {
+      const staticStr = v;
 
-    if (!old) {
-      if (typeof v === "function" || Array.isArray(v)) {
-        shape[k] = v;
-      } else {
-        shape[k] = router(v);
+      // When serving static strings, content-type is determined by the
+      // extension in the route. If there isn't one, fallback to HTML. Only some
+      // extensions are supported for now. It's important that content-type
+      // detection isn't run based on the content of a dynamic string (in an
+      // endpoint) because it'd open an XSS vuln
+      const ext = path.extname(k);
+      let type: string;
+      switch(ext) {
+        case ".html": type = "text/html; charset=UTF-8"; break;
+        case ".md": type = "text/markdown; charset=UTF-8"; break;
+        case ".css": type = "text/css; charset=UTF-8"; break;
+        case ".txt": type = "text/plain; charset=UTF-8"; break;
+        case ".js": type = "text/javascript; charset=UTF-8"; break;
+        case ".json": type = "application/json; charset=UTF-8"; break;
+        case ".svg": type = "image/svg+xml; charset=UTF-8"; break;
+        case ".rss": type = "application/rss+xml; charset=UTF-8"; break;
+        case ".xml": type = "application/xml; charset=UTF-8"; break;
+        default: type = "text/html; charset=UTF-8";
       }
-    } else if (Array.isArray(old)) {
-      if (typeof v === "function") {
-        shape[k] = [...old, v];
-      } else if (Array.isArray(v)) {
-        shape[k] = [...old, ...v];
-      } else {
-        shape[k] = [...old, router(v)];
-      }
-    } else {
-      if (typeof v === "function") {
-        shape[k] = [old, v];
-      } else if (Array.isArray(v)) {
-        shape[k] = [old, ...v];
-      } else {
-        shape[k] = [old, router(v)];
-      }
+
+      // Because there's no file info to work with, we generate the etag using
+      // the entire string. It's a static string, therefore we only have to do
+      // this once
+      const etag = createEtagHash(staticStr);
+      const modified = new Date();
+
+      v = async (req: Request) => {
+        if (req.method === "OPTIONS") {
+          return new Response(null, {
+            status: 204,
+            headers: { "allow": "OPTIONS, GET, HEAD" },
+          });
+        }
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          return new Response("405 method not allowed", {
+            status: 405,
+            headers: { "allow": "OPTIONS, GET, HEAD" },
+          });
+        }
+
+        const headers = new Headers();
+        headers.set("etag", await etag);
+        headers.set("last-modified", modified.toUTCString());
+        headers.set("content-type", type);
+
+        // This works similarly to how the std lib does it in their file server
+        if (should304({
+          req,
+          etag: await etag,
+          modified,
+        })) {
+          return new Response(null, { status: 304, headers });
+        }
+        
+        const res = new Response(staticStr, { headers });
+        if (req.method === "HEAD") {
+          return new Response(null, { headers: res.headers });
+        }
+        return res;
+      };
     }
+
+    shape[k] = v;
   }
 
   // Check that routes are valid
   for (const k of Object.keys(shape)) {
-    // The wildcard route is allowed
+    // The lone wildcard is allowed
     if (k === "*") {
       continue;
     }
 
     const split = k.split("/");
     for (const s of split) {
+      // Non-lone wildcards aren't allowed
+      if (s === "*") {
+        throw new SyntaxError(
+          "Asterisks aren't permitted in routers",
+        );
+      }
+
+      // Multiple slashes next to each other aren't allowed, and neither are
+      // leading/trailing slashes. However, the empty string is allowed
+      if (!s && split.length !== 1) {
+        throw new SyntaxError(
+          "Duplicate and leading/trailing slashes aren't permitted in routers",
+        );
+      }
+
       // "." and ".." aren't allowed
       if (s === "." || s === "..") {
         throw new SyntaxError(
-          "'.' and '..' aren't allowed in route path segments",
-        );
-      }
-
-      // The empty route "" isn't allowed either
-      if (s === "") {
-        throw new SyntaxError(
-          "The empty route '' isn't allowed (it would never match)",
-        );
-      }
-
-      if (
-        // If it doesn't match the path capture regex
-        !s.match(/^:[a-zA-Z_$]+[a-zA-Z_$0-9]*$/) &&
-        // And it has at least one unescaped URLPattern character
-        s.match(/[^\\][:*?(){}]/)
-      ) {
-        throw new SyntaxError(
-          `"${k}" isn't a valid Router route. The Router only supports basic path segments and named path segments (groups). Wildcards, RegExp, optionals, and other advanced URLPattern syntax isn't supported, with the exception of the solo wildcard "*"`,
+          "'.' and '..' path segments aren't permitted in routers",
         );
       }
     }
@@ -199,10 +226,10 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     return paths.indexOf(b) - paths.indexOf(a);
   });
 
-  const patterns = new Map<URLPattern, Handler | Handler[]>();
+  const patterns = new Map<string[], Handler | Handler[]>();
   for (const p of sortedPaths) {
-    const pattern = p === "*" ? `/:__nextPath*/*?` : `${p}/:__nextPath*/*?`;
-    patterns.set(new URLPattern(pattern, "http://_._"), shape[p]);
+    const pattern = !p ? [] : p.split("/");
+    patterns.set(pattern, shape[p]);
   }
   
   const handler = async (
@@ -210,7 +237,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     conn: http.ConnInfo,
   ): Promise<Response> => {
     // Check for redirect
-    const ctx = routerContext(req);
+    const ctx = context(req);
     if (ctx.redirect) {
       return ctx.redirect;
     }
@@ -218,39 +245,21 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     let lastNoMatch: Response | null = null;
 
     for (const [pattern, fn] of patterns.entries()) {
-      const match = pattern.exec(ctx.path, "http://_._");
+      const match = matchPattern(pattern, ctx.path);
       if (!match) {
         continue;
       }
       
-      const groups = { ...ctx.groups };
-      for (const [k, v] of Object.entries(match.pathname.groups)) {
-        const old = groups[k];
-        if (Array.isArray(old)) {
-          groups[k] = [...old, v];
-        } else if (typeof old === "string") {
-          groups[k] = [old, v];
-        } else {
-          groups[k] = v;
-        }
-      }
-
-      // REVIEW: I don't think this delete will ever cause a bug but it might?
-      // The 0 group is always empty I think.
-      // https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API#unnamed_and_named_groups
-      delete groups["0"];
-
-      // const groups = { ...ctx.groups, ...match.pathname.groups };
-      const path = `/${groups.__nextPath || ""}`;
-      delete groups.__nextPath;
+      const param = { ...ctx.param, ...match.param };
+      let path = match.nextPath;
 
       const oPath = ctx.path;
-      const oGroups = ctx.groups;
+      const oParam = ctx.param;
 
       // The context object is only created once for every request, so
       // modifications to the data object will be preserved across handling
       // contexts
-      Object.assign(ctx, { path, groups });
+      Object.assign(ctx, { path, param });
 
       try {
         if (Array.isArray(fn)) {
@@ -271,9 +280,9 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
           }
         }
       } finally {
-        // Before moving on, put the path and groups back to their original
+        // Before moving on, put the path and param back to their original
         // state
-        Object.assign(ctx, { path: oPath, groups: oGroups });
+        Object.assign(ctx, { path: oPath, param: oParam });
       }
     }
 
@@ -284,7 +293,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     return noMatch(new Response("404 not found", { status: 404 }));
   };
 
-  return Object.assign(handler, { ...routes });
+  return Object.assign(handler, routes);
 }
 
 const _noMatch = Symbol("_noMatch");
