@@ -1,0 +1,80 @@
+.room {
+  width: 100%;
+  max-width: 45em;
+  flex: 1 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5em;
+}
+
+.messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.new-msg {
+  display: grid;
+  align-items: stretch;
+  position: relative;
+  margin: 2em 0 0 0;
+  overflow: hidden;
+  max-height: 15em;
+  border-radius: 1.5em;
+}
+.new-msg::after {
+  content: attr(data-value) ' ';
+  white-space: pre-wrap;
+  visibility: hidden;
+  color: red;
+  grid-area: 1 / 1;
+  padding: 0.75em 1em;
+  display: block;
+  font: inherit;
+}
+.new-msg__text {
+  grid-area: 1 / 1;
+  background: #444;
+  border: 0;
+  resize: none;
+  font: inherit;
+  color: white;
+  padding: 0.75em 1em;
+  appearance: none;
+  overflow-x: hidden;
+  max-height: 15em;
+  overflow-y: auto;
+}
+
+.right {
+  align-self: flex-end;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.msg-group {
+  display: flex;
+  flex-direction: column;
+  max-width: 60%;
+  margin: 0.5em 0;
+}
+
+.user {
+  color: #efefef;
+  font-weight: bold;
+}
+
+.msg {
+  background: #666;
+  color: white;
+  padding: 0.9em;
+  text-align: left;
+  border-radius: 0 0.75em 0.75em 0.75em;
+  margin: 0.5em 0;
+}
+.right .msg {
+  border-radius: 0.75em 0 0.75em 0.75em;
+}
+.room .msg + .msg, .room .right .msg + .msg {
+  border-radius: 0.75em;
+}

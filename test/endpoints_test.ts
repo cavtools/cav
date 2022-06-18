@@ -32,6 +32,15 @@ type AssertEquals<Check, Correct> = (
 );
 
 Deno.test("endpoint()", async t => {
+  await t.step("sets html content type when it can autodetect it", async () => {
+    const end = endpoint(() => /*html*/`
+      <!DOCTYPE html>
+    `);
+    const res1 = await end(new Request("http://localhost"), conn);
+    assertEquals(res1.status, 200);
+    assertEquals(res1.headers.get("content-type"), "text/html");
+  });
+
   await t.step("args: none", async () => {
     const end = endpoint();
     const _check: AssertEquals<typeof end, Endpoint<{}>> = true;

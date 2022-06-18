@@ -106,6 +106,9 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     }
 
     k = k.split("/").filter(k2 => !!k2).join("/");
+    if (!k) {
+      k = "/";
+    }
     const old = shape[k];
 
     if (!old) {
@@ -146,13 +149,6 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       if (s === "." || s === "..") {
         throw new SyntaxError(
           "'.' and '..' aren't allowed in route path segments",
-        );
-      }
-
-      // The empty route "" isn't allowed either
-      if (s === "") {
-        throw new SyntaxError(
-          "The empty route '' isn't allowed (it would never match)",
         );
       }
 

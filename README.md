@@ -1,11 +1,11 @@
 # Cav
 
-Cav is a solo developer's web framework, made for [Deno](https://deno.land).
-Guiding principles:
+Cav is a web framework for [Deno](https://deno.land). Guiding principles:
 
 - Modular, maintainable server definitions
 - No-fuss data serialization
 - Automatic end-to-end typesafety
+- Minimal typing
 - Use The Platform
 
 **Status:** WIP, active, almost tested, and definitely not ready for production.
@@ -42,16 +42,6 @@ Guiding principles:
   - [x] ~~No magic~~ Yes magic 🧙‍♂️
 - Production deployments should be a simple git-commit-push
   - [x] [Deno Deploy](https://deno.com) without a build step
-
-## Non-goals
-
-- [ ] React-first
-- [ ] Built-in SSR and hydration
-- [ ] SSG
-- [ ] Strict file/folder structure
-- [ ] File-system based routing
-- [ ] Make everyone happy
-- [ ] Money
 
 ## Inspirations
 
@@ -106,7 +96,3 @@ Links and thoughts related to Cav's architecture.
     comments on this post that work with similar concepts. TypeScript makes
     implementing this pretty simple, and Cav is just one person's subjective
     take on what it can look like. -->
-
-## Dedication
-
-Cav is dedicated to the bar it's named after. 🍻

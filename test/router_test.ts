@@ -18,6 +18,13 @@ const conn: http.ConnInfo = {
   },
 };
 
+Deno.test("allows the '/' route", async () => {
+  const rtr = router({ "/": () => new Response("hi") });
+  const res = await rtr(new Request("http://_"), conn);
+  assertEquals(res.status, 200);
+  assertEquals(await res.text(), "hi");
+});
+
 Deno.test("deeper routes are checked first", async () => {
   const req1 = new Request("http://localhost/a/b");
   const req2 = new Request("http://localhost/a");

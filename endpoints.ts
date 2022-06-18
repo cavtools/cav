@@ -458,6 +458,14 @@ export function endpoint(
       output = `500 internal server error [${bugtrace}]`;
     }
 
+    if (
+      typeof output === "string" &&
+      !res.headers.get("content-type") &&
+      output.match(/^\s*<!DOCTYPE html>/)
+    ) {
+      res.headers.set("content-type", "text/html");
+    }
+
     const response = packResponse(output, {
       ...res,
       serializers: schema.serializers || undefined,
