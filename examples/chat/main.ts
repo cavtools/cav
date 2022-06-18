@@ -7,6 +7,9 @@ import {
   assets,
   endpoint,
 } from "./deps.ts";
+import * as auth from "./auth/mod.ts";
+import * as chat from "./chat/mod.ts";
+import * as landing from "./landing/mod.ts";
 
 // The server only stores room IDs and the names claimed in those rooms.
 // Everything else is transient and GCed after a request/message is handled
@@ -34,24 +37,23 @@ export const mainRouter = router({
   // Serve static assets when nothing else matches
   "*": assets({ cwd: import.meta.url }),
 
+  // Landing page
+  "/": endpoint(null, landing.html),
+
   // Creates a new room and redirects to it. Uses a 2 second sleep to keep room
   // creation rate low. (Built-in rate limiting is on the radar)
   create: endpoint(null, async x => {
     await new Promise(r => setTimeout(r, 2000));
     const id = crypto.randomUUID();
     rooms.set(id, new Set<string>());
-    return x.redirect(id + "/login");
+    return x.redirect(id + "/auth");
   }),
 
   // The chat rooms
   ":id": {
-    "/": endpoint(roomBase, x => x.asset({
-      cwd: import.meta.url,
-      dir: "pages",
-      path: "chat.html",
-    })),
+    "/": endpoint(roomBase, chat.html),
 
-    login: endpoint({
+    auth: endpoint({
       ...roomBase,
       message: m => {
         if (typeof m === "undefined") { // It's a GET request
@@ -77,11 +79,7 @@ export const mainRouter = router({
       // If it's a GET request, redirect them if they're already signed in or
       // show them the login form if not
       if (!x.message && !cookie) {
-        return x.asset({
-          cwd: import.meta.url,
-          dir: "pages",
-          path: "login.html",
-        });
+        return auth.html();
       }
       if (!x.message) {
         return x.redirect("..");

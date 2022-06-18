@@ -3,7 +3,7 @@
 
 import { $ } from "../browser_deps.ts";
 
-export function initLanding() {
+export function landingInit() {
   const newChat = $<HTMLAnchorElement>(".new-chat")!;
   newChat.onclick = (e) => {
     newChat.classList.add("disabled");

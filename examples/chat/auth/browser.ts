@@ -3,7 +3,7 @@
 
 import { $ } from "../browser_deps.ts";
 
-export function initLogin() {
+export function loginInit() {
   const input = $<HTMLInputElement>(".input")!;
   const submit = $<HTMLButtonElement>(".submit")!;
 

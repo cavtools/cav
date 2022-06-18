@@ -1,9 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
+// This module is browser-only.
 
 import { $, client } from "../browser_deps.ts";
 import type { MainRouter } from "../main.ts";
 
-export async function initChat() {
+export async function chatInit() {
   const messages = $(".messages")!;
   const msgGroupTemplate = $<HTMLTemplateElement>("#msg-group")!.content;
   const newMsg = $(".new-msg")!;
