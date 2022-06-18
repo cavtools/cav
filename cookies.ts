@@ -57,7 +57,7 @@ export async function decodeCookie(cookie: string, keys?: string | string[]) {
  */
 export interface CookieJar {
   /** Gets an up-to-date cookie value. */
-  get: (name: string) => string | undefined;
+  get: (name: string, opt?: { signed?: boolean }) => string | undefined;
   /**
    * Updates a cookie's value. Cookies with the `signed` option set to true will
    * be stored as a JWT with the header removed, signed using the keys provided
@@ -75,9 +75,7 @@ export interface CookieJar {
    */
   entries: () => [string, string][];
   /** Checks if a cookie exists in the CookieJar. */
-  has: (name: string) => boolean;
-  /** Checks if a cookie is signed or not. Non-existent cookies return false. */
-  isSigned: (name: string) => boolean;
+  has: (name: string, opt?: { signed?: boolean }) => boolean;
   /**
    * Calculates the set-cookie headers for all updates applied to this CookieJar
    * and appends them to the given Headers instance. Note that this operation is
@@ -139,8 +137,11 @@ export async function cookieJar(
   }
 
   return {
-    get: (name) => {
-      return signed.has(name) ? signed.get(name) : unsigned.get(name);
+    get: (name, opt) => {
+      if (opt?.signed) {
+        return signed.get(name);
+      }
+      return unsigned.get(name);
     },
     set: (name, value, opt) => {
       updates.push({ op: "set", name, value, opt });
@@ -184,11 +185,11 @@ export async function cookieJar(
         ...unsigned.entries(),
       ];
     },
-    has: (name) => {
-      return signed.has(name) || unsigned.has(name);
-    },
-    isSigned: (name) => {
-      return signed.has(name);
+    has: (name, opt) => {
+      if (opt?.signed) {
+        return signed.has(name);
+      }
+      return unsigned.has(name);
     },
     setCookies: async (headers) => {
       for (const u of updates) {

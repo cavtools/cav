@@ -40,12 +40,16 @@ export const mainRouter = router({
     await new Promise(r => setTimeout(r, 2000));
     const id = crypto.randomUUID();
     rooms.set(id, new Set<string>());
-    return x.redirect(id);
+    return x.redirect(id + "/login");
   }),
 
   // The chat rooms
   ":id": {
-    "/": endpoint(roomBase, x => x.asset({ path: ".chat.html" })),
+    "/": endpoint(roomBase, x => x.asset({
+      cwd: import.meta.url,
+      dir: "pages",
+      path: "chat.html",
+    })),
 
     login: endpoint({
       ...roomBase,
@@ -53,52 +57,59 @@ export const mainRouter = router({
         if (typeof m === "undefined") { // It's a GET request
           return m;
         }
-        if (typeof m !== "string") {
-          throw new Error("Only plain-text messages are accepted");
+        let name = m.name;
+        if (typeof name !== "string") {
+          name = name[0];
         }
-        if (m.length > 20) {
+        if (name.length > 20) {
           throw new Error("Names can't be longer than 20 characters");
         }
-        if (m.length < 1) {
+        if (name.length < 1) {
           throw new Error("Names must be at least 1 character");
         }
-        return m;
+        return { name };
       },
     }, x => {
       const roomId = x.groups.id;
       const names = rooms.get(roomId)!;
-      const cookie = x.cookies.get(roomId);
+      const cookie = x.cookies.get(roomId, { signed: true });
 
-      // If it's a GET request, the client is checking to see if they're
-      // already signed in. If they are, just tell them their name in this room
+      // If it's a GET request, redirect them if they're already signed in or
+      // show them the login form if not
       if (!x.message && !cookie) {
-        throw new HttpError("401 not signed in", { status: 401 });
+        return x.asset({
+          cwd: import.meta.url,
+          dir: "pages",
+          path: "login.html",
+        });
       }
       if (!x.message) {
-        return cookie!;
+        return x.redirect("..");
       }
 
+      const name = x.message.name;
+
       // If they're signed in but want to change their name, they can do that
-      if (cookie === x.message) {
-        return x.message;
+      if (cookie === name) {
+        return x.redirect("..");
       }
-      if (cookie && names.has(x.message)) {
+      if (cookie && names.has(name)) {
         throw new HttpError("409 name taken", { status: 409 });
       }
       if (cookie) {
         names.delete(cookie);
-        names.add(x.message);
-        x.cookies.set(roomId, x.message);
-        return x.message;
+        names.add(name);
+        x.cookies.set(roomId, name, { signed: true });
+        return x.redirect("..");
       }
 
       // Otherwise, they're looking to sign in for the first time
-      if (names.has(x.message)) {
+      if (names.has(name)) {
         throw new HttpError("409 name taken", { status: 409 });
       }
-      names.add(x.message);
-      x.cookies.set(roomId, x.message);
-      return x.message;
+      names.add(name);
+      x.cookies.set(roomId, name, { signed: true });
+      return x.redirect("..");
     }),
   },
 });

@@ -24,6 +24,8 @@
 - Resolvers are no longer assigned to endpoints as the `resolve` property
 - Endpoints now require both a schema and a resolver to be specified explicitly
 - Change `ResolveArg` to `ResolverArg`
+- Updated the cookies to better handle signed/unsigned operations
+- Fixed a redirect bug
 
 ## June 16, 2022: [0.1.0](https://deno.land/x/cav@0.1.0)
 

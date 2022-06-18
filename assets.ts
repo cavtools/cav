@@ -76,8 +76,11 @@ export async function serveAsset(
   // Special rules for serving files. To opt out, specify the path directly on
   // the options
   if (!opt?.path) {
-    if (path.basename(pathname).startsWith(".")) {
-      return noMatch(new Response("404 not found", { status: 404 }));
+    const parts = pathname.split("/");
+    for (const p of parts) {
+      if (p.startsWith(".")) {
+        return noMatch(new Response("404 not found", { status: 404 }));
+      }
     }
 
     if (pathname.endsWith(".ts") || pathname.endsWith(".tsx")) {

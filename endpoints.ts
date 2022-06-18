@@ -310,10 +310,8 @@ export function endpoint(
     // Utilities
     const asset = (opt?: ServeAssetOptions) => serveAsset(req, opt);
     const redirect = (to: string, status?: number) => {
-      if (to.startsWith("./")) {
-        to = stdPath.join(url.pathname, "..", to);
-      } else if (to.startsWith("../")) {
-        to = stdPath.join(url.pathname, "../..", to);
+      if (to.startsWith("../") || to.startsWith(".")) {
+        to = stdPath.join(url.pathname, to);
       }
       const u = new URL(to, url.origin);
       return Response.redirect(u.href, status || 302);
