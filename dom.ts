@@ -11,7 +11,10 @@
  * Shorthand for `document.querySelector`. If a second `parent` node is
  * provided, it will be searched instead of the document.
  */
-export function $(selector: string, parent: ParentNode = document) {
+export function $<T extends Element = HTMLElement>(
+  selector: string,
+  parent: ParentNode = document,
+): T | null {
   return parent.querySelector(selector);
 }
 
@@ -19,6 +22,9 @@ export function $(selector: string, parent: ParentNode = document) {
  * Shorthand for `document.querySelectorAll`. If a second `parent` node is
  * provided, it will be searched instead of the document.
  */
-export function $$(selector: string, parent: ParentNode = document) {
+export function $$<T extends Element = HTMLElement>(
+  selector: string,
+  parent: ParentNode = document,
+): NodeListOf<T> {
   return parent.querySelectorAll(selector);
 }

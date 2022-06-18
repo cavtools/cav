@@ -213,8 +213,8 @@ export type MessageOutput<Schema> = (
   : unknown
 );
 
-/** Arguments available to the resolve function of an endpoint. */
-export interface ResolveArg<Schema = unknown> {
+/** Arguments available to the resolver of an endpoint. */
+export interface ResolverArg<Schema = unknown> {
   /**
    * The schema used to create this resolver's endpoint. If no schema was used,
    * this will be an empty object.
@@ -255,78 +255,39 @@ export interface ResolveArg<Schema = unknown> {
 }
 
 /** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<Schema = unknown> = Schema & ((
+export type Endpoint<Schema = unknown, Result = unknown> = Schema & ((
   req: EndpointRequest<(
     Schema extends { query: Parser } ? ParserInput<Schema["query"]>
-    : QueryRecord
+    : QueryRecord | undefined
   ), (
     Schema extends { message: Parser } ? ParserInput<Schema["message"]>
     : Schema extends Record<string, unknown> ? undefined
     : unknown
-  ), (
-    Schema extends { resolve: (x: any) => infer R } ? Awaited<R>
-    : Schema extends Record<string, unknown> ? undefined
-    : unknown
-  )>,
+  ), Result>,
   conn: http.ConnInfo,
 ) => Promise<Response>);
-
-// I'm using this type to know when the resolve/setup function wasn't specified,
-// so that the output doesn't include it on the schema. I tried a few different
-// methods and this was the first one that worked without problems
-declare const _omitted: unique symbol;
-type Omitted = typeof _omitted;
-
-const test: unknown = null;
-if (test instanceof HttpError) {
-  const err = test;
-}
 
 /**
  * Constructs a new Endpoint request handler using the provided schema and
  * resolver function. The schema properties will be assigned to the returned
- * endpoint function, with the resolve argument available as the "resolve"
- * property.
+ * endpoint function, so that they can be reused on other endpoint schemas.
  */
 export function endpoint<
   Schema extends EndpointSchema = {},
-  Resolve extends (x: ResolveArg<Schema>) => any = () => Omitted,
+  Result = undefined,
 >(
-  schema?: (Schema & EndpointSchema) | null,
-  resolve?: Resolve & ((x: ResolveArg<Schema>) => any),
-): Endpoint<{
-  [K in keyof Schema | "resolve" as (
-    K extends "resolve" ? (Resolve extends () => Omitted ? never : K)
-    : K
-  )]: (
-    K extends "resolve" ? Resolve
-    : K extends keyof Schema ? Schema[K]
-    : never
-  );
-}>;
-export function endpoint<
-  Resolve extends (x: ResolveArg<{}>, ...a: any[]) => any = () => Omitted,
->(resolve?: Resolve & ((x: ResolveArg<{}>) => any)): Endpoint<
-  Resolve extends () => Omitted ? {} : { resolve: Resolve }
+  schema: (Schema & EndpointSchema) | null,
+  resolver: ((x: ResolverArg<Schema>) => Result) | null,
+): Endpoint<
+  { [K in keyof Schema]: Schema[K] },
+  Awaited<Result> extends Response ? unknown : Awaited<Result>
 >;
 export function endpoint(
-  schemaOrResolve?: (
-    | EndpointSchema
-    | ((x: ResolveArg) => any)
-    | null
-  ),
-  maybeResolve?: (x: ResolveArg) => any,
+  _schema: EndpointSchema | null,
+  _resolver: ((x: ResolverArg<any>) => any) | null,
 ) {
-  // TODO: Throw SyntaxErrors on invalid input
-  const schema: EndpointSchema = (
-    schemaOrResolve && typeof schemaOrResolve === "object" ? schemaOrResolve
-    : {}
-  );
-  const resolve: (x: ResolveArg) => any = (
-    typeof schemaOrResolve === "function" ? schemaOrResolve
-    : typeof maybeResolve === "function" ? maybeResolve
-    : () => {}
-  );
+  const schema = _schema || {};
+  const resolver = _resolver || (() => {});
 
   const checkMethod = methodChecker(schema.message);
   const matchPath = pathMatcher({
@@ -400,7 +361,7 @@ export function endpoint(
       }
 
       const { query, message } = await parseInput(req);
-      output = await resolve({
+      output = await resolver({
         schema: schema as any,
         req,
         res,
@@ -480,7 +441,7 @@ export function endpoint(
     return response;
   };
 
-  return Object.assign(handler, { ...schema, resolve }) as any;
+  return Object.assign(handler, schema) as any;
 }
 
 /**
@@ -735,7 +696,7 @@ export function assets(init?: AssetsInit) {
  * get the final redirect path. The default status is 302.
  */
 export function redirect(to: string, status?: number) {
-  return endpoint(x => x.redirect(to, status || 302));
+  return endpoint(null, x => x.redirect(to, status || 302));
 }
 
 /** Schema options for creating a `socket()` handler. */
@@ -774,7 +735,9 @@ export type SendType<Schema extends SocketSchema | null> = (
 );
 
 /** Arguments available to the setup function of a socket endpoint. */
-export interface SetupArg<Schema = unknown> extends Omit<ResolveArg<Schema>, "message" | "asset" | "redirect"> {
+export interface SetupArg<Schema = unknown> extends Omit<
+  ResolverArg<Schema>, "message" | "asset" | "redirect"
+> {
   ws: WS<SendType<Schema>, MessageOutput<Schema>>;
 }
 
@@ -783,46 +746,16 @@ export interface SetupArg<Schema = unknown> extends Omit<ResolveArg<Schema>, "me
  * function. The schema properties will be assigned to the returned socket
  * endpoint function, with the setup argument available as the "setup" property.
  */
-export function socket<
-  Schema extends SocketSchema | null,
-  Setup extends ((x: SetupArg<Schema>) => any) = () => Omitted,
->(
-  schema?: (Schema & SocketSchema) | null,
-  setup?: Setup & ((x: SetupArg<Schema>) => Promise<void> | void),
-): Socket<{
-  [K in keyof Schema | "setup" as (
-    K extends "setup" ? (Setup extends () => Omitted ? never : K)
-    : K
-  )]: (
-    K extends "setup" ? Setup
-    : K extends keyof Schema ? Schema[K]
-    : never
-  );
-}>;
-export function socket<
-  Setup extends (x: SetupArg<{}>) => any = () => Omitted,
->(setup?: Setup): Socket<
-  Setup extends () => Omitted ? {}
-  : { setup: Setup }
->;
+export function socket<Schema extends SocketSchema | null>(
+  schema: (Schema & SocketSchema) | null,
+  setup: ((x: SetupArg<Schema>) => Promise<void> | void) | null,
+): Socket<{ [K in keyof Schema]: Schema[K] }>;
 export function socket(
-  schemaOrSetup?: (
-    | SocketSchema
-    | ((x: SetupArg) => Promise<void> | void)
-    | null
-  ),
-  maybeSetup?: (x: SetupArg) => Promise<void> | void,
+  _schema: SocketSchema | null,
+  _setup: ((x: SetupArg) => Promise<void> | void) | null,
 ) {
-  const schema: SocketSchema = (
-    schemaOrSetup && typeof schemaOrSetup === "object" ? schemaOrSetup
-    : {}
-  );
-  const setup: (x: SetupArg) => Promise<void> | void = (
-    typeof schemaOrSetup === "function" ? schemaOrSetup
-    : typeof maybeSetup === "function" ? maybeSetup
-    : () => {}
-  );
-
+  const schema = _schema || {};
+  const setup = _setup || (() => {});
   const parseMessage = normalizeParser(schema.message || ((m) => m));
 
   const handler = endpoint({

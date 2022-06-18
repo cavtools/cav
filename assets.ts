@@ -198,6 +198,11 @@ async function bundle(input: string) {
   const js = (await emit.bundle(input, {
     allowRemote: true,
     type: "module",
+    compilerOptions: {
+      inlineSources: false,
+      inlineSourceMap: false,
+      sourceMap: false,
+    },
   })).code;
 
   await Deno.writeTextFile(output, js);
@@ -307,7 +312,7 @@ export interface WatchAssetsOptions extends AssetsLocation {
       try {
         await bundle(input);
       } catch (e) {
-        console.warn("Failed to bundle", input, "-", e);
+        console.warn("Failed to bundle", input, "-", e.message);
         return;
       }
     }
@@ -369,7 +374,12 @@ export interface WatchAssetsOptions extends AssetsLocation {
       }
       if (event.kind === "create" || event.kind === "modify") {
         for (const p of event.paths) {
-          if (p.endsWith("_bundle.ts") || p.endsWith("_bundle.tsx")) {
+          if (
+            p === "bundle.ts" ||
+            p === "bundle.tsx" ||
+            p.endsWith("_bundle.ts") ||
+            p.endsWith("_bundle.tsx")
+          ) {
             watch(p); // Don't await
           }
         }

@@ -292,16 +292,14 @@ export function client<T extends ClientType = null>(
   baseUrl = "",
   baseSerializers?: Serializers,
 ): Client<T> {
-  // Remove duplicate/trailing slashes from the base url
-  let [proto, ...others] = baseUrl.split("://");
-  others = others.map(v => v.split("/").filter(v2 => !!v2).join("/"));
-  baseUrl = proto + "://" + others.join("/");
+  const burl = new URL(baseUrl, self.location?.origin);
+  burl.pathname = burl.pathname.split("/").filter(p => !!p).join("/");
 
   const clientFn = (path: string, x: UnknownClientArg = {}) => {
     // Calculate the final request path
     let xp = x.path || "";
     xp = xp.split("/").filter(v => !!v).join("/");
-    path = baseUrl + (path ? "/" + path : "") + (xp ? "/" + xp : "");
+    path = burl.href + (path ? "/" + path : "") + (xp ? "/" + xp : "");
 
     // Check that there's no conflicting serializer names
     let serializers: Serializers = { ...(x.serializers || {}) };

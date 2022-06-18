@@ -11,30 +11,29 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
 }
 
 .new-msg {
   display: grid;
   align-items: stretch;
   position: relative;
-  margin: 2em 0 0 0;
+  margin: 3em 0 0 0;
   overflow: hidden;
   max-height: 15em;
   border-radius: 1.5em;
+  background: #444;
 }
 .new-msg::after {
   content: attr(data-value) ' ';
   white-space: pre-wrap;
   visibility: hidden;
-  color: red;
   grid-area: 1 / 1;
   padding: 0.75em 1em;
-  display: block;
-  font: inherit;
 }
 .new-msg__text {
   grid-area: 1 / 1;
-  background: #444;
+  background: transparent;
   border: 0;
   resize: none;
   font: inherit;
@@ -70,11 +69,12 @@
   padding: 0.9em;
   text-align: left;
   border-radius: 0 0.75em 0.75em 0.75em;
-  margin: 0.5em 0;
+  margin: 0.4em 0;
 }
 .right .msg {
   border-radius: 0.75em 0 0.75em 0.75em;
 }
-.room .msg + .msg, .room .right .msg + .msg {
+.room .msg + .msg,
+.room .right .msg + .msg {
   border-radius: 0.75em;
 }

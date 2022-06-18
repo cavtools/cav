@@ -4,29 +4,30 @@
   <title>Chat</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./chat.css">
-  <script type="module" src="./bundle.ts"></script>
 
 </head><body>
 
   <main class="room">
     <div class="messages">
-      <section class="msg-group right">
-        <header class="user">Connor</header>
-        <p class="msg">How much wood would a woodchuck chuck if a woodchuck could chuck wood?</p>
-        <p class="msg">How much wood would a woodchuck chuck if a woodchuck could chuck wood?</p>
-      </section>
-      <section class="msg-group">
-        <header class="user">Bitchell</header>
-        <p class="msg">I'm a narcissist, pray for me my nose is running, ooweee a minor headache, that cunt coworker didn't complement my facial hair time for revenge, oh your friend died that's too bad guess when my next xray is...</p>
-      </section>
+      <template id="msg-group">
+        <section class="msg-group">
+          <header class="user"></header>
+          <p class="msg"></p>
+        </section>
+      </template>
     </div>
 
     <label class="new-msg">
-      <textarea class="new-msg__text" rows="1"></textarea>
+      <textarea
+        class="new-msg__text"
+        rows="1"
+        placeholder="Type to say something"
+      ></textarea>
     </label>
+
+    <dialog>Claim name</dialog>
   </main>
   
 </body></html>

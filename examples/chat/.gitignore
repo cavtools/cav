@@ -1,0 +1,3 @@
+# When building for Deno Deploy, you should comment out the next line so the
+# bundled assets get committed
+assets/*_bundle.ts.js

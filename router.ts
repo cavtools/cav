@@ -106,9 +106,6 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     }
 
     k = k.split("/").filter(k2 => !!k2).join("/");
-    if (!k) {
-      k = "/";
-    }
     const old = shape[k];
 
     if (!old) {
@@ -197,7 +194,11 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
 
   const patterns = new Map<URLPattern, Handler | Handler[]>();
   for (const p of sortedPaths) {
-    const pattern = p === "*" ? `/:__nextPath*/*?` : `${p}/:__nextPath*/*?`;
+    const pattern = (
+      p === "*" ? `/:__nextPath*/*?`
+      : !p ? "/"
+      : `/${p}/:__nextPath*/*?`
+    );
     patterns.set(new URLPattern(pattern, "http://_._"), shape[p]);
   }
   
@@ -236,7 +237,6 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       // https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API#unnamed_and_named_groups
       delete groups["0"];
 
-      // const groups = { ...ctx.groups, ...match.pathname.groups };
       const path = `/${groups.__nextPath || ""}`;
       delete groups.__nextPath;
 
