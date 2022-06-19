@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { endpoint, assets, redirect, socket } from "../endpoints.ts";
-import { assertEquals } from "./test_deps.ts";
+import { assertEquals } from "./deps.ts";
 import { router } from "../router.ts";
 import { unwatchAssets } from "../assets.ts";
 import { chdir, cleanAssets } from "./assets_test.ts";

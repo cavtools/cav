@@ -5,7 +5,7 @@ import {
   assertEquals,
   assertStrictEquals,
   assertThrows,
-} from "./test_deps.ts";
+} from "./deps.ts";
 import {
   HttpError,
   serializer,

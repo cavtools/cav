@@ -4,7 +4,7 @@ import {
   http,
   assertEquals,
   assertStrictEquals,
-} from "./test_deps.ts";
+} from "./deps.ts";
 import { webSocket } from "../ws.ts";
 import type { WSMessageListener } from "../ws.ts";
 

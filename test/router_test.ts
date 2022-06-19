@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { router, routerContext, noMatch, didMatch } from "../router.ts";
-import { assert, assertEquals, assertThrows } from "./test_deps.ts";
+import { assert, assertEquals, assertThrows } from "./deps.ts";
 import type { http } from "../deps.ts";
 
 // Doesn't matter

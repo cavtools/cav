@@ -1,6 +1,6 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { assertStrictEquals, assertEquals } from "./test_deps.ts";
+import { assertStrictEquals, assertEquals } from "./deps.ts";
 import { HttpError, packResponse, unpack, serializer } from "../serial.ts";
 import { client } from "../client.ts";
 import type {

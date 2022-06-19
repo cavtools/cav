@@ -1,6 +1,6 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { assertEquals } from "./test_deps.ts";
+import { assertEquals } from "./deps.ts";
 import { cookieJar } from "../cookies.ts";
 import type { CookieJar } from "../cookies.ts";
 import { base64 } from "../deps.ts";

@@ -6,111 +6,105 @@ import {
   router,
   assets,
   endpoint,
-} from "./deps.ts";
-import * as auth from "./auth/mod.ts";
-import * as chat from "./chat/mod.ts";
-import * as landing from "./landing/mod.ts";
+} from "../../mod.ts";
+import * as chat from "./chat.ts";
+import * as html from "./html.ts";
 
-// The server only stores room IDs and the names claimed in those rooms.
-// Everything else is transient and GCed after a request/message is handled
-const rooms = new Map<string, Set<string>>();
-if (Deno.env.get("DEV")) {
-  rooms.set("dev", new Set<string>());
-}
-
-const roomBase = endpoint({
-  groups: g => {
-    let id = g.id;
-    if (Array.isArray(id)) {
-      id = id[0];
+const roomSchema = endpoint({
+  groups: ({ roomId }) => {
+    if (Array.isArray(roomId)) {
+      throw new Error("invalid routing setup: only 1 roomId allowed");
     }
-    if (!rooms.has(id)) {
+    if (!chat.roomExists(roomId)) {
       throw new Error("room not found");
     }
-    return { id };
+    return { roomId };
   },
 }, null);
 
-export type MainRouter = typeof mainRouter;
-
-export const mainRouter = router({
-  // Serve static assets when nothing else matches
+const mainRouter = router({
   "*": assets({ cwd: import.meta.url }),
+  "/": endpoint(null, html.index),
+  "index.css": endpoint(null, html.indexCss),
+  "auth.css": endpoint(null, html.authCss),
+  "chat.css": endpoint(null, html.chatCss),
 
-  // Landing page
-  "/": endpoint(null, landing.html),
-
-  // Creates a new room and redirects to it. Uses a 2 second sleep to keep room
-  // creation rate low. (Built-in rate limiting is on the radar)
-  create: endpoint(null, async x => {
-    await new Promise(r => setTimeout(r, 2000));
-    const id = crypto.randomUUID();
-    rooms.set(id, new Set<string>());
-    return x.redirect(id + "/auth");
+  chat: endpoint(null, async x => {
+    await new Promise(r => setTimeout(r, 2000)); // "rate limiting"
+    return x.redirect(chat.createRoom() + "/auth");
   }),
 
-  // The chat rooms
-  ":id": {
-    "/": endpoint(roomBase, chat.html),
+  ":roomId": {
+    "/": endpoint(roomSchema, html.chat),
 
     auth: endpoint({
-      ...roomBase,
-      message: m => {
-        if (typeof m === "undefined") { // It's a GET request
-          return m;
+      ...roomSchema,
+      message: msg => {
+        // Allow GET
+        if (typeof msg === "undefined") {
+          return msg;
         }
-        let name = m.name;
+        if (!msg || typeof msg !== "object") {
+          throw new Error("message must be a Record<string, string>")
+        }
+        
+        const { name } = msg;
+        if (typeof name === "undefined") {
+          throw new Error("name required");
+        }
         if (typeof name !== "string") {
-          name = name[0];
+          throw new Error("message must be a Record<string, string>")
         }
         if (name.length > 20) {
-          throw new Error("Names can't be longer than 20 characters");
+          throw new Error("names can't be longer than 20 characters");
         }
         if (name.length < 1) {
-          throw new Error("Names must be at least 1 character");
+          throw new Error("names must be at least 1 character");
         }
         return { name };
       },
     }, x => {
-      const roomId = x.groups.id;
-      const names = rooms.get(roomId)!;
-      const cookie = x.cookies.get(roomId, { signed: true });
-
+      const { roomId } = x.groups;
+      const oldName = x.cookies.get(roomId, { signed: true });
+      const newName = x.message?.name;
+    
       // If it's a GET request, redirect them if they're already signed in or
       // show them the login form if not
-      if (!x.message && !cookie) {
-        return auth.html();
+      if (!oldName && !newName) {
+        return html.auth();
       }
-      if (!x.message) {
+      if (!newName) {
         return x.redirect("..");
       }
-
-      const name = x.message.name;
-
+    
       // If they're signed in but want to change their name, they can do that
-      if (cookie === name) {
+      if (oldName === newName) {
         return x.redirect("..");
       }
-      if (cookie && names.has(name)) {
+      if (oldName && chat.nameTaken(roomId, newName)) {
         throw new HttpError("409 name taken", { status: 409 });
       }
-      if (cookie) {
-        names.delete(cookie);
-        names.add(name);
-        x.cookies.set(roomId, name, { signed: true });
+      if (oldName) {
+        chat.changeName(roomId, {
+          old: oldName,
+          new: newName,
+        });
+        x.cookies.set(roomId, newName, { signed: true });
         return x.redirect("..");
       }
-
+    
       // Otherwise, they're looking to sign in for the first time
-      if (names.has(name)) {
+      if (chat.nameTaken(roomId, newName)) {
         throw new HttpError("409 name taken", { status: 409 });
       }
-      names.add(name);
-      x.cookies.set(roomId, name, { signed: true });
+      chat.addUser(roomId, newName);
+      x.cookies.set(roomId, newName, { signed: true });
       return x.redirect("..");
     }),
   },
 });
+
+export type MainRouter = typeof mainRouter;
 
 serve(mainRouter, { port: 8080 });
 console.log("listening on port 8080");

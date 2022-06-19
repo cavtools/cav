@@ -278,10 +278,10 @@ export function endpoint<
 >(
   schema: (Schema & EndpointSchema) | null,
   resolver: ((x: ResolverArg<Schema>) => Result) | null,
-): Endpoint<
-  { [K in keyof Schema]: Schema[K] },
-  Awaited<Result> extends Response ? unknown : Awaited<Result>
->;
+): Endpoint<(
+  EndpointSchema extends Schema ? {}
+  : { [K in keyof Schema]: Schema[K] }
+), Awaited<Result> extends Response ? unknown : Awaited<Result>>;
 export function endpoint(
   _schema: EndpointSchema | null,
   _resolver: ((x: ResolverArg<any>) => any) | null,
@@ -417,12 +417,17 @@ export function endpoint(
       output = `500 internal server error [${bugtrace}]`;
     }
 
+    // Content-type detection for string content. So far only HTML and CSS are
+    // supported
     if (
       typeof output === "string" &&
-      !res.headers.get("content-type") &&
-      output.match(/^\s*<!DOCTYPE html>/)
+      !res.headers.get("content-type")
     ) {
-      res.headers.set("content-type", "text/html");
+      if (output.match(/^\s*<!DOCTYPE html>/)) {
+        res.headers.set("content-type", "text/html");
+      } else if (output.match(/^\s*\/\* !DOCTYPE css \*\//)) {
+        res.headers.set("content-type", "text/css");
+      }
     }
 
     const response = packResponse(output, {
@@ -617,6 +622,9 @@ function inputParser(opt: {
         try {
           query = await parseQuery(undefined);
         } catch {
+          if (err instanceof HttpError) {
+            throw err;
+          }
           throw new HttpError("400 bad request", {
             status: 400,
             expose: err,
@@ -642,6 +650,9 @@ function inputParser(opt: {
       try {
         message = await parseMessage(message);
       } catch (err) {
+        if (err instanceof HttpError) {
+          throw err;
+        }
         throw new HttpError("400 bad request", {
           status: 400,
           expose: err,

@@ -181,10 +181,8 @@ async function findModules(dir: string) {
   const modules: string[] = [];
   for await (const entry of Deno.readDir(dir)) {
     if (entry.isFile && (
-      entry.name === "bundle.ts" ||
-      entry.name === "bundle.tsx" ||
-      entry.name.endsWith("_bundle.ts") ||
-      entry.name.endsWith("_bundle.tsx")
+      entry.name.endsWith(".ts") ||
+      entry.name.endsWith(".tsx")
     )) {
       modules.push(path.join(dir, entry.name));
     } else if (entry.isDirectory) {
@@ -377,12 +375,7 @@ export interface WatchAssetsOptions extends AssetsLocation {
       }
       if (event.kind === "create" || event.kind === "modify") {
         for (const p of event.paths) {
-          if (
-            p === "bundle.ts" ||
-            p === "bundle.tsx" ||
-            p.endsWith("_bundle.ts") ||
-            p.endsWith("_bundle.tsx")
-          ) {
+          if (p.endsWith(".ts") || p.endsWith(".tsx")) {
             watch(p); // Don't await
           }
         }

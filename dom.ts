@@ -7,6 +7,11 @@
 /// <reference lib="dom.asynciterable" />
 /// <reference lib="esnext" />
 
+export * from "./client.ts";
+export * from "./parser.ts";
+export * from "./serial.ts";
+export * from "./ws.ts";
+
 /**
  * Shorthand for `document.querySelector`. If a second `parent` node is
  * provided, it will be searched instead of the document.

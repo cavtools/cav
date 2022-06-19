@@ -1,6 +1,6 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { assertEquals } from "./test_deps.ts";
+import { assertEquals } from "./deps.ts";
 import { normalizeParser } from "../parser.ts";
 
 Deno.test("normalizes parser", () => {
