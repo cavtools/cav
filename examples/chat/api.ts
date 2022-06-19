@@ -43,7 +43,7 @@ export function changeName(roomId: string, arg: {
   users.add(arg.new);
 }
 
-function addUser(roomId: string, name: string) {
+export function addUser(roomId: string, name: string) {
   const users = getUsers(roomId);
   if (users.has(name)) {
     throw new Error("name already taken");

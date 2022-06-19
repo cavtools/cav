@@ -29,43 +29,41 @@ function base({ pageId, content }: {
 }
 
 // The initial "/* !DOCTYPE css */" comment triggers css content-type detection
-function baseCss() {
-  return /*css*/`
-    /* !DOCTYPE css */
+const baseCss = /*css*/`
+  /* !DOCTYPE css */
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      text-rendering: optimizeLegibility;
-      letter-spacing: 0.01em;
-    }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0.01em;
+  }
 
-    :root {
-      width: 100%;
-      height: 100%;
-      font-size: 16px;
-      font-family: sans-serif;
-    }
+  :root {
+    width: 100%;
+    height: 100%;
+    font-size: 16px;
+    font-family: sans-serif;
+  }
 
-    body {
-      display: flex;
-      align-items: center;
-      flex-direction: column;
-      width: 100%;
-      min-height: 100%;
-      background: #333;
-      line-height: 1.35;
-      letter-spacing: 0.01em;
-      position: relative;
-    }
+  body {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100%;
+    background: #333;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    position: relative;
+  }
 
-    a {
-      text-decoration: none;
-      font: inherit;
-    }
-  `;
-}
+  a {
+    text-decoration: none;
+    font: inherit;
+  }
+`;
 
 export function index() {
   return base({
@@ -78,7 +76,7 @@ export function index() {
 
 export function indexCss() {
   return /*css*/`
-    ${baseCss()}
+    ${baseCss}
 
     body {
       display: flex;
@@ -134,7 +132,7 @@ export function auth() {
 
 export function authCss() {
   return /*css*/`
-    ${baseCss()}
+    ${baseCss}
 
     .form {
       display: flex;
@@ -216,7 +214,7 @@ export function chat() {
 
 export function chatCss() {
   return /*css*/`
-    ${baseCss()}
+    ${baseCss}
     
     .room {
       width: 100%;

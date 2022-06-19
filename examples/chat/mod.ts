@@ -33,6 +33,9 @@ export type ChatRoom = ReturnType<typeof chatRoom>;
 function chatRoom() {
   const schema = endpoint({
     groups: ({ roomId }) => {
+      if (!roomId) {
+        throw new Error("invalid routing setup: roomId required");
+      }
       if (Array.isArray(roomId)) {
         throw new Error("invalid routing setup: only 1 roomId allowed");
       }
