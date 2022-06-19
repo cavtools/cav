@@ -30,6 +30,8 @@
 - HttpErrors thrown during query/message parsing are passed along instead of
   being wrapped in a 400 HttpError
 - Content-type detection for CSS using `/* !DOCTYPE css */`
+- Modified client type to treat "*" correctly (it treated it like a path param,
+  but it doesn't consume path parts)
 
 ## June 16, 2022: [0.1.0](https://deno.land/x/cav@0.1.0)
 

@@ -91,9 +91,10 @@ export type ClientType = (
  * in them.
  */
 type ExpandPath<K, T> = (
-  K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
-  : K extends `*` | `:${string}` ? { [x: string]: T }
-  : K extends `/${infer P}` | `${infer P}/` | `${infer P}/*` ? ExpandPath<P, T>
+  K extends `*` ? T
+  : K extends `:${string}/${infer P2}` ? { [x: string]: ExpandPath<P2, T> }
+  : K extends `:${string}` ? { [x: string]: T }
+  : K extends `/${infer P}` | `${infer P}/` ? ExpandPath<P, T>
   : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
   : K extends string ? { [x in K]: T }
   : never

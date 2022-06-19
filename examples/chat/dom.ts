@@ -32,8 +32,6 @@ export function auth() {
 }
 
 export async function chat() {
-  const messages = $(".messages")!;
-  const msgGroupTemplate = $<HTMLTemplateElement>("#msg-group")!.content;
   const newMsg = $(".new-msg")!;
 
   // The css needs the value of the textarea to be synced with the data-value
@@ -46,6 +44,4 @@ export async function chat() {
     window.scrollTo(0, document.body.scrollHeight);
   };
   textarea.dispatchEvent(new Event("input"));
-
-  // messages.appendChild(msgGroupTemplate.cloneNode(true));
 }

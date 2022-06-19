@@ -13,22 +13,22 @@ function getUsers(roomId: string) {
   return users;
 }
 
-export function createRoom() {
+function createRoom() {
   const id = crypto.randomUUID();
   rooms.set(id, new Set<string>());
   return id;
 }
 
-export function roomExists(roomId: string) {
+function roomExists(roomId: string) {
   return rooms.has(roomId);
 }
 
-export function nameTaken(roomId: string, name: string) {
+function nameTaken(roomId: string, name: string) {
   const users = getUsers(roomId);
   return users.has(name);
 }
 
-export function changeName(roomId: string, arg: {
+function changeName(roomId: string, arg: {
   old: string;
   new: string;
 }) {
@@ -43,7 +43,7 @@ export function changeName(roomId: string, arg: {
   users.add(arg.new);
 }
 
-export function addUser(roomId: string, name: string) {
+function addUser(roomId: string, name: string) {
   const users = getUsers(roomId);
   if (users.has(name)) {
     throw new Error("name already taken");
