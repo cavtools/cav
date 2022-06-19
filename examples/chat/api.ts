@@ -5,7 +5,7 @@ if (Deno.env.get("DEV")) {
   rooms.set("dev", new Set<string>());
 }
 
-function getUsers(roomId: string) {
+export function getUsers(roomId: string) {
   const users = rooms.get(roomId);
   if (!users) {
     throw new Error("room not found");
@@ -13,22 +13,22 @@ function getUsers(roomId: string) {
   return users;
 }
 
-function createRoom() {
+export function createRoom() {
   const id = crypto.randomUUID();
   rooms.set(id, new Set<string>());
   return id;
 }
 
-function roomExists(roomId: string) {
+export function roomExists(roomId: string) {
   return rooms.has(roomId);
 }
 
-function nameTaken(roomId: string, name: string) {
+export function nameTaken(roomId: string, name: string) {
   const users = getUsers(roomId);
   return users.has(name);
 }
 
-function changeName(roomId: string, arg: {
+export function changeName(roomId: string, arg: {
   old: string;
   new: string;
 }) {
