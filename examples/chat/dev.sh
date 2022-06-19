@@ -8,4 +8,4 @@ DEV=1 deno run \
   --allow-env \
   --allow-read \
   --allow-write=./assets \
-  app.ts
+  mod.ts
