@@ -87,3 +87,14 @@ export function disconnect(roomId: string, arg: {
   users.set(arg.name, ws.filter(w => w !== arg.ws));
 }
 
+export function broadcast(roomId: string, arg: {
+  from: string;
+  text: string;
+}) {
+  const users = getUsers(roomId);
+  for (const [_, sockets] of users.entries())  {
+    for (const ws of sockets) {
+      ws.send(arg);
+    }
+  }
+}

@@ -6,10 +6,12 @@ import { normalizeParser } from "./parser.ts";
 import type { Parser } from "./parser.ts";
 import type { Serializers } from "./serial.ts";
 
+// TODO: When a socket event is cancelled, stop calling listeners
+
 /**
  * Isomorphic WebSocket interface with JSON serialization and typed messages.
  */
- export interface WS<Send = unknown, Recv = unknown> {
+ export interface WS<Send = any, Recv = any> {
   /**
    * The raw WebSocket instance.
    */
@@ -39,7 +41,7 @@ import type { Serializers } from "./serial.ts";
    * from the connected party. The message received is deserialized to the
    * event's "message" property.
    */
-  onmessage?: WSMessageListener;
+  onmessage?: WSMessageListener<Recv>;
   /**
    * Listener for the "error" event, triggered when the connection has been
    * closed due to an error or when received/sent data couldn't be
@@ -93,8 +95,8 @@ export type WSCloseListener = (ev: CloseEvent) => void;
  * Listener for a web socket's "message" event. The message is deserialized from
  * the event data.
  */
-export type WSMessageListener<Message = unknown> = (
-  (message: Message, ev: MessageEvent) => void
+export type WSMessageListener<Recv = any> = (
+  (recv: Recv, ev: MessageEvent) => void
 );
 
 /** Listener for a web socket's "error" event. */
@@ -107,17 +109,17 @@ export type WSErrorListener = (
  * Type that matches any socket. Useful for type constraints.
  */
 // deno-lint-ignore no-explicit-any
-export type AnySocket = WS<any, any>;
+// export type AnySocket = WS<any, any>;
 
 /** Initializer options for the `webSocket()` function. */
-export interface WSInit<Recv = unknown> {
+export interface WSInit<Recv = any> {
   /**
    * For parsing received messages before calling any registered message
    * listeners. If this is omitted, messages will be passed through to listeners
-   * without parsing, typed as `unknown`. If this parser returns undefined, no
+   * without parsing, typed as `any`. If this parser returns undefined, no
    * message event will be triggered.
    */
-  recv?: Parser<unknown, Recv> | null;
+  recv?: Parser<any, Recv> | null;
   /**
    * Additional serializers to use when serializing and deserializing
    * sent/received messages.
@@ -131,13 +133,13 @@ export interface WSInit<Recv = unknown> {
  * with the given URL.
  */
 export function webSocket<
-  Send = unknown,
-  Recv = unknown,
+  Send = any,
+  Recv = any,
 >(
   input: WebSocket | string,
   init?: WSInit<Recv>,
 ): WS<Send, Recv> {
-  type AnyListener = (...a: unknown[]) => unknown;
+  type AnyListener = (...a: any[]) => any;
 
   const raw = typeof input === "string" ? new WebSocket(input, "json") : input;
 
@@ -152,7 +154,7 @@ export function webSocket<
   // order to catch errors that occur in the listeners themselves and log them
   // instead of letting them bubble. I remember there being a global error
   // handler in the works for cases like this, maybe this isn't necessary?
-  const trigger = (type: keyof typeof listeners, ...args: unknown[]) => {
+  const trigger = (type: keyof typeof listeners, ...args: any[]) => {
     if (ws[`on${type}`]) {
       (ws[`on${type}`] as AnyListener)(...args);
     }
@@ -174,7 +176,7 @@ export function webSocket<
       raw.close(code, reason);
     },
     on: (type, cb) => {
-      listeners[type].add(cb as (...a: unknown[]) => unknown);
+      listeners[type].add(cb as (...a: any[]) => any);
     },
     off: (type, cb: (ev: Event | Error) => void) => {
       if (!type && !cb) {
@@ -231,14 +233,18 @@ export function webSocket<
       return;
     }
 
+    // FIXME: HttpErrors sent to the server would trigger the onerror listener.
+    // I need a way to tell the client they sent a bad message that doesn't
+    // conflict with sending legitimate data
     if (recv instanceof HttpError) {
       trigger("error", recv, null);
       return;
     }
 
-    if (typeof recv === "undefined") {
-      return;
-    }
+    // REVIEW: Can't remember why this was here
+    // if (typeof recv === "undefined") {
+    //   return;
+    // }
 
     trigger("message", recv, ev);
   });

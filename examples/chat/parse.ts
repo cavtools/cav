@@ -27,6 +27,10 @@ export function authBody(body?: { name: string }) {
   return { name };
 }
 
-export function wsMessage(msg: api.Message) {
+export function socketMessage(msg: string) {
+  if (typeof msg !== "string") {
+    throw new Error("invalid message");
+  }
 
+  return msg;
 }

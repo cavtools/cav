@@ -16,16 +16,14 @@ export function app() {
   const indexHtml = html.index();
 
   return router({
+    "*": assets({ cwd: import.meta.url }),
     "/": endpoint(null, () => indexHtml),
+    ":roomId": chatRoom(),
 
     "chat": endpoint(null, async x => {
       await new Promise(r => setTimeout(r, 2000)); // "rate limiting"
       return x.redirect(api.createRoom() + "/auth");
     }),
-
-    ":roomId": chatRoom(),
-
-    "*": assets({ cwd: import.meta.url }),
   });
 }
 
@@ -51,7 +49,13 @@ function chatRoom() {
   }, null);
 
   return router({
-    "/": endpoint(base, () => chatHtml),
+    "/": endpoint(base, x => {
+      const name = x.cookies.get(x.groups.roomId, { signed: true });
+      if (!name) {
+        return x.redirect("../" + x.groups.roomId);
+      }
+      return chatHtml;
+    }),
 
     "auth": endpoint({
       ...base,
@@ -85,7 +89,7 @@ function chatRoom() {
         x.cookies.set(roomId, newName, { signed: true });
         return x.redirect("..");
       }
-    
+
       // Otherwise, they're looking to sign in for the first time
       if (api.nameTaken(roomId, newName)) {
         throw new HttpError("409 name taken", { status: 409 });
@@ -96,9 +100,30 @@ function chatRoom() {
     }),
 
     "ws": socket({
+      ...base,
       send: {} as api.Message,
+      recv: parse.socketMessage,
     }, x => {
+      const roomId = x.groups.roomId;
+      const name = x.cookies.get(roomId, { signed: true });
+      const ws = x.ws;
 
+      if (!name) {
+        throw new HttpError("401 unauthorized", { status: 401 });
+      }
+
+      ws.onopen = () => {
+        api.connect(roomId, { name, ws });
+      };
+      ws.onclose = () => {
+        api.disconnect(roomId, { name, ws });
+      };
+      ws.onmessage = (recv) => {
+        api.broadcast(roomId, { from: name, text: recv });
+      };
+      ws.onerror = (err) => {
+        console.error("socket error:", err);
+      };
     }),
   });
 }

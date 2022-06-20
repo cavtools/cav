@@ -857,18 +857,12 @@ export function packResponse(
   init?: PackResponseInit,
 ): Response {
   // If it's already a Response, just append the headers and forward it. Ignore
-  // the init status and statusText. If appending the headers fails, just return
-  // the response. (This can happen if the response is a redirect response, for
-  // example.)  
+  // the init status and statusText 
   // TODO: Test the above caveat
   if (body instanceof Response) {
-    try {
-      const mergeHeaders = new Headers(init?.headers);
-      for (const [k, v] of mergeHeaders.entries()) {
-        body.headers.append(k, v);
-      }
-    } catch {
-      // continue;
+    const mergeHeaders = new Headers(init?.headers);
+    for (const [k, v] of mergeHeaders.entries()) {
+      body.headers.append(k, v);
     }
     return body;
   }

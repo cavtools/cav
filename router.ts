@@ -61,7 +61,12 @@ export function routerContext(request: Request): RouterContext {
   let redirect: Response | null = null;
   if (path !== url.pathname) {
     url.pathname = path;
-    redirect = Response.redirect(url.href, 302);
+    // NOTE: Don't use Response.redirect. It prevents modifying headers
+    // redirect = Response.redirect(url.href, 302);
+    redirect = new Response(null, {
+      status: 302,
+      headers: { "location": url.href },
+    });
   }
 
   const query: Record<string, string | string[]> = {};

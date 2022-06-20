@@ -15,6 +15,10 @@ import type { ServeAssetOptions } from "./assets.ts";
 import type { WS } from "./ws.ts";
 import type { QueryRecord, GroupsRecord } from "./router.ts";
 
+// TODO: Test what happens when sending huge amounts of data to a server with a
+// websocket. AFAIK, there's no way to prevent processing super large web socket
+// messages
+
 /** Options for processing requests, used to construct Endpoints. */
 export interface EndpointSchema {
   /**
@@ -321,7 +325,12 @@ export function endpoint(
         to = stdPath.join(url.pathname, to);
       }
       const u = new URL(to, url.origin);
-      return Response.redirect(u.href, status || 302);
+      // NOTE: Don't use Response.redirect. It prevents modifying headers
+      // return Response.redirect(u.href, status || 302);
+      return new Response(null, {
+        status: status || 302,
+        headers: { "location": u.href },
+      });
     };
 
     const res: ResponseInit & { headers: Headers } = { headers: new Headers() };
@@ -739,7 +748,6 @@ export type Socket<Schema = null> = (
     "send" extends keyof Schema ? Schema["send"] : unknown
   ), (
     Schema extends { recv: Parser } ? ParserInput<Schema["recv"]>
-    : Schema extends { recv?: undefined | null } ? undefined
     : unknown
   )>,
   conn: http.ConnInfo,
@@ -804,7 +812,12 @@ export function socket(
     const ws = webSocket(socket, {
       recv: async (input: unknown) => {
         // This is wrapped so that incoming message parsing errors get
-        // serialized back to the client, which will trigger an 
+        // serialized back to the client, which will trigger an error event
+        // FIXME: The way this works isn't very clear and can create conflicts.
+        // How do I get message parsing errors back to the client without
+        // confusing them with legitimate data? Also, when a client sends an
+        // HttpError it'll trigger the onerror listener instead of the onmessage
+        // listener, which is undesireable
         try {
           return await recv(input);
         } catch (err) {
@@ -817,6 +830,10 @@ export function socket(
       serializers: schema.serializers,
     });
     
+    // TODO: It would be nice if the onsetup can return a response to serialize
+    // in case of a problem. Don't merge socket with endpoint, even though it
+    // seems like that would be the right thing to do here; they function
+    // differently and don't use the exact same schema structure
     if (setup) {
       await setup({ ...x, schema, ws });
     }

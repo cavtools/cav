@@ -36,13 +36,51 @@ export function auth() {
 export async function chat() {
   const newMsg = $<HTMLLabelElement>(".new-msg")!;
   const newMsgText = $<HTMLTextAreaElement>(".new-msg textarea")!;
+  const messages = $(".messages")!;
 
-  // Auto-sizing text area
+  // Auto-size text area
   newMsgText.oninput = () => {
     newMsg.dataset.value = newMsgText.value;
     window.scrollTo(0, document.body.scrollHeight);
   };
-  newMsgText.dispatchEvent(new Event("input")); // Auto-size on load
+  newMsgText.dispatchEvent(new Event("input"));
+
+  const msgGroup = $<HTMLTemplateElement>("#msg-group")!.content;
+  const appendNewMessage = (arg: { from: string; text: string }) => {
+    const lastGroup = $(".msg-group:last-child");
+    if (lastGroup && $(".user", lastGroup)!.innerText === arg.from) {
+      const p = document.createElement("p");
+      p.classList.add("msg");
+      p.innerText = arg.text;
+      lastGroup.append(p);
+      return;
+    }
+
+    const newGroup = msgGroup.cloneNode(true) as ParentNode;
+    $(".user", newGroup)!.innerText = arg.from;
+    $(".msg", newGroup)!.innerText = arg.text;
+    messages.append(newGroup);
+  };
 
   const ws = client<ChatRoom>(self.location.pathname).ws({ socket: true });
+  ws.onopen = () => {
+    newMsgText.onkeydown = ev => {
+      if (ev.key === "Enter" && !ev.getModifierState("Shift")) {
+        ev.preventDefault();
+        ws.send(newMsgText.value);
+        newMsgText.value = "";
+        newMsg.dataset.value = "";
+      }
+    };
+  };
+  ws.onclose = () => {
+    console.log("socket closed");
+  };
+  ws.onmessage = (recv) => {
+    console.log("message received", recv);
+    appendNewMessage(recv);
+  };
+  ws.onerror = (err) => {
+    console.error("socket error", err);
+  };
 }
