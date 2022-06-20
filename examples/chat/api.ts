@@ -1,26 +1,37 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-const rooms = new Map<string, Set<string>>();
-if (Deno.env.get("DEV")) {
-  rooms.set("dev", new Set<string>());
+import type { WS } from "./deps.ts";
+
+export interface Message {
+  from: string;
+  text: string;
 }
 
-export function getUsers(roomId: string) {
-  const users = rooms.get(roomId);
-  if (!users) {
-    throw new Error("room not found");
-  }
-  return users;
+type Users = Map<string, WS<Message>[]>;
+
+type Rooms = Map<string, Users>;
+
+const rooms: Rooms = new Map();
+if (Deno.env.get("DEV")) {
+  rooms.set("dev", new Map());
 }
 
 export function createRoom() {
   const id = crypto.randomUUID();
-  rooms.set(id, new Set<string>());
+  rooms.set(id, new Map());
   return id;
 }
 
 export function roomExists(roomId: string) {
   return rooms.has(roomId);
+}
+
+function getUsers(roomId: string) {
+  const users = rooms.get(roomId);
+  if (!users) {
+    throw new Error("room not found");
+  }
+  return users;
 }
 
 export function nameTaken(roomId: string, name: string) {
@@ -33,20 +44,46 @@ export function changeName(roomId: string, arg: {
   new: string;
 }) {
   const users = getUsers(roomId);
-  if (!users.has(arg.old)) {
+  const ws = users.get(arg.old);
+  if (!ws) {
     throw new Error("old name not found");
   }
   if (users.has(arg.new)) {
     throw new Error("new name already taken");
   }
   users.delete(arg.old);
-  users.add(arg.new);
+  users.set(arg.new, ws);
 }
 
-export function addUser(roomId: string, name: string) {
+export function newUser(roomId: string, name: string) {
   const users = getUsers(roomId);
   if (users.has(name)) {
     throw new Error("name already taken");
   }
-  users.add(name);
+  users.set(name, []);
 }
+
+export function connect(roomId: string, arg: {
+  name: string;
+  ws: WS<Message>;
+}) {
+  const users = getUsers(roomId);
+  const ws = users.get(arg.name);
+  if (!ws) {
+    throw new Error("user not found");
+  }
+  ws.push(arg.ws);
+}
+
+export function disconnect(roomId: string, arg: {
+  name: string;
+  ws: WS<Message>;
+}) {
+  const users = getUsers(roomId);
+  const ws = users.get(arg.name);
+  if (!ws) {
+    throw new Error("user not found");
+  }
+  users.set(arg.name, ws.filter(w => w !== arg.ws));
+}
+

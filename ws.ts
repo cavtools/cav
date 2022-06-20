@@ -9,7 +9,7 @@ import type { Serializers } from "./serial.ts";
 /**
  * Isomorphic WebSocket interface with JSON serialization and typed messages.
  */
- export interface WS<Send = unknown, Receive = unknown> {
+ export interface WS<Send = unknown, Recv = unknown> {
   /**
    * The raw WebSocket instance.
    */
@@ -62,7 +62,7 @@ import type { Serializers } from "./serial.ts";
    * message is received from the connected party. The message received is
    * deserialized before the listener is called.
    */
-  on(type: "message", cb: WSMessageListener<Receive>): void;
+  on(type: "message", cb: WSMessageListener<Recv>): void;
   /**
    * Register an event listener for the "error" event, triggered when the
    * connection has been closed due to an error or when an error is thrown
@@ -110,14 +110,14 @@ export type WSErrorListener = (
 export type AnySocket = WS<any, any>;
 
 /** Initializer options for the `webSocket()` function. */
-export interface WSInit<Receive = unknown> {
+export interface WSInit<Recv = unknown> {
   /**
    * For parsing received messages before calling any registered message
    * listeners. If this is omitted, messages will be passed through to listeners
    * without parsing, typed as `unknown`. If this parser returns undefined, no
    * message event will be triggered.
    */
-  message?: Parser<unknown, Receive> | null;
+  recv?: Parser<unknown, Recv> | null;
   /**
    * Additional serializers to use when serializing and deserializing
    * sent/received messages.
@@ -132,11 +132,11 @@ export interface WSInit<Receive = unknown> {
  */
 export function webSocket<
   Send = unknown,
-  Receive = unknown,
+  Recv = unknown,
 >(
   input: WebSocket | string,
-  init?: WSInit<Receive>,
-): WS<Send, Receive> {
+  init?: WSInit<Recv>,
+): WS<Send, Recv> {
   type AnyListener = (...a: unknown[]) => unknown;
 
   const raw = typeof input === "string" ? new WebSocket(input, "json") : input;
@@ -161,7 +161,7 @@ export function webSocket<
     }
   };
   
-  const ws: WS<Send, Receive> = {
+  const ws: WS<Send, Recv> = {
     raw,
     send: (data) => {
       try {
@@ -201,7 +201,7 @@ export function webSocket<
       return;
     }
 
-    let message: Receive;
+    let recv: Recv;
     try {
       if (
         typeof ev.data !== "string" &&
@@ -211,7 +211,7 @@ export function webSocket<
         throw new Error(`Invalid data received: ${ev.data}`);
       }
   
-      message = deserialize(
+      recv = deserialize(
         JSON.parse(
           typeof ev.data === "string"
             ? ev.data
@@ -222,25 +222,25 @@ export function webSocket<
         init?.serializers,
       );
   
-      if (init?.message) {
-        const parseMessage = normalizeParser(init.message);
-        message = await parseMessage(message) as Receive;
+      if (init?.recv) {
+        const parseRecv = normalizeParser(init.recv);
+        recv = await parseRecv(recv) as Recv;
       }
     } catch (err) {
       trigger("error", err, null);
       return;
     }
 
-    if (message instanceof HttpError) {
-      trigger("error", message, null);
+    if (recv instanceof HttpError) {
+      trigger("error", recv, null);
       return;
     }
 
-    if (typeof message === "undefined") {
+    if (typeof recv === "undefined") {
       return;
     }
 
-    trigger("message", message, ev);
+    trigger("message", recv, ev);
   });
 
   raw.addEventListener("error", (ev) => {

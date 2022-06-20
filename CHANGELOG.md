@@ -2,8 +2,7 @@
 
 ## Up next: [0.2.0](https://deno.land/x/cav@0.2.0)
 
-- Removed the COOKIE_JWT_HEADER and added the `encodeCookie()` and
-  `decodeCookie()` exports to cookies.ts
+- Added the `encodeCookie()` and `decodeCookie()` exports to cookies.ts
 - When serving assets without an explicit asset `path` specified, the
   `serveAsset()` function will now use the routed path from the RouterContext
   instead of the full request path
@@ -17,13 +16,10 @@
 - If an endpoint resolver returns a string that begins with optional whitespace
   and then `<!DOCTYPE html>`, it'll automatically set the content-type to be
   html unless the content-type was already explicitly set
-- Fixed a bug where the route "/" wasn't working properly
-- Fixed a few client bugs with URL formation
 - Resolvers are no longer assigned to endpoints as the `resolve` property
 - Endpoints now require both a schema and a resolver to be specified explicitly
 - Change `ResolveArg` to `ResolverArg`
 - Updated the cookies to better handle signed/unsigned operations
-- Fixed a redirect bug
 - All .ts and .tsx assets are bundled now. (No need to end in *_bundle.ts(x).)
   To avoid bundling, store the TS files elsewhere
 - Changed the name of `browser.ts` to `mod_browser.ts`
@@ -32,6 +28,8 @@
 - Content-type detection for CSS using `/* !DOCTYPE css */`
 - Modified client type to treat "*" correctly (it treated it like a path param,
   but it doesn't consume path parts)
+- Various bug fixes
+- Changed endpoint `message`s to `body`s
 
 ## June 16, 2022: [0.1.0](https://deno.land/x/cav@0.1.0)
 

@@ -31,7 +31,7 @@ export interface EndpointSchema {
    * the endpoint won't match with the request and the router will continue
    * looking for matching handlers.
    */
-  groups?: Parser<GroupsRecord, any> | null;
+  groups?: Parser<GroupsRecord> | null;
   /**
    * Keys to use when signing cookies. The cookies are available as the
    * "cookies" resolver argument.
@@ -50,12 +50,9 @@ export interface EndpointSchema {
    * fails, a 400 bad request error will be sent to the client. The output is
    * available as the "query" resolver argument.
    */
-  query?: Parser<QueryRecord, any> | null;
-  // TODO: Maybe split maxBodySize into two options: "memory" and "disk", which
-  // specify the maximum space a request can use in memory and on disk.
-  // "bodySize" wouldn't be general enough to cover both cases
+  query?: Parser<QueryRecord> | null;
   /**
-   * Limits the size of posted messages. If a message exceeds the limit, a 413
+   * Limits the size of posted bodies. If a body exceeds the limit, a 413
    * HttpError will be thrown and serialized back to the client. If 0 is
    * specified, body size is unlimited. (Don't do that.) The default max body
    * size is 1024 * 1024 bytes (1 Megabyte).
@@ -72,9 +69,14 @@ export interface EndpointSchema {
    * only GET and HEAD requests will be allowed. If there is one and it
    * successfully parses `undefined`, POST will also be allowed. If the parser
    * throws when parsing `undefined`, *only* POST will be allowed. The output
-   * from parsing is available as the "message" resolver argument.
+   * from parsing is available as the "body" resolver argument.
    */
-  message?: Parser<any, any> | null;
+  body?: Parser | null;
+  /**
+   * Overrides the type returned by the resolver. The value of this property
+   * doesn't matter, it's only used for its type.
+   */
+  result?: unknown;
   // TODO: When you do the "memory" and "disk" options, change the name of this
   // option to just "error". That way all keys on the schema are a single word
   /**
@@ -83,7 +85,7 @@ export interface EndpointSchema {
    * of the error. If an error is re-thrown, that error will be serialized to
    * the client instead of the original error.
    */
-  resolveError?: ((x: ResolveErrorArg) => any) | null;
+  error?: ((x: ErrorArg) => any) | null;
 }
 
 /** Arguments available to Context functions. */
@@ -120,7 +122,7 @@ export interface ContextArg {
 }
 
 /** Arguments available to a ResolveError function. */
-export interface ResolveErrorArg {
+export interface ErrorArg {
   /** The Request being processed. */
   req: Request;
   /**
@@ -198,15 +200,15 @@ export type QueryOutput<Schema> = (
 );
 
 /**
- * Type utility for extracting the output of a "message" parser on an
+ * Type utility for extracting the output of a "body" parser on an
  * EndpointSchema or SocketSchema.
  */
-export type MessageOutput<Schema> = (
-  "message" extends keyof Schema ? (
-    Schema extends { message: Parser } ? (
-      ParserOutput<Schema["message"]>
+export type BodyOutput<Schema> = (
+  "body" extends keyof Schema ? (
+    Schema extends { body: Parser } ? (
+      ParserOutput<Schema["body"]>
     )
-    : Schema extends { message?: undefined | null } ? undefined
+    : Schema extends { body?: undefined | null } ? undefined
     : never
   )
   : Schema extends Record<string, unknown> ? undefined
@@ -242,7 +244,7 @@ export interface ResolverArg<Schema = unknown> {
   /** The parsed query string parameters. */
   query: QueryOutput<Schema>;
   /** The parsed Request body, if any. */
-  message: MessageOutput<Schema>;
+  body: BodyOutput<Schema>;
   /** Returns a Response created using an asset from an assets directory. */
   asset: (opt?: ServeAssetOptions) => Promise<Response>;
   /**
@@ -260,7 +262,7 @@ export type Endpoint<Schema = unknown, Result = unknown> = Schema & ((
     Schema extends { query: Parser } ? ParserInput<Schema["query"]>
     : QueryRecord | undefined
   ), (
-    Schema extends { message: Parser } ? ParserInput<Schema["message"]>
+    Schema extends { body: Parser } ? ParserInput<Schema["body"]>
     : Schema extends Record<string, unknown> ? undefined
     : unknown
   ), Result>,
@@ -281,7 +283,12 @@ export function endpoint<
 ): Endpoint<(
   EndpointSchema extends Schema ? {}
   : { [K in keyof Schema]: Schema[K] }
-), Awaited<Result> extends Response ? unknown : Awaited<Result>>;
+), (
+  unknown extends Schema["result"] ? (
+    Awaited<Result> extends Response ? unknown : Awaited<Result>
+  )
+  : Schema["result"]
+)>;
 export function endpoint(
   _schema: EndpointSchema | null,
   _resolver: ((x: ResolverArg<any>) => any) | null,
@@ -289,14 +296,14 @@ export function endpoint(
   const schema = _schema || {};
   const resolver = _resolver || (() => {});
 
-  const checkMethod = methodChecker(schema.message);
+  const checkMethod = methodChecker(schema.body);
   const matchPath = pathMatcher({
     path: schema.path,
     groups: schema.groups,
   });
   const parseInput = inputParser({
     query: schema.query,
-    message: schema.message,
+    body: schema.body,
     maxBodySize: schema.maxBodySize,
     serializers: schema.serializers,
   });
@@ -358,7 +365,7 @@ export function endpoint(
         });
       }
 
-      const { query, message } = await parseInput(req);
+      const { query, body } = await parseInput(req);
       output = await resolver({
         schema: schema as any,
         req,
@@ -370,18 +377,18 @@ export function endpoint(
         groups: groups as any,
         ctx: ctx as any,
         query: query as any,
-        message: message as any,
+        body: body as any,
         asset,
         redirect,
       });
     } catch (err) {
       error = err;
-      // Check to see if the resolveError function can handle it
-      if (schema.resolveError) {
+      // Check to see if the error function can handle it
+      if (schema.error) {
         // If it rethrows, use the newly thrown error instead. If it returns
         // something, that thing should be packed into a Response
         try {
-          output = await schema.resolveError({
+          output = await schema.error({
             req,
             res,
             url,
@@ -448,29 +455,24 @@ export function endpoint(
 }
 
 /**
- * Given an Endpoint's "message" option, this returns a function that checks
+ * Given an Endpoint's "body" option, this returns a function that checks
  * whether a Request's method is allowed or not during handling. When a
  * request's method isn't in the calculated set of allowed methods, a 405
  * HttpError will be thrown. If the returned value is a Response, it should be
  * returned to the client right away. It means the request is an OPTIONS
  * request, and the Response returned is meant to handle it.
  *
- * OPTIONS is always an allowed method. If the message parser is `null` or
- * `undefined`, GET and HEAD will be allowed. If there's a message parser and it
+ * OPTIONS is always an allowed method. If the body parser is `null` or
+ * `undefined`, GET and HEAD will be allowed. If there's a body parser and it
  * successfully parses `undefined`, GET, HEAD, and POST will be allowed. If the
- * message parser throws an error while parsing `undefined`, only POST will be
+ * body parser throws an error while parsing `undefined`, only POST will be
  * allowed.
  */
 function methodChecker(
-  message?: Parser | null,
+  body?: Parser | null,
 ): (req: Request) => Promise<Response | null> {
-  const parseMessage = (
-    typeof message === "function"
-      ? message
-      : message
-      ? message.parse
-      : null
-  );
+  const parseBody = body && normalizeParser(body);
+
   let allowed: Set<string> | null = null;
   return async (req: Request) => {
     // On the first request, setup the allowed methods set. Doing it here
@@ -479,9 +481,9 @@ function methodChecker(
     if (!allowed) {
       allowed = new Set(["OPTIONS"]);
       let postRequired = false;
-      if (parseMessage) {
+      if (parseBody) {
         try {
-          await parseMessage(undefined);
+          await parseBody(undefined);
         } catch {
           postRequired = true;
         }
@@ -491,7 +493,7 @@ function methodChecker(
       } else {
         allowed.add("GET");
         allowed.add("HEAD");
-        if (parseMessage) {
+        if (parseBody) {
           allowed.add("POST");
         }
       }
@@ -597,19 +599,19 @@ function pathMatcher(opt: {
  * Creates an input parser that processes the Endpoint input using the relevant
  * EndpointSchema options. If parsing fails, a 400 HttpError will be thrown with
  * the offending error exposed on the "expose" property. If it succeeds, the
- * parsed query and message will be returned.
+ * parsed query and body will be returned.
  */
 function inputParser(opt: {
   query?: Parser | null;
-  message?: Parser | null;
+  body?: Parser | null;
   maxBodySize?: number | null;
   serializers?: Serializers | null;
 }): (req: Request) => Promise<{
   query: unknown;
-  message: unknown;
+  body: unknown;
 }> {
   const parseQuery = opt.query && normalizeParser(opt.query);
-  const parseMessage = opt.message && normalizeParser(opt.message);
+  const parseBody = opt.body && normalizeParser(opt.body);
 
   return async (req) => {
     const routerCtx = routerContext(req);
@@ -633,13 +635,13 @@ function inputParser(opt: {
       }
     }
 
-    let message: unknown = undefined;
-    if (req.body && parseMessage) {
-      // If the req.body is true, parseMessage should also be true due to the
+    let body: unknown = undefined;
+    if (req.body && parseBody) {
+      // If the req.body is true, parseBody should also be true due to the
       // method check that happens at the start of request handling. The above
       // conditional is redundant for type purposes
       
-      message = await unpack(req, {
+      body = await unpack(req, {
         maxBodySize: (
           typeof opt.maxBodySize === "number" ? opt.maxBodySize
           : undefined
@@ -648,7 +650,7 @@ function inputParser(opt: {
       });
 
       try {
-        message = await parseMessage(message);
+        body = await parseBody(body);
       } catch (err) {
         if (err instanceof HttpError) {
           throw err;
@@ -660,7 +662,7 @@ function inputParser(opt: {
       }
     }
 
-    return { query, message };
+    return { query, body };
   };
 }
 
@@ -709,7 +711,16 @@ export function redirect(to: string, status?: number) {
 }
 
 /** Schema options for creating a `socket()` handler. */
-export interface SocketSchema extends Omit<EndpointSchema, "maxBodySize"> {
+export interface SocketSchema extends Omit<
+  EndpointSchema,
+  "maxBodySize" | "body"
+> {
+  /**
+   * Incoming message parser. Without this, received messages will be typed as
+   * `unknown`. When a message fails to parse, an error message will be sent
+   * back to the client.
+   */
+  recv?: Parser | null;
   /**
    * The type of message this Socket expects to send to a connected client. The
    * value of this property doesn't matter, it's only used for the type.
@@ -723,12 +734,12 @@ export type Socket<Schema = null> = (
 ) & ((
   req: SocketRequest<(
     Schema extends { query: Parser } ? ParserInput<Schema["query"]>
-    : Record<string, string | string[]>
+    : QueryRecord | undefined
   ), (
     "send" extends keyof Schema ? Schema["send"] : unknown
   ), (
-    Schema extends { message: Parser } ? ParserInput<Schema["message"]>
-    : Schema extends { message?: undefined | null } ? undefined
+    Schema extends { recv: Parser } ? ParserInput<Schema["recv"]>
+    : Schema extends { recv?: undefined | null } ? undefined
     : unknown
   )>,
   conn: http.ConnInfo,
@@ -736,18 +747,27 @@ export type Socket<Schema = null> = (
 
 /**
  * Type utility for extracting the type of message a socket expects to send from
- * a SocketSchema.
+ * its SocketSchema.
  */
 export type SendType<Schema extends SocketSchema | null> = (
   Schema extends { send: infer S } ? S
   : unknown
 );
 
+/**
+ * Type utility for extracting the type of message a socket expects to receive
+ * from its SocketSchema.
+ */
+export type RecvType<Schema extends SocketSchema | null> = (
+  Schema extends { recv: Parser<infer R> } ? R
+  : unknown
+);
+
 /** Arguments available to the setup function of a socket endpoint. */
 export interface SetupArg<Schema = unknown> extends Omit<
-  ResolverArg<Schema>, "message" | "asset" | "redirect"
+  ResolverArg<Schema>, "body" | "asset" | "redirect"
 > {
-  ws: WS<SendType<Schema>, MessageOutput<Schema>>;
+  ws: WS<SendType<Schema>, RecvType<Schema>>;
 }
 
 /**
@@ -765,11 +785,10 @@ export function socket(
 ) {
   const schema = _schema || {};
   const setup = _setup || (() => {});
-  const parseMessage = normalizeParser(schema.message || ((m) => m));
+  const recv = normalizeParser(schema.recv || ((m) => m));
 
-  const handler = endpoint({
+  return endpoint({
     ...schema,
-    message: null, // !important
   }, async x => {
     let socket: WebSocket;
     let response: Response;
@@ -783,11 +802,11 @@ export function socket(
     }
 
     const ws = webSocket(socket, {
-      message: async (input: unknown) => {
+      recv: async (input: unknown) => {
         // This is wrapped so that incoming message parsing errors get
         // serialized back to the client, which will trigger an 
         try {
-          return await parseMessage(input);
+          return await recv(input);
         } catch (err) {
           ws.send(new HttpError("400 bad request", {
             status: 400,
@@ -803,10 +822,5 @@ export function socket(
     }
 
     return response;
-  });
-
-  // Don't forget that the message parser won't be set on the handler yet
-  // because we overwrote it when constructing the endpoint, so it needs to be
-  // manually re-assigned after construction
-  return Object.assign(handler, { message: schema.message }) as Socket;
+  }) as Socket;
 }

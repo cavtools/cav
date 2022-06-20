@@ -6,32 +6,36 @@ import {
   assets,
   endpoint,
   serve,
+  socket,
 } from "./deps.ts";
 import * as api from "./api.ts";
 import * as html from "./html.ts";
+import * as parse from "./parse.ts";
 
 export function app() {
+  const indexHtml = html.index();
+
   return router({
-    "*": assets({ cwd: import.meta.url }),
-    "index.css": endpoint(null, html.indexCss),
-    "auth.css": endpoint(null, html.authCss),
-    "chat.css": endpoint(null, html.chatCss),
+    "/": endpoint(null, () => indexHtml),
 
-    "/": endpoint(null, html.index),
-
-    chat: endpoint(null, async x => {
+    "chat": endpoint(null, async x => {
       await new Promise(r => setTimeout(r, 2000)); // "rate limiting"
-      return x.redirect("../" + api.createRoom() + "/auth");
+      return x.redirect(api.createRoom() + "/auth");
     }),
 
     ":roomId": chatRoom(),
+
+    "*": assets({ cwd: import.meta.url }),
   });
 }
 
 export type ChatRoom = ReturnType<typeof chatRoom>;
 
 function chatRoom() {
-  const schema = endpoint({
+  const chatHtml = html.chat();
+  const authHtml = html.auth();
+  
+  const base = endpoint({
     groups: ({ roomId }) => {
       if (!roomId) {
         throw new Error("invalid routing setup: roomId required");
@@ -47,43 +51,20 @@ function chatRoom() {
   }, null);
 
   return router({
-    "/": endpoint(schema, html.chat),
-    
-    auth: endpoint({
-      ...schema,
-      message: msg => {
-        // Allow GET
-        if (typeof msg === "undefined") {
-          return msg;
-        }
-        if (!msg || typeof msg !== "object") {
-          throw new Error("message must be a Record<string, string>")
-        }
-        
-        const { name } = msg;
-        if (typeof name === "undefined") {
-          throw new Error("name required");
-        }
-        if (typeof name !== "string") {
-          throw new Error("message must be a Record<string, string>")
-        }
-        if (name.length > 20) {
-          throw new Error("names can't be longer than 20 characters");
-        }
-        if (name.length < 1) {
-          throw new Error("names must be at least 1 character");
-        }
-        return { name };
-      },
+    "/": endpoint(base, () => chatHtml),
+
+    "auth": endpoint({
+      ...base,
+      body: parse.authBody,
     }, x => {
       const { roomId } = x.groups;
       const oldName = x.cookies.get(roomId, { signed: true });
-      const newName = x.message?.name;
+      const newName = x.body?.name;
     
       // If it's a GET request, redirect them if they're already signed in or
       // show them the login form if not
       if (!oldName && !newName) {
-        return html.auth();
+        return authHtml;
       }
       if (!newName) {
         return x.redirect("..");
@@ -109,9 +90,15 @@ function chatRoom() {
       if (api.nameTaken(roomId, newName)) {
         throw new HttpError("409 name taken", { status: 409 });
       }
-      api.addUser(roomId, newName);
+      api.newUser(roomId, newName);
       x.cookies.set(roomId, newName, { signed: true });
       return x.redirect("..");
+    }),
+
+    "ws": socket({
+      send: {} as api.Message,
+    }, x => {
+
     }),
   });
 }
