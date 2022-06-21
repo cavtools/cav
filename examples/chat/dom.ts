@@ -44,6 +44,13 @@ export async function chatPage() {
   const inputText = $<HTMLTextAreaElement>("textarea", inputLabel)!;
   const messages = $(".messages")!;
 
+  self.onkeydown = (ev) => {
+    if (ev.key === "Enter" && document.activeElement !== inputText) {
+      ev.preventDefault();
+      inputText.select();
+    }
+  };
+
   // Auto-sizing for the textarea
   inputText.oninput = () => {
     inputLabel.dataset.value = inputText.value;
