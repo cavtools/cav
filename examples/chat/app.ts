@@ -13,46 +13,34 @@ import * as html from "./html.ts";
 import * as parse from "./parse.ts";
 
 export function app() {
-  const indexHtml = html.index();
+  const indexHtml = html.indexPage();
 
   return router({
     "*": assets({ cwd: import.meta.url }),
     "/": endpoint(null, () => indexHtml),
-    ":roomId": chatRoom(),
-
     "chat": endpoint(null, async x => {
       await new Promise(r => setTimeout(r, 2000)); // "rate limiting"
       return x.redirect(api.createRoom() + "/auth");
     }),
+    ":roomId": chatRoom(),
   });
 }
 
 export type ChatRoom = ReturnType<typeof chatRoom>;
 
 function chatRoom() {
-  const chatHtml = html.chat();
-  const authHtml = html.auth();
+  const chatHtml = html.chatPage();
+  const authHtml = html.authPage();
   
   const base = endpoint({
-    groups: ({ roomId }) => {
-      if (!roomId) {
-        throw new Error("invalid routing setup: roomId required");
-      }
-      if (Array.isArray(roomId)) {
-        throw new Error("invalid routing setup: only 1 roomId allowed");
-      }
-      if (!api.roomExists(roomId)) {
-        throw new Error("room not found");
-      }
-      return { roomId };
-    },
+    groups: parse.authGroups,
   }, null);
 
   return router({
     "/": endpoint(base, x => {
       const name = x.cookies.get(x.groups.roomId, { signed: true });
       if (!name) {
-        return x.redirect("../" + x.groups.roomId);
+        return x.redirect("./auth");
       }
       return chatHtml;
     }),

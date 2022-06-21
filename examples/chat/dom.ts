@@ -1,12 +1,19 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-only.
 
-import { $, client } from "../../dom.ts";
+import { $, client } from "./deps_dom.ts";
+import * as html from "./html.ts";
 import type { ChatRoom } from "./app.ts";
 
-export function index() {
+function make(html: string) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  return template.content;
+}
+
+export function indexPage() {
   const newChat = $<HTMLAnchorElement>(".new-chat")!;
-  newChat.onclick = (e) => {
+  newChat.onclick = () => {
     newChat.classList.add("disabled");
     newChat.innerText = "Take a deep breath...";
   };
@@ -18,58 +25,52 @@ export function index() {
   };
 }
 
-export function auth() {
+export function authPage() {
   const name = $<HTMLInputElement>(".name")!;
   const submit = $<HTMLButtonElement>(".submit")!;
 
   name.oninput = () => {
     submit.disabled = !name.value;
   };
-  name.dispatchEvent(new Event("input"));
-
   name.onfocus = () => {
     name.select();
   };
+  name.dispatchEvent(new Event("input"));
   name.focus();
 }
 
-export async function chat() {
-  const newMsg = $<HTMLLabelElement>(".new-msg")!;
-  const newMsgText = $<HTMLTextAreaElement>(".new-msg textarea")!;
+export async function chatPage() {
+  const inputLabel = $<HTMLLabelElement>(".input")!;
+  const inputText = $<HTMLTextAreaElement>("textarea", inputLabel)!;
   const messages = $(".messages")!;
 
-  // Auto-size text area
-  newMsgText.oninput = () => {
-    newMsg.dataset.value = newMsgText.value;
+  // Auto-sizing for the textarea
+  inputText.oninput = () => {
+    inputLabel.dataset.value = inputText.value;
     window.scrollTo(0, document.body.scrollHeight);
   };
-  newMsgText.dispatchEvent(new Event("input"));
+  inputText.dispatchEvent(new Event("input")); // Size on page load
+  inputText.focus();
 
-  const msgGroup = $<HTMLTemplateElement>("#msg-group")!.content;
-  const appendNewMessage = (arg: { from: string; text: string }) => {
-    const lastGroup = $(".msg-group:last-child");
-    if (lastGroup && $(".user", lastGroup)!.innerText === arg.from) {
-      const p = document.createElement("p");
-      p.classList.add("msg");
-      p.innerText = arg.text;
-      lastGroup.append(p);
+  const renderMessage = (x: { from: string; text: string; self: boolean }) => {
+    const lastGroup = $(".group:last-child", messages);
+    if (lastGroup && $(".user", lastGroup)!.innerText === x.from) {
+      lastGroup.append(make(html.chatMsg(x.text)));
       return;
     }
 
-    const newGroup = msgGroup.cloneNode(true) as ParentNode;
-    $(".user", newGroup)!.innerText = arg.from;
-    $(".msg", newGroup)!.innerText = arg.text;
-    messages.append(newGroup);
+    const msg = make(html.chatGroup(x));
+    messages.append(msg);
   };
 
   const ws = client<ChatRoom>(self.location.pathname).ws({ socket: true });
   ws.onopen = () => {
-    newMsgText.onkeydown = ev => {
+    inputText.onkeydown = ev => {
       if (ev.key === "Enter" && !ev.getModifierState("Shift")) {
         ev.preventDefault();
-        ws.send(newMsgText.value);
-        newMsgText.value = "";
-        newMsg.dataset.value = "";
+        ws.send(inputText.value);
+        inputText.value = "";
+        inputLabel.dataset.value = "";
       }
     };
   };
@@ -78,7 +79,7 @@ export async function chat() {
   };
   ws.onmessage = (recv) => {
     console.log("message received", recv);
-    appendNewMessage(recv);
+    renderMessage(recv);
   };
   ws.onerror = (err) => {
     console.error("socket error", err);

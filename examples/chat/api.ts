@@ -5,6 +5,7 @@ import type { WS } from "./deps.ts";
 export interface Message {
   from: string;
   text: string;
+  self: boolean;
 }
 
 type Users = Map<string, WS<Message>[]>;
@@ -16,6 +17,14 @@ if (Deno.env.get("DEV")) {
   rooms.set("dev", new Map());
 }
 
+function getUsers(roomId: string) {
+  const users = rooms.get(roomId);
+  if (!users) {
+    throw new Error("room not found");
+  }
+  return users;
+}
+
 export function createRoom() {
   const id = crypto.randomUUID();
   rooms.set(id, new Map());
@@ -24,14 +33,6 @@ export function createRoom() {
 
 export function roomExists(roomId: string) {
   return rooms.has(roomId);
-}
-
-function getUsers(roomId: string) {
-  const users = rooms.get(roomId);
-  if (!users) {
-    throw new Error("room not found");
-  }
-  return users;
 }
 
 export function nameTaken(roomId: string, name: string) {
@@ -92,9 +93,9 @@ export function broadcast(roomId: string, arg: {
   text: string;
 }) {
   const users = getUsers(roomId);
-  for (const [_, sockets] of users.entries())  {
+  for (const [name, sockets] of users.entries())  {
     for (const ws of sockets) {
-      ws.send(arg);
+      ws.send({ ...arg, self: name === arg.from });
     }
   }
 }
