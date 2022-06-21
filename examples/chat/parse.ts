@@ -38,9 +38,12 @@ export function authGroups(groups: GroupsRecord) {
   return { roomId };
 }
 
-export function socketMessage(msg: string) {
+export function sendMessage(msg: string) {
   if (typeof msg !== "string") {
     throw new Error("invalid message");
+  }
+  if (msg.length > 1000) {
+    throw new Error("messages must be less than 1000 characters");
   }
   return msg;
 }

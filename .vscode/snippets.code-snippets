@@ -11,7 +11,7 @@
 	// 	"prefix": "log",
 	// 	"body": [
 	// 		"console.log('$1');",
-	// 		"$2"
+	// 		"$1"
 	// 	],
 	// 	"description": "Log output to console"
 	// }
@@ -20,7 +20,7 @@
 		"prefix": "//c",
 		"body": [
 			"// Copyright 2022 Connor Logan. All rights reserved. MIT License.",
-			"$1"
+			"$0"
 		]
 	},
 	"Copyright CSS": {
@@ -28,7 +28,7 @@
 		"prefix": "/*c",
 		"body": [
 			"/* Copyright 2022 Connor Logan. All rights reserved. MIT License. */",
-			"$1"
+			"$0"
 		]
 	},
 	"Copyright HTML": {
@@ -36,7 +36,7 @@
 		"prefix": "<!--c",
 		"body": [
 			"<!-- Copyright 2022 Connor Logan. All rights reserved. MIT License. -->",
-			"$1"
+			"$0"
 		]
 	},
 	"Browser-only": {
@@ -44,7 +44,7 @@
 		"prefix": "//bo",
 		"body": [
 			"// This module is browser-only.",
-			"$1"
+			"$0"
 		]
 	},
 	"Browser-compatible": {
@@ -52,7 +52,7 @@
 		"prefix": "//bc",
 		"body": [
 			"// This module is browser-compatible.",
-			"$1"
+			"$0"
 		]
 	},
 }

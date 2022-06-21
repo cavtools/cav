@@ -1,5 +1,5 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
-// This module is browser-only.
+// This module is browser-compatible.
 
 /// <reference no-default-lib="true" />
 /// <reference lib="dom" />
@@ -11,6 +11,13 @@ export * from "./client.ts";
 export * from "./parser.ts";
 export * from "./serial.ts";
 export * from "./ws.ts";
+
+/** Creates a new DocumentFragment using the provided HTML. */
+export function make(html: string) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  return template.content;
+}
 
 /**
  * Shorthand for `document.querySelector`. If a second `parent` node is
