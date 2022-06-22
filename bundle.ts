@@ -35,7 +35,7 @@ export interface ServeBundleOptions {
 const bundleCache = new Map<string, Promise<string>>();
 
 async function bundle(url: string): Promise<string> {
-  return (await emit.bundle(url, {
+  return (await emit.bundle(path.fromFileUrl(url), {
     allowRemote: true,
     type: "module",
     compilerOptions: {
@@ -88,7 +88,9 @@ export async function serveBundle(
     });
   }
 
+
   cache = bundle(url).catch(reason => {
+    console.error("Failed to bundle", url, reason);
     bundleCache.delete(url);
     throw reason;
   });
@@ -111,6 +113,7 @@ export async function serveBundle(
         }
 
         cache = bundle(url).catch(reason => {
+          console.error("Failed to bundle", url, reason);
           bundleCache.delete(url);
           throw reason;
         });

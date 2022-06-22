@@ -30,7 +30,6 @@ export function base({ head, body }: {
 
 export function baseCss() {
   return /*css*/`
-    /* !DOCTYPE css */
     * {
       margin: 0;
       padding: 0;

@@ -28,10 +28,11 @@ export function roomRouter() {
   }, null);
 
   return router({
-    "/": endpoint(base, ({ ctx, redirect }) => {
+    "/": endpoint(base, ({ res, ctx, redirect }) => {
       if (!ctx.name) {
         return redirect("./auth");
       }
+      res.headers.set("content-type", "text/html");
       return html.chat();
     }),
 
@@ -44,13 +45,14 @@ export function roomRouter() {
         if (!body || typeof body !== "object") {
           throw new Error("invalid body type");
         }
-        const { name } = body;
+        let { name } = body;
         if (typeof name === "undefined") {
           throw new Error("name required");
         }
         if (typeof name !== "string") {
           throw new Error("invalid body type");
         }
+        name = name.trim();
         if (name.length > 20) {
           throw new Error("name length > 20");
         }
@@ -59,10 +61,11 @@ export function roomRouter() {
         }
         return { name };
       },
-    }, ({ cookie, param, ctx, body, redirect }) => {
+    }, ({ res, cookie, param, ctx, body, redirect }) => {
       // If it's a GET request, redirect them if they're already signed in or
       // show them the login form if not
       if (!ctx.name && !body) {
+        res.headers.set("content-type", "text/html");
         return html.auth();
       }
       if (!body) {

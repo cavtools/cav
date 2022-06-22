@@ -6,7 +6,7 @@ import { $ } from "./deps_dom.ts";
 export * as room from "./room/dom.ts";
 
 export function indexInit() {
-  const newChat = $<HTMLAnchorElement>(".new-chat")!;
+  const newChat = $<HTMLAnchorElement>(".chat")!;
   newChat.onclick = () => {
     newChat.classList.add("disabled");
     newChat.innerText = "Take a deep breath...";

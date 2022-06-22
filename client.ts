@@ -5,7 +5,6 @@ import { webSocket } from "./ws.ts";
 import { HttpError, packRequest, unpack } from "./serial.ts";
 import type { WS } from "./ws.ts";
 import type { Serializers } from "./serial.ts";
-import type { QueryRecord } from "./router.ts";
 
 // TODO: Several type constraints are more permissive than they should be, for
 // example query parsers should constrain to Parser<Record<string, string |
@@ -28,11 +27,11 @@ declare const _cav: unique symbol;
  * to the client about what argument types are acceptable and what the Response
  * will deserialize into.
  */
-export interface EndpointRequest<Query, Message, Resp> extends Request {
+export interface EndpointRequest<Query, Body, Resp> extends Request {
   [_cav]?: { // imaginary
     endpointRequest: {
       query: Query;
-      message: Message;
+      body: Body;
       resp: Resp;
     };
   };
@@ -139,7 +138,7 @@ type UnionToIntersection<U> = (
  */
 export type Client<T = null> = (
   T extends string ? (
-    (x: ClientArg<QueryRecord | undefined, never, false>) => Promise<[unknown, Response]>
+    (x: ClientArg<Record<string, string | string[]> | undefined, never, false>) => Promise<[unknown, Response]>
   )
 
   : T extends Handler ? (
@@ -175,7 +174,7 @@ export interface UnknownClient {
  * Arguments for the client function when its internal path points to an
  * endpoint.
  */
-export type ClientArg<Query, Message, Socket> = {
+export type ClientArg<Query, Body, Socket> = {
   /**
    * Additional path segments to use when making a request to this endpoint.
    * Including extra path segments should only be done if the endpoint expects
@@ -203,10 +202,10 @@ export type ClientArg<Query, Message, Socket> = {
    */
   query: Query;
   /**
-   * This is the type of message the endpoint expects to be POSTed. Ignored if
+   * This is the type of body the endpoint expects to be POSTed. Ignored if
    * the `socket` option is `true`. Default: `undefined`
    */
-  message: true extends Socket ? never : Message;
+  body: true extends Socket ? never : Body;
 }>;
 
 /**
@@ -218,7 +217,7 @@ export interface UnknownClientArg<Socket extends boolean = boolean> {
   socket?: Socket;
   headers?: HeadersInit;
   query?: unknown;
-  message?: Socket extends true ? never : unknown;
+  body?: Socket extends true ? never : unknown;
   serializers?: Serializers;
   // onProgress?: (progress: number) => void | Promise<void>; // :(
 }
@@ -354,7 +353,7 @@ export function client<T extends ClientType = null>(
     return (async () => {
       const req = packRequest(url.href, {
         headers: x.headers,
-        message: x.message,
+        body: x.body,
         serializers,
       });
 
