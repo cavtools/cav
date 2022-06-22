@@ -1,8 +1,8 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-export function basePage({ pageId, body }: {
-  pageId: string;
+export function base({ head, body }: {
+  head: string;
   body: string;
 }) {
   return /*html*/`
@@ -13,12 +13,8 @@ export function basePage({ pageId, body }: {
       <title>Chat</title>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <link rel="stylesheet" href="/base.css">
-      <link rel="stylesheet" href="/${pageId}.css">
-      <script type="module">
-        import { ${pageId}Init } from "/bundle.ts";
-        ${pageId}Init();
-      </script>
+      
+      ${head}
 
     </head>
     <body class="center">
@@ -35,7 +31,6 @@ export function basePage({ pageId, body }: {
 export function baseCss() {
   return /*css*/`
     /* !DOCTYPE css */
-
     * {
       margin: 0;
       padding: 0;

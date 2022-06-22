@@ -1,6 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import { http } from "./deps.ts";
+import { http, path } from "./deps.ts";
+import { packResponse } from "./serial.ts";
 import type {
   RouterShape,
   RouterRequest,
@@ -22,8 +23,8 @@ export interface RouterContext {
   path: string;
   /** The raw query string parameters, as an object. */
   query: Record<string, string | string[]>;
-  /** The path groups captured during the routing process so far. */
-  groups: Record<string, string | string[]>;
+  /** The path parameters captured during the routing process so far. */
+  param: Record<string, string>;
   /**
    * If this isn't null, this Response should be returned as soon as possible in
    * the routing process. It means the path requested wasn't canonical, and this
@@ -37,8 +38,8 @@ const _routerContext = Symbol("_routerContext");
 /** Record representing query string parameters. */
 export type QueryRecord = Record<string, string | string[]>;
 
-/** Record representing path groups captured during routing. */
-export type GroupsRecord = Record<string, string | string[]>;
+/** Record representing path parameters captured during routing. */
+export type ParamRecord = Record<string, string>;
 
 /**
  * Hook for getting routing metadata from a Request. If there isn't already a
@@ -84,7 +85,7 @@ export function routerContext(request: Request): RouterContext {
   const ctx: RouterContext = {
     url,
     path,
-    groups: {},
+    param: {},
     query,
     redirect,
   };
@@ -106,11 +107,58 @@ export type Router<S extends RouterShape = {}>  = S & ((
 export function router<S extends RouterShape>(routes: S): Router<S> {
   const shape: Record<string, Handler | Handler[]> = {};
   for (let [k, v] of Object.entries(routes)) {
-    if (!v) {
+    if (typeof v === "undefined" || v === null) {
       continue;
     }
 
     k = k.split("/").filter(k2 => !!k2).join("/");
+
+    if (typeof v === "string") {
+      const staticStr = v;
+
+      // When serving static strings, content-type is determined by the
+      // extension in the route. If there isn't one, fallback to HTML. Only some
+      // extensions are supported for now. It's important that content-type
+      // detection isn't run based on the content of a dynamic string (in an
+      // endpoint) because it'd open an XSS vuln
+      const ext = path.extname(k);
+      let type: string;
+      switch(ext) {
+        case ".html": type = "text/html"; break;
+        case ".css": type = "text/css"; break;
+        case ".js": type = "application/javascript"; break;
+        case ".json": type = "application/json"; break;
+        case ".svg": type = "image/svg+xml"; break;
+        case ".rss": type = "application/rss+xml"; break;
+        case ".xml": type = "application/xml"; break;
+        case ".txt": type = "text/plain"; break;
+        default: type = "text/html";
+      }
+
+      v = (req: Request) => {
+        if (req.method === "OPTIONS") {
+          return new Response(null, {
+            status: 204,
+            headers: { "allow": "OPTIONS, GET, HEAD" },
+          });
+        }
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          return new Response("405 method not allowed", {
+            status: 405,
+            headers: { "allow": "OPTIONS, GET, HEAD" },
+          });
+        }
+        
+        const res = new Response(staticStr, {
+          headers: { "content-type": type },
+        });
+        if (req.method === "HEAD") {
+          return new Response(null, { headers: res.headers });
+        }
+        return res;
+      };
+    }
+
     const old = shape[k];
 
     if (!old) {
@@ -161,7 +209,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
         s.match(/[^\\][:*?(){}]/)
       ) {
         throw new SyntaxError(
-          `"${k}" isn't a valid Router route. The Router only supports basic path segments and named path segments (groups). Wildcards, RegExp, optionals, and other advanced URLPattern syntax isn't supported, with the exception of the solo wildcard "*"`,
+          `"${k}" isn't a valid Router route. The Router only supports basic path segments and named path segments (param). Wildcards, RegExp, optionals, and other advanced URLPattern syntax isn't supported, with the exception of the solo wildcard "*"`,
         );
       }
     }
@@ -225,33 +273,26 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
         continue;
       }
       
-      const groups = { ...ctx.groups };
+      const param = { ...ctx.param };
       for (const [k, v] of Object.entries(match.pathname.groups)) {
-        const old = groups[k];
-        if (Array.isArray(old)) {
-          groups[k] = [...old, v];
-        } else if (typeof old === "string") {
-          groups[k] = [old, v];
-        } else {
-          groups[k] = v;
-        }
+        param[k] = v;
       }
 
       // REVIEW: I don't think this delete will ever cause a bug but it might?
       // The 0 group is always empty I think.
       // https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API#unnamed_and_named_groups
-      delete groups["0"];
+      delete param["0"];
 
-      const path = `/${groups.__nextPath || ""}`;
-      delete groups.__nextPath;
+      const path = `/${param.__nextPath || ""}`;
+      delete param.__nextPath;
 
       const oPath = ctx.path;
-      const oGroups = ctx.groups;
+      const oParam = ctx.param;
 
       // The context object is only created once for every request, so
       // modifications to the data object will be preserved across handling
       // contexts
-      Object.assign(ctx, { path, groups });
+      Object.assign(ctx, { path, param });
 
       try {
         if (Array.isArray(fn)) {
@@ -272,9 +313,9 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
           }
         }
       } finally {
-        // Before moving on, put the path and groups back to their original
+        // Before moving on, put the path and param back to their original
         // state
-        Object.assign(ctx, { path: oPath, groups: oGroups });
+        Object.assign(ctx, { path: oPath, param: oParam });
       }
     }
 
@@ -285,7 +326,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     return noMatch(new Response("404 not found", { status: 404 }));
   };
 
-  return Object.assign(handler, { ...routes });
+  return Object.assign(handler, routes);
 }
 
 const _noMatch = Symbol("_noMatch");

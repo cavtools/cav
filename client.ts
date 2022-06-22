@@ -5,6 +5,7 @@ import { webSocket } from "./ws.ts";
 import { HttpError, packRequest, unpack } from "./serial.ts";
 import type { WS } from "./ws.ts";
 import type { Serializers } from "./serial.ts";
+import type { QueryRecord } from "./router.ts";
 
 // TODO: Several type constraints are more permissive than they should be, for
 // example query parsers should constrain to Parser<Record<string, string |
@@ -78,6 +79,7 @@ export type ClientType = (
   | Handler
   | Handler[]
   | RouterShape
+  | string
   | null
 );
 
@@ -136,7 +138,11 @@ type UnionToIntersection<U> = (
  * to a Cav handler, complete with serialization and socket support.
  */
 export type Client<T = null> = (
-  T extends Handler ? (
+  T extends string ? (
+    (x: ClientArg<QueryRecord | undefined, never, false>) => Promise<[unknown, Response]>
+  )
+
+  : T extends Handler ? (
     Parameters<T>[0] extends RouterRequest<infer S> ? Client<S>
     : Parameters<T>[0] extends EndpointRequest<infer Q, infer M, infer R> ? (
       (x: ClientArg<Q, M, false>) => Promise<[R, Response]>
@@ -161,7 +167,7 @@ export interface UnknownClient {
   <Socket extends boolean = false>(x: UnknownClientArg<Socket>): (
     true extends Socket ? WS<unknown, unknown> : Promise<[unknown, Response]>
   );
-  [x: string]: UnknownClient
+  [x: string]: UnknownClient;
 }
 
 // TODO: Any other fetch options that can be forwarded (example: CORS)

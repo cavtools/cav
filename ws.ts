@@ -100,10 +100,7 @@ export type WSMessageListener<Recv = any> = (
 );
 
 /** Listener for a web socket's "error" event. */
-export type WSErrorListener = (
-  err: Error | null,
-  ev: Event | ErrorEvent,
-) => void;
+export type WSErrorListener = (ev: Event | ErrorEvent) => void;
 
 /**
  * Type that matches any socket. Useful for type constraints.
@@ -150,10 +147,6 @@ export function webSocket<
     error: new Set<AnyListener>(),
   };
 
-  // REVIEW: Currently, the listeners are executed in an async try/catch in
-  // order to catch errors that occur in the listeners themselves and log them
-  // instead of letting them bubble. I remember there being a global error
-  // handler in the works for cases like this, maybe this isn't necessary?
   const trigger = (type: keyof typeof listeners, ...args: any[]) => {
     if (ws[`on${type}`]) {
       (ws[`on${type}`] as AnyListener)(...args);
@@ -169,7 +162,7 @@ export function webSocket<
       try {
         raw.send(JSON.stringify(serialize(data, init?.serializers)));
       } catch (err) {
-        trigger("error", err);
+        console.error("Failed to send message:", err);
       }
     },
     close: (code, reason) => {
@@ -196,6 +189,7 @@ export function webSocket<
 
   raw.addEventListener("open", ev => trigger("open", ev));
   raw.addEventListener("close", ev => trigger("close", ev));
+  raw.addEventListener("error", ev => trigger("error", ev));
 
   const decoder = new TextDecoder();
   raw.addEventListener("message", async ev => {
@@ -212,47 +206,31 @@ export function webSocket<
       ) {
         throw new Error(`Invalid data received: ${ev.data}`);
       }
-  
+
       recv = deserialize(
         JSON.parse(
-          typeof ev.data === "string"
-            ? ev.data
-            : ArrayBuffer.isView(ev.data)
-            ? decoder.decode(ev.data)
-            : await ev.data.text(), // Blob
+          typeof ev.data === "string" ? ev.data
+          : ArrayBuffer.isView(ev.data) ? decoder.decode(ev.data)
+          : await ev.data.text() // Blob
         ),
         init?.serializers,
       );
-  
+
       if (init?.recv) {
         const parseRecv = normalizeParser(init.recv);
         recv = await parseRecv(recv) as Recv;
       }
     } catch (err) {
-      trigger("error", err, null);
+      console.error("Socket message failed to parse:", err);
       return;
     }
-
-    // FIXME: HttpErrors sent to the server would trigger the onerror listener.
-    // I need a way to tell the client they sent a bad message that doesn't
-    // conflict with sending legitimate data
-    if (recv instanceof HttpError) {
-      trigger("error", recv, null);
-      return;
-    }
-
-    // REVIEW: Can't remember why this was here
-    // if (typeof recv === "undefined") {
-    //   return;
-    // }
-
     trigger("message", recv, ev);
   });
 
   raw.addEventListener("error", (ev) => {
     const evt = ev as ErrorEvent;
     const err = evt.message ? new Error(evt.message) : null;
-    trigger("error", err, ev);
+    trigger("error", ev);
   });
 
   return ws;

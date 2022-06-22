@@ -1,19 +1,21 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { http, path as stdPath } from "./deps.ts";
-import { watchAssets, serveAsset } from "./assets.ts";
+import { serveAsset } from "./asset.ts";
 import { routerContext, noMatch } from "./router.ts";
 import { HttpError, packResponse, unpack } from "./serial.ts";
-import { cookieJar } from "./cookies.ts";
+import { cookieJar } from "./cookie.ts";
 import { webSocket } from "./ws.ts";
 import { normalizeParser } from "./parser.ts";
+import { serveBundle } from "./bundle.ts";
 import type { EndpointRequest, SocketRequest } from "./client.ts";
 import type { Parser, ParserInput, ParserOutput } from "./parser.ts";
-import type { CookieJar } from "./cookies.ts";
+import type { CookieJar } from "./cookie.ts";
 import type { Serializers } from "./serial.ts";
-import type { ServeAssetOptions } from "./assets.ts";
+import type { ServeAssetOptions } from "./asset.ts";
 import type { WS } from "./ws.ts";
-import type { QueryRecord, GroupsRecord } from "./router.ts";
+import type { QueryRecord, ParamRecord } from "./router.ts";
+import type { ServeBundleOptions } from "./bundle.ts";
 
 // TODO: Test what happens when sending huge amounts of data to a server with a
 // websocket. AFAIK, there's no way to prevent processing super large web socket
@@ -22,23 +24,23 @@ import type { QueryRecord, GroupsRecord } from "./router.ts";
 /** Options for processing requests, used to construct Endpoints. */
 export interface EndpointSchema {
   /**
-   * URLPattern string to match against the Request's routed path. If the
-   * string starts with '^', the full request path will be used instead. The
-   * full URLPattern syntax is supported. Any captured path groups will be
-   * merged into the path groups captured during routing. The matched path is
+   * URLPattern string to match against the Request's routed path. If the string
+   * starts with '^', the full request path will be used instead. The full
+   * URLPattern syntax is supported. Any captured path parameters will be merged
+   * into the path parameters captured during routing. The matched path is
    * available as the "path" resolver argument.
    */
   path?: string | null;
   /**
-   * Parses any path groups captured during routing. The result is available
-   * as the "groups" resolver argument. If an error is thrown during parsing,
+   * Parses any path parameters captured during routing. The result is available
+   * as the "param" resolver argument. If an error is thrown during parsing,
    * the endpoint won't match with the request and the router will continue
    * looking for matching handlers.
    */
-  groups?: Parser<GroupsRecord> | null;
+  param?: Parser<ParamRecord> | null;
   /**
    * Keys to use when signing cookies. The cookies are available as the
-   * "cookies" resolver argument.
+   * "cookie" resolver argument.
    */
   keys?: [string, ...string[]] | null;
   /**
@@ -109,13 +111,13 @@ export interface ContextArg {
    * The CookieJar for this Request/Response pair, created after the Endpoint
    * matched with the Request.
    */
-  cookies: CookieJar;
+  cookie: CookieJar;
   /** The path that matched the Endpoint's path schema option. */
   path: string;
   /** The unprocessed query object associated with this request. */
   query: QueryRecord;
-  /** The unprocessed path groups object captured during routing. */
-  groups: GroupsRecord;
+  /** The unprocessed path parameters object captured during routing. */
+  param: ParamRecord;
   /**
    * When context functions need to run cleanup tasks after the Endpoint has
    * resolved the Response (such as setting cookies, logging performance
@@ -142,10 +144,15 @@ export interface ErrorArg {
   path: string;
   /** The unprocessed query object associated with this request. */
   query: QueryRecord;
-  /** The unprocoessed path groups object captured during routing. */
-  groups: GroupsRecord;
+  /** The unprocoessed path parameters object captured during routing. */
+  param: ParamRecord;
   /** The offending error. */
   error: unknown;
+  /**
+   * Returns a TypeScript/JavaScript bundle as a response. The bundle is cached
+   * into memory and, if possible, watched and rebundled whenever updated.
+   */
+  bundle: (opt: ServeBundleOptions) => Promise<Response>;
   /** Returns a Response created using an asset from an assets directory. */
   asset: (opt?: ServeAssetOptions) => Promise<Response>;
   /**
@@ -158,18 +165,18 @@ export interface ErrorArg {
 }
 
 /**
- * Type utility for extracting the output of a "groups" parser on an
+ * Type utility for extracting the output of a "param" parser on an
  * EndpointSchema or SocketSchema.
  */
-export type GroupsOutput<Schema> = (
-  "groups" extends keyof Schema ? (
-    Schema extends { groups: Parser } ? (
-      ParserOutput<Schema["groups"]>
+export type ParamOutput<Schema> = (
+  "param" extends keyof Schema ? (
+    Schema extends { param: Parser } ? (
+      ParserOutput<Schema["param"]>
     )
-    : Schema extends { groups?: undefined | null } ? GroupsRecord
+    : Schema extends { param?: undefined | null } ? ParamRecord
     : never
   )
-  : Schema extends Record<string, unknown> ? GroupsRecord
+  : Schema extends Record<string, unknown> ? ParamRecord
   : unknown
 );
 
@@ -238,17 +245,22 @@ export interface ResolverArg<Schema = unknown> {
   /** Connection information provided by Deno. */
   conn: http.ConnInfo;
   /** The CookieJar created after the endpoint matched with the Request. */
-  cookies: CookieJar;
+  cookie: CookieJar;
   /** The path that matched the endpoint's `path` schema option. */
   path: string;
-  /** The parsed path groups captured while routing the request. */
-  groups: GroupsOutput<Schema>;
+  /** The parsed path parameters captured while routing the request. */
+  param: ParamOutput<Schema>;
   /** The context created after the endpoint matched the Request. */
   ctx: CtxOutput<Schema>;
   /** The parsed query string parameters. */
   query: QueryOutput<Schema>;
   /** The parsed Request body, if any. */
   body: BodyOutput<Schema>;
+  /**
+   * Returns a TypeScript/JavaScript bundle as a response. The bundle is cached
+   * into memory and, if possible, watched and rebundled whenever updated.
+   */
+  bundle: (opt: ServeBundleOptions) => Promise<Response>;
   /** Returns a Response created using an asset from an assets directory. */
   asset: (opt?: ServeAssetOptions) => Promise<Response>;
   /**
@@ -303,7 +315,7 @@ export function endpoint(
   const checkMethod = methodChecker(schema.body);
   const matchPath = pathMatcher({
     path: schema.path,
-    groups: schema.groups,
+    param: schema.param,
   });
   const parseInput = inputParser({
     query: schema.query,
@@ -320,6 +332,7 @@ export function endpoint(
 
     // Utilities
     const asset = (opt?: ServeAssetOptions) => serveAsset(req, opt);
+    const bundle = (opt: ServeBundleOptions) => serveBundle(req, opt);
     const redirect = (to: string, status?: number) => {
       if (to.startsWith("../") || to.startsWith(".")) {
         to = stdPath.join(url.pathname, to);
@@ -338,12 +351,12 @@ export function endpoint(
     const cleanupTasks: (() => Promise<void> | void)[] = [];
     let output: unknown = undefined;
     let path: string;
-    let groups: unknown;
-    let unparsedGroups: Record<string, string | string[]>;
+    let param: unknown;
+    let unparsedParam: ParamRecord;
     let error: unknown = undefined;
 
     try {
-      ({ path, groups, unparsedGroups } = await matchPath(req));
+      ({ path, param, unparsedParam } = await matchPath(req));
     } catch {
       return noMatch(new Response("404 not found", { status: 404 }));
     }
@@ -354,8 +367,8 @@ export function endpoint(
         return options;
       }
 
-      const cookies = await cookieJar(req, schema.keys || undefined);
-      cleanupTasks.push(() => cookies.setCookies(res.headers));
+      const cookie = await cookieJar(req, schema.keys || undefined);
+      cleanupTasks.push(() => cookie.setCookies(res.headers));
 
       let ctx: unknown = undefined;
       if (schema.ctx) {
@@ -364,10 +377,10 @@ export function endpoint(
           res,
           url,
           conn,
-          cookies,
+          cookie,
           path,
           query: routerCtx.query,
-          groups: unparsedGroups,
+          param: unparsedParam,
           cleanup: (task: () => Promise<void> | void) => {
             cleanupTasks.push(task);
           },
@@ -381,12 +394,13 @@ export function endpoint(
         res,
         url,
         conn,
-        cookies,
+        cookie,
         path,
-        groups: groups as any,
+        param: param as any,
         ctx: ctx as any,
         query: query as any,
         body: body as any,
+        bundle,
         asset,
         redirect,
       });
@@ -404,8 +418,9 @@ export function endpoint(
             conn,
             error,
             path: routerCtx.path,
+            param: routerCtx.param,
             query: routerCtx.query,
-            groups: routerCtx.groups,
+            bundle,
             asset: (opt?: ServeAssetOptions) => serveAsset(req, opt),
             redirect,
           });
@@ -431,19 +446,6 @@ export function endpoint(
       console.error(`ERROR: Uncaught exception [${bugtrace}] -`, error);
       res.status = 500;
       output = `500 internal server error [${bugtrace}]`;
-    }
-
-    // Content-type detection for string content. So far only HTML and CSS are
-    // supported
-    if (
-      typeof output === "string" &&
-      !res.headers.get("content-type")
-    ) {
-      if (output.match(/^\s*<!DOCTYPE html>/)) {
-        res.headers.set("content-type", "text/html");
-      } else if (output.match(/^\s*\/\* !DOCTYPE css \*\//)) {
-        res.headers.set("content-type", "text/css");
-      }
     }
 
     const response = packResponse(output, {
@@ -532,28 +534,28 @@ function methodChecker(
  * "/" is the default meaning the containing Router(s) should have routed (i.e.
  * consumed) the entire request path before reaching the called Endpoint.
  *
- * When calling the returned function, if the request path matches, the groups
- * on the RequestContext (captured by the containing Router(s)) will be merged
- * with the groups captured during path matching and then parsed with the groups
- * parser, if any. The path and parsed groups will be returned on success, a 404
- * HttpError will be thrown on failure.
+ * When calling the returned function, if the request path matches, the
+ * parameters on the RequestContext (captured by the containing Router(s)) will
+ * be merged with the parameters captured during path matching and then parsed
+ * with the parameters parser, if any. The path and parsed parameters will be
+ * returned on success, a 404 HttpError will be thrown on failure.
  */
 function pathMatcher(opt: {
   path?: string | null;
-  groups?: Parser | null;
+  param?: Parser | null;
 }): (req: Request) => Promise<{
   path: string;
-  groups: unknown;
-  unparsedGroups: Record<string, string | string[]>;
+  param: unknown;
+  unparsedParam: ParamRecord;
 }> {
   const useFullPath = opt.path && opt.path.startsWith("^");
   const pattern = new URLPattern(
     useFullPath ? opt.path!.slice(1) : opt.path || "/",
     "http://_",
   );
-  const parseGroups = (
-    typeof opt.groups === "function" ? opt.groups
-    : opt.groups ? opt.groups.parse
+  const parseParam = (
+    typeof opt.param === "function" ? opt.param
+    : opt.param ? opt.param.parse
     : null
   );
 
@@ -566,41 +568,30 @@ function pathMatcher(opt: {
       throw new HttpError("404 not found", { status: 404 });
     }
 
-    // 0 group should be the path that matched, i.e. the path var already set
+    // 0 param should be the path that matched, i.e. the path var already set
     delete match.pathname.groups["0"];
 
-    const unparsedGroups = { ...routerCtx.groups };
+    const unparsedParam = { ...routerCtx.param };
     for (const [k, v] of Object.entries(match.pathname.groups)) {
-      if (!v) {
-        continue;
-      }
-      
-      const old = unparsedGroups[k];
-      if (Array.isArray(old)) {
-        unparsedGroups[k] = [...old, v];
-      } else if (typeof old === "string") {
-        unparsedGroups[k] = [old, v];
-      } else {
-        unparsedGroups[k] = v;
-      }
+      unparsedParam[k] = v;
     }
 
-    let groups = unparsedGroups;
-    if (!parseGroups) {
-      return { path, groups, unparsedGroups };
+    let param = unparsedParam;
+    if (!parseParam) {
+      return { path, param, unparsedParam };
     }
 
     try {
-      groups = await parseGroups(groups);
+      param = await parseParam(param);
     } catch {
       try {
-        groups = await parseGroups(undefined);
+        param = await parseParam(undefined);
       } catch {
         throw new HttpError("404 not found", { status: 404 });
       }
     }
 
-    return { path, groups, unparsedGroups };
+    return { path, param, unparsedParam };
   };
 }
 
@@ -636,9 +627,12 @@ function inputParser(opt: {
           if (err instanceof HttpError) {
             throw err;
           }
-          throw new HttpError("400 bad request", {
+          throw new HttpError((
+            err instanceof Error ? err.message
+            : "400 bad request"
+          ), {
             status: 400,
-            expose: err,
+            detail: { original: err }
           });
         }
       }
@@ -664,9 +658,12 @@ function inputParser(opt: {
         if (err instanceof HttpError) {
           throw err;
         }
-        throw new HttpError("400 bad request", {
+        throw new HttpError((
+          err instanceof Error ? err.message
+          : "400 bad request"
+        ), {
           status: 400,
-          expose: err,
+          detail: { original: err }
         });
       }
     }
@@ -676,34 +673,33 @@ function inputParser(opt: {
 }
 
 /** Initializer options for creating an `assets()` endpoint. */
-export interface AssetsInit extends Omit<ServeAssetOptions, "path"> {
-  /** If true, turns off asset preparation. */
-  noPrep?: boolean;
-};
+export type AssetsInit = Omit<ServeAssetOptions, "path">;
 
 /**
  * Creates an Endpoint for serving static assets. The routed request path will
  * be used to find the asset to serve from inside the assets directory
  * specified.
- *
- * The calculated assets directory will be prepared and watched using
- * `watchAssets()` unless the `noPrep` option is `true`. If the the
- * `--allow-write` permission isn't available for the directory, asset watching
- * will fail silently.
  */
 export function assets(init?: AssetsInit) {
-  // Note that this is a no-op in production (without --allow-write) due to
-  // failSilently
-  if (!init?.noPrep) {
-    watchAssets({ // Don't await
-      cwd: init?.cwd,
-      dir: init?.dir,
-      failSilently: true,
-    });
-  }
-
   return endpoint({ path: "*" as const }, x => {
     return x.asset(init);
+  });
+}
+
+/** Initializer options for creating a `bundle()` endpoint. */
+export type BundleInit = ServeBundleOptions;
+
+/**
+ * Creates an endpoint for serving a TypeScript or JavaScript bundle. The bundle
+ * is cached into memory and will be watched and rebundled whenever updated, if
+ * possible.
+ */
+export function bundle(init: BundleInit) {
+  // Warm up the cache
+  serveBundle(new Request("http://_"), init).catch(() => {});
+
+  return endpoint(null, x => {
+    return x.bundle(init);
   });
 }
 
@@ -810,23 +806,7 @@ export function socket(
     }
 
     const ws = webSocket(socket, {
-      recv: async (input: unknown) => {
-        // This is wrapped so that incoming message parsing errors get
-        // serialized back to the client, which will trigger an error event
-        // FIXME: The way this works isn't very clear and can create conflicts.
-        // How do I get message parsing errors back to the client without
-        // confusing them with legitimate data? Also, when a client sends an
-        // HttpError it'll trigger the onerror listener instead of the onmessage
-        // listener, which is undesireable
-        try {
-          return await recv(input);
-        } catch (err) {
-          ws.send(new HttpError("400 bad request", {
-            status: 400,
-            expose: err,
-          }));
-        }
-      },
+      recv,
       serializers: schema.serializers,
     });
     

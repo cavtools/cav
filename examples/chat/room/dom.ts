@@ -1,9 +1,25 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-only.
 
-import { $, make, client } from "./deps_dom.ts";
-import { chatMsg, chatGroup } from "./chat_html.ts";
-import type { ChatRoom } from "./app.ts";
+import * as html from "./html.ts";
+import { $, make, client } from "../deps_dom.ts";
+import type { RoomRouter } from "./server.ts";
+
+const roomClient = client<RoomRouter>(self.location.pathname);
+
+export function authInit() {
+  const name = $<HTMLInputElement>(".name")!;
+  const submit = $<HTMLButtonElement>(".submit")!;
+
+  name.oninput = () => {
+    submit.disabled = !name.value;
+  };
+  name.onfocus = () => {
+    name.select();
+  };
+  name.dispatchEvent(new Event("input"));
+  name.focus();
+}
 
 export async function chatInit() {
   const inputLabel = $<HTMLLabelElement>(".input")!;
@@ -13,10 +29,10 @@ export async function chatInit() {
   const renderMessage = (x: { from: string; text: string; self: boolean }) => {
     const lastGroup = $(".group:last-child", messages);
     if (lastGroup && $(".user", lastGroup)!.innerText === x.from) {
-      lastGroup.append(make(chatMsg(x.text)));
+      lastGroup.append(make(html.message(x.text)));
       return;
     }
-    messages.append(make(chatGroup(x)));
+    messages.append(make(html.messageGroup(x)));
   };
 
   self.onkeydown = (ev) => {
@@ -35,8 +51,9 @@ export async function chatInit() {
   inputText.focus();
 
   // Setup the chat messages web socket
-  const ws = client<ChatRoom>(self.location.pathname).ws({ socket: true });
+  const ws = roomClient.ws({ socket: true });
   ws.onopen = () => {
+    console.log("socket opened");
     inputText.onkeydown = ev => {
       if (ev.key === "Enter" && !ev.getModifierState("Shift")) {
         ev.preventDefault();
@@ -52,8 +69,5 @@ export async function chatInit() {
   ws.onmessage = (recv) => {
     console.log("message received", recv);
     renderMessage(recv);
-  };
-  ws.onerror = (err) => {
-    console.error("socket error", err);
   };
 }
