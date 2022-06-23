@@ -34,6 +34,7 @@
 - Removed asset bundling
 - Managed to get the resolver and setup function to fit onto the schemas without
   breaking the types
+- Whenever Cav sets a content-type of "text/*", it also sets the "utf-8" charset
 
 ## June 16, 2022: [0.1.0](https://deno.land/x/cav@0.1.0)
 
