@@ -15,9 +15,8 @@ export * as room from "./room/server.ts";
 
 export function chatRouter() {
   return router({
-    "*": assets(), // cwd === "."
-    "dom.ts": bundle({ url: "./dom.ts" }), // cwd === "."
-
+    "*": assets(),
+    "dom.ts": bundle({ url: "./dom.ts" }),
     "/": html.index(),
     "new": endpoint(null, async ({ redirect }) => {
       await new Promise(r => setTimeout(r, 3000)); // "rate limiting"
