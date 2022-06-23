@@ -8,13 +8,17 @@ export interface Message {
   self: boolean;
 }
 
-type Users = Map<string, WS<Message>[]>;
+type RoomId = string;
+type Name = string;
+type UserWS = WS<Message>;
+type Users = Map<Name, UserWS[]>; // Users can have multiple tabs open
 
-type Rooms = Map<string, Users>;
+const rooms = new Map<RoomId, Users>();
 
-const rooms: Rooms = new Map();
-if (Deno.env.get("DEV")) {
+const perm = await Deno.permissions.query({ name: "env" });
+if (perm.state === "granted" && Deno.env.get("DEV")) {
   rooms.set("dev", new Map());
+  console.log(`The development room is available: http://localhost:8080/dev`)
 }
 
 function getUsers(roomId: string) {

@@ -23,7 +23,7 @@ export function roomRouter() {
       return { roomId };
     },
     ctx: ({ param, cookie }) => ({
-      name: cookie.get(param.roomId as string, { signed: true }),
+      name: cookie.get(param.roomId, { signed: true }),
     }),
   }, null);
 
@@ -62,33 +62,18 @@ export function roomRouter() {
         return { name };
       },
     }, ({ res, cookie, param, ctx, body, redirect }) => {
-      // If it's a GET request, redirect them if they're already signed in or
-      // show them the login form if not
-      if (!ctx.name && !body) {
-        res.headers.set("content-type", "text/html");
-        return html.auth();
-      }
-      if (!body) {
-        return redirect("..");
-      }
-    
-      // If they're signed in but want to change their name, they can do that
-      if (ctx.name === body.name) {
-        return redirect("..");
-      }
-      if (ctx.name && api.nameTaken(param.roomId, body.name)) {
-        throw new HttpError("409 name taken", { status: 409 });
-      }
+      // If they're already signed in, redirect them
       if (ctx.name) {
-        api.changeName(param.roomId, {
-          old: ctx.name,
-          new: body.name,
-        });
-        cookie.set(param.roomId, body.name, { signed: true });
         return redirect("..");
       }
 
-      // Otherwise, they're looking to sign in for the first time
+      // If it's a GET request, serve the auth page
+      if (!body) {
+        res.headers.set("content-type", "text/html");
+        return html.auth();
+      }
+
+      // If it's a POST request, try to reserve the name
       if (api.nameTaken(param.roomId, body.name)) {
         throw new HttpError("409 name taken", { status: 409 });
       }
@@ -99,7 +84,7 @@ export function roomRouter() {
 
     "ws": socket({
       ...base,
-      send: {} as api.Message,
+      send: {} as api.Message, // Only used to type the messages sent by the ws
     }, ({ param, ctx, ws }) => {
       const name = ctx.name;
       if (!name) {

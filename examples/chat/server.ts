@@ -7,22 +7,20 @@ import {
   endpoint,
   serve,
   bundle,
+  assets,
 } from "./deps.ts";
 import { roomRouter } from "./room/server.ts";
 
+export * as room from "./room/server.ts";
+
 export function chatRouter() {
   return router({
-    "/": html.index(),
-    "index.css": html.indexCss(),
-    "chat.css": html.room.chatCss(),
-    "auth.css": html.room.authCss(),
-    "dom.ts": bundle({
-      cwd: import.meta.url,
-      url: "dom.ts",
-    }),
+    "*": assets(), // cwd === "."
+    "dom.ts": bundle({ url: "./dom.ts" }), // cwd === "."
 
-    "chat": endpoint(null, async ({ redirect }) => {
-      await new Promise(r => setTimeout(r, 2000)); // "rate limiting"
+    "/": html.index(),
+    "new": endpoint(null, async ({ redirect }) => {
+      await new Promise(r => setTimeout(r, 3000)); // "rate limiting"
       return redirect(api.room.createRoom() + "/auth");
     }),
     ":roomId": roomRouter(),

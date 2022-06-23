@@ -3,6 +3,7 @@
 
 import * as html from "./html.ts";
 import { $, make, client } from "../deps_dom.ts";
+import { scrolledToBottom } from "../base/dom.ts";
 import type { RoomRouter } from "./server.ts";
 
 const roomClient = client<RoomRouter>(self.location.pathname);
@@ -25,23 +26,36 @@ export async function chatInit() {
   const inputLabel = $<HTMLLabelElement>(".input")!;
   const inputText = $<HTMLTextAreaElement>("textarea", inputLabel)!;
   const messages = $(".messages")!;
-  const root = $("html")!;
+  const body = document.body;
 
   const renderMessage = (x: { from: string; text: string; self: boolean }) => {
-    const scrollToBottom = (
-      root.scrollHeight - root.scrollTop === root.clientHeight
-    );
+    const wasAtBottom = scrolledToBottom();
     const lastGroup = $(".group:last-child", messages);
     if (lastGroup && $(".user", lastGroup)!.innerText === x.from) {
       lastGroup.append(make(html.message(x.text)));
     } else {
       messages.append(make(html.messageGroup(x)));
     }
-    if (scrollToBottom) {
+    if (wasAtBottom) {
       window.scrollTo(0, document.body.scrollHeight);
     }
   };
 
+  // Feature: Messages received on the web socket are escaped and rendered to
+  // the message list
+  const ws = roomClient.ws({ socket: true });
+  ws.onopen = () => {
+    console.log("socket opened");
+  };
+  ws.onclose = () => {
+    throw new Error("TODO: socket closed");
+  };
+  ws.onmessage = (recv) => {
+    // TODO: Escape the received text
+    renderMessage(recv);
+  };
+
+  // Feature: Pressing enter selects the textarea if it's not already
   self.onkeydown = (ev) => {
     if (ev.key === "Enter" && document.activeElement !== inputText) {
       ev.preventDefault();
@@ -49,31 +63,38 @@ export async function chatInit() {
     }
   };
 
+  // Feature: Auto-size the textarea when text is input
   inputText.oninput = () => {
+    // https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
     inputLabel.dataset.value = inputText.value;
     window.scrollTo(0, document.body.scrollHeight);
   };
-  inputText.dispatchEvent(new Event("input")); // Size on page load
+
+  // Feature: Auto-size and focus the textarea on page load
+  inputText.dispatchEvent(new Event("input")); 
   inputText.focus();
+
+  // Feature: Send messages when enter is pressed while the input is focused.
+  // Pressing enter while holding shift inputs a newline instead
   inputText.onkeydown = async ev => {
     if (ev.key === "Enter" && !ev.getModifierState("Shift")) {
       ev.preventDefault();
-      await roomClient.send({ body: inputText.value });
-      inputText.value = "";
-      inputLabel.dataset.value = "";
+      inputText.disabled = true;
+      try {
+        await roomClient.send({ body: inputText.value });
+        inputText.value = "";
+        inputLabel.dataset.value = "";
+      } catch (err) {
+        inputText.disabled = false;
+        console.error(err);
+      }
     }
   };
 
-  // Setup the chat messages web socket
-  const ws = roomClient.ws({ socket: true });
-  ws.onopen = () => {
-    console.log("socket opened");
-  };
-  ws.onclose = () => {
-    console.log("socket closed");
-  };
-  ws.onmessage = (recv) => {
-    console.log("message received", recv);
-    renderMessage(recv);
+  // Feature: Clicking on a non-message area focuses the input
+  body.onclick = ev => {
+    if (ev.target === messages || ev.target === body) {
+      inputText.select();
+    }
   };
 }

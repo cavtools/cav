@@ -227,11 +227,5 @@ export function webSocket<
     trigger("message", recv, ev);
   });
 
-  raw.addEventListener("error", (ev) => {
-    const evt = ev as ErrorEvent;
-    const err = evt.message ? new Error(evt.message) : null;
-    trigger("error", ev);
-  });
-
   return ws;
 }

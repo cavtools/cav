@@ -35,7 +35,7 @@ export interface ServeBundleOptions {
 const bundleCache = new Map<string, Promise<string>>();
 
 async function bundle(url: string): Promise<string> {
-  return (await emit.bundle(path.fromFileUrl(url), {
+  const code = (await emit.bundle(path.fromFileUrl(url), {
     allowRemote: true,
     type: "module",
     compilerOptions: {
@@ -59,6 +59,11 @@ async function bundle(url: string): Promise<string> {
       };
     },
   })).code;
+
+  // TODO: Currently, the source map options are ignored by deno_emit.
+  // (deno_emit is still new and v0). We need to manually remove the inline
+  // source maps until those options get implemented
+  return code.split("//# sourceMappingUrl=")[0];
 }
 
 /**
@@ -71,14 +76,14 @@ export async function serveBundle(
   req: Request,
   opt: ServeBundleOptions,
 ): Promise<Response> {
-  const cwd = opt.cwd ? parseCwd(opt.cwd) : ".";
+  const cwd = opt.cwd ? parseCwd(opt.cwd) : Deno.cwd();
   let url = opt.url;
   if (
     !url.startsWith("file://") &&
     !url.startsWith("https://") &&
     !url.startsWith("http://")
   ) {
-    url = path.toFileUrl(path.join(cwd, url)).href;
+    url = path.toFileUrl(path.resolve(cwd, url)).href;
   }
 
   let cache = bundleCache.get(url);
