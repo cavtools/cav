@@ -12,10 +12,7 @@
 - Moved the browser exports to `dom.ts` and added some selector shorthands `$`
   and `$$`
 - Resolvers are no longer assigned to endpoints as the `resolve` property
-- Endpoints now require both a schema and a resolver to be specified explicitly
-- Change `ResolveArg` to `ResolverArg`
 - Updated the cookies to better handle signed/unsigned operations
-- Changed the name of `browser.ts` to `dom.ts`
 - HttpErrors thrown during query/message parsing are passed along instead of
   being wrapped in a 400 HttpError
 - Modified client type to treat "*" correctly (it treated it like a path param,
@@ -25,15 +22,17 @@
 - Changed endpoint `groups` to `params`
 - Params can only be strings (used to allow string[] also). Duplicate params
   will override old values
-- No more plural(s) in filenames
+- No more plural(s) in module names (besides deps)
 - When a string is specified on a router, it'll serve that string with a
   content-type based on the extension of the route. If there isn't an extension,
   it defaults to html. Supported extensions are: .html, .md, .css, .json, .js, .svg, .txt, .rss, .xml,
+- Removed the old asset bundling, which bundled all ts(x) files in the assets
+  directory
 - Added the `bundle` endpoint type and related utility functions
-- Removed asset bundling
 - Managed to get the resolver and setup function to fit onto the schemas without
-  breaking the types
-- Whenever Cav sets a content-type of "text/*", it also sets the "utf-8" charset
+  breaking the types (!!!! "the big problem". Haven't tested this fully yet, it might not be working lol. This problem has been hard for me)
+- Whenever Cav sets a content-type of "text/*", it also sets the "utf-8"
+  charset. This applies for static string routes and asset files
 
 ## June 16, 2022: [0.1.0](https://deno.land/x/cav@0.1.0)
 
