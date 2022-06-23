@@ -298,9 +298,9 @@ export type Endpoint<Schema extends EndpointSchema> = Schema & ((
 ) => Promise<Response>);
 
 /**
- * Constructs a new Endpoint request handler using the provided schema and
- * resolver function. The schema properties will be assigned to the returned
- * endpoint function, so that they can be reused on other endpoint schemas.
+ * Constructs a new Endpoint request handler. The schema properties will be
+ * assigned to the returned endpoint function, so that they can be reused on
+ * other endpoint schemas.
  */
 export function endpoint<
   Schema extends EndpointSchema,

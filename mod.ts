@@ -1,6 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 export * from "./asset.ts";
+export * from "./bundle.ts";
 export * from "./client.ts";
 export * from "./cookie.ts";
 export * from "./endpoint.ts";

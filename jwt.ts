@@ -94,7 +94,9 @@ export async function encodeJwt(
 
 /**
  * Verifies the JWT and returns its parsed payload object. If verification
- * fails, an error will be thrown. Verification will fail if:
+ * fails, an error will be thrown.
+ *
+ * Verification will fail if:
  *
  * - The header isn't `{ "alg": "HS256" }` (temporary, WIP)
  * - The JWT was signed with an unknown key

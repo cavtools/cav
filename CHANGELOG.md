@@ -2,7 +2,9 @@
 
 ## Up next: [0.2.0](https://deno.land/x/cav@0.2.0)
 
-- Added the `encodeCookie()` and `decodeCookie()` exports to cookies.ts
+- Added the `encodeCookie()` and `decodeCookie()` exports to cookies.ts, removed
+  the `COOKIE_JWT_HEADER`. Also changed some `const` functions into regular
+  functions. Cav shouldn't have any more variables in the Deno Docs
 - When serving assets without an explicit asset `path` specified, the
   `serveAsset()` function will now use the routed path from the RouterContext
   instead of the full request path

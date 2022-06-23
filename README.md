@@ -3,7 +3,8 @@
 Cav is a collection of powerful primitives for building full stack web apps with
 [Deno](https://deno.land). Guiding principles:
 
-- [POLA](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
+- [Least
+  Astonishment](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
 - Modular, maintainable server definitions
 - No-fuss data serialization
 - Automatic end-to-end typesafety

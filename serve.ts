@@ -29,10 +29,10 @@ export function server(init: ServerInit): Server {
 export type ServeInit = http.ServeInit;
  
 /**
- * Serves HTTP requests with the given handler. (Stacks and Rpcs are handlers.)
- * You can specify an object with a port and hostname option, which is the
- * address to listen on. The default is port 8000 on hostname "0.0.0.0". This is
- * a re-export of the serve() function from
+ * Serves HTTP requests with the given handler. (Routers and Endpoints are
+ * handlers.) You can specify an object with a port and hostname option, which
+ * is the address to listen on. The default is port 8000 on hostname "0.0.0.0".
+ * This is a re-export of the serve() function from
  * https://deno.land/std/http/server.ts.
  */
 export async function serve(handler: http.Handler, init?: ServeInit) {
