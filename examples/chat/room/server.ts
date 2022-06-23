@@ -34,7 +34,7 @@ export function roomRouter() {
         if (!ctx.name) {
           return redirect("./auth");
         }
-        res.headers.set("content-type", "text/html");
+        res.headers.set("content-type", "text/html; charset=UTF-8");
         return html.chat();
       }
     }),
@@ -72,7 +72,7 @@ export function roomRouter() {
   
         // If it's a GET request, serve the auth page
         if (!body) {
-          res.headers.set("content-type", "text/html");
+          res.headers.set("content-type", "text/html; charset=UTF-8");
           return html.auth();
         }
   

@@ -715,7 +715,7 @@ Deno.test("packing and unpacking", async (t) => {
   }));
 
   await t.step("File", () => testPacking({
-    message: new File(["blah"], "eh.txt", { type: "text/plain" }),
+    message: new File(["blah"], "eh.txt", { type: "text/plain; charset=UTF-8" }),
     check: async (x) =>
       await assertEqualsBlob(x.unpacked, x.opt.message as File),
   }));
@@ -723,7 +723,7 @@ Deno.test("packing and unpacking", async (t) => {
   await t.step("Blob", () => testPacking({
     message: new Blob(
       ["you look lovely today, btw"],
-      { type: "text/plain" },
+      { type: "text/plain; charset=UTF-8" },
     ),
     check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as Blob),
   }));
@@ -732,7 +732,7 @@ Deno.test("packing and unpacking", async (t) => {
     "File with quotes in filename (testing content-disposition)",
     () => testPacking({
       message: new File(["jk i can't see you"], 'thank "god".txt', {
-        type: "text/plain",
+        type: "text/plain; charset=UTF-8",
       }),
       check: (x) => assertEqualsBlob(x.unpacked, x.opt.message as File),
     }),
@@ -740,8 +740,8 @@ Deno.test("packing and unpacking", async (t) => {
 
   await t.step("object w/Files", () => testPacking({
     message: new Map([[
-      new File(["hello"], "dumb.csv", { type: "text/csv" }),
-      new File(["world"], "dumber.csv", { type: "text/csv" }),
+      new File(["hello"], "dumb.csv", { type: "text/csv; charset=UTF-8" }),
+      new File(["world"], "dumber.csv", { type: "text/csv; charset=UTF-8" }),
     ]]),
     check: async (x) => {
       const [[a, b]] = Array.from(x.unpacked.entries());
@@ -755,8 +755,8 @@ Deno.test("packing and unpacking", async (t) => {
 
   await t.step("object w/Blobs", () => testPacking({
     message: new Map([[
-      new Blob(["hello"], { type: "text/csv" }),
-      new Blob(["world"], { type: "text/csv" }),
+      new Blob(["hello"], { type: "text/csv; charset=UTF-8" }),
+      new Blob(["world"], { type: "text/csv; charset=UTF-8" }),
     ]]),
     check: async (x) => {
       const [[a, b]] = Array.from(x.unpacked.entries());
@@ -769,7 +769,7 @@ Deno.test("packing and unpacking", async (t) => {
   }));
 
   const refFile = new File(["red cards for everybody"], "soccer.txt", {
-    type: "text/plain",
+    type: "text/plain; charset=UTF-8",
   });
   await t.step(
     "object w/ multiple ref. equal Files",
@@ -840,7 +840,7 @@ Deno.test("packing and unpacking", async (t) => {
           controller.close();
         },
       }),
-    headers: { "content-type": "text/plain" },
+    headers: { "content-type": "text/plain; charset=UTF-8" },
     check: (x) => {
       assertEquals(x.unpacked, "-");
     },
@@ -986,13 +986,13 @@ Deno.test("packing and unpacking", async (t) => {
   await t.step("specified headers override auto headers", async () => {
     const req = packRequest("http://localhost/test", {
       message: { hello: "world" },
-      headers: { "content-type": "text/plain" },
+      headers: { "content-type": "text/plain; charset=UTF-8" },
     });
     assertEquals(await unpack(req), `{"hello":"world"}`);
 
     const req2 = packRequest("http://localhost/test", {
-      message: new Blob(["foobar"], { type: "text/csv" }),
-      headers: { "content-type": "text/plain", "content-disposition": "" },
+      message: new Blob(["foobar"], { type: "text/csv; charset=UTF-8" }),
+      headers: { "content-type": "text/plain; charset=UTF-8", "content-disposition": "" },
     });
     assertEquals(
       await unpack(req2),

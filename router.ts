@@ -124,15 +124,15 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       const ext = path.extname(k);
       let type: string;
       switch(ext) {
-        case ".html": type = "text/html;charset=utf-8"; break;
-        case ".css": type = "text/css;charset=utf-8"; break;
+        case ".html": type = "text/html; charset=UTF-8"; break;
+        case ".css": type = "text/css; charset=UTF-8"; break;
         case ".js": type = "application/javascript"; break;
         case ".json": type = "application/json"; break;
         case ".svg": type = "image/svg+xml"; break;
         case ".rss": type = "application/rss+xml"; break;
         case ".xml": type = "application/xml"; break;
-        case ".txt": type = "text/plain;charset=utf-8"; break;
-        default: type = "text/html;charset=utf-8";
+        case ".txt": type = "text/plain; charset=UTF-8"; break;
+        default: type = "text/html; charset=UTF-8";
       }
 
       v = (req: Request) => {

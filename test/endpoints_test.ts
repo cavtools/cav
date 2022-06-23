@@ -38,7 +38,7 @@ Deno.test("endpoint()", async t => {
     `);
     const res1 = await end(new Request("http://localhost"), conn);
     assertEquals(res1.status, 200);
-    assertEquals(res1.headers.get("content-type"), "text/html");
+    assertEquals(res1.headers.get("content-type"), "text/html; charset=UTF-8");
   });
 
   await t.step("args: none", async () => {
@@ -163,7 +163,7 @@ Deno.test("assets()", async t => {
 
     const res1 = await ass(new Request("http://_"), conn);
     assertEquals(res1.status, 200);
-    assertEquals(res1.headers.get("content-type"), "text/html");
+    assertEquals(res1.headers.get("content-type"), "text/html; charset=UTF-8");
     assertEquals(await res1.text(), "<h1>assets/index.html</h1>");
 
     const res2 = await ass(new Request("http://_/root_bundle.tsx.js"), conn);

@@ -125,7 +125,7 @@ Deno.test("serveAsset()", async t => {
     let req = new Request("http://_");
     const res1 = await serveAsset(req);
     await res1.text(); // The bodies need to be consumed or the test will fail
-    assertEquals(res1.headers.get("content-type"), "text/html");
+    assertEquals(res1.headers.get("content-type"), "text/html; charset=UTF-8");
 
     req = new Request("http://_/cool-plant.jpg");
     const res2 = await serveAsset(req);
@@ -135,7 +135,7 @@ Deno.test("serveAsset()", async t => {
     req = new Request("http://_/css.css");
     const res3 = await serveAsset(req);
     await res3.text();
-    assertEquals(res3.headers.get("content-type"), "text/css");
+    assertEquals(res3.headers.get("content-type"), "text/css; charset=UTF-8");
 
     req = new Request("http://_/js.js");
     const res4 = await serveAsset(req);
