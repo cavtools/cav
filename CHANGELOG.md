@@ -32,6 +32,8 @@
   .svg, .xml, .rss
 - Added the `bundle` endpoint type and related utility functions
 - Removed asset bundling
+- Managed to get the resolver and setup function to fit onto the schemas without
+  breaking the types
 
 ## June 16, 2022: [0.1.0](https://deno.land/x/cav@0.1.0)
 

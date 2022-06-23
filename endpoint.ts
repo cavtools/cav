@@ -79,12 +79,15 @@ export interface EndpointSchema {
    */
   body?: Parser | null;
   /**
+   * Resolves a successfully matching request into an output to send to the
+   * client.
+   */
+  // resolve?: ((x: ResolveArg<any, any, any, any>) => any) | null;
+  /**
    * Overrides the type returned by the resolver. The value of this property
    * doesn't matter, it's only used for its type.
    */
   result?: unknown;
-  // TODO: When you do the "memory" and "disk" options, change the name of this
-  // option to just "error". That way all keys on the schema are a single word
   /**
    * If specified, an error thrown during request processing will be passed into
    * this function, which can return a value to send back to the client instead
@@ -168,71 +171,71 @@ export interface ErrorArg {
  * Type utility for extracting the output of a "param" parser on an
  * EndpointSchema or SocketSchema.
  */
-export type ParamOutput<Schema> = (
-  "param" extends keyof Schema ? (
-    Schema extends { param: Parser } ? (
-      ParserOutput<Schema["param"]>
-    )
-    : Schema extends { param?: undefined | null } ? ParamRecord
-    : never
-  )
-  : Schema extends Record<string, unknown> ? ParamRecord
-  : unknown
-);
+// export type ParamOutput<Schema> = (
+//   "param" extends keyof Schema ? (
+//     Schema extends { param: Parser } ? (
+//       ParserOutput<Schema["param"]>
+//     )
+//     : Schema extends { param?: undefined | null } ? ParamRecord
+//     : never
+//   )
+//   : Schema extends Record<string, unknown> ? ParamRecord
+//   : unknown
+// );
 
 /**
  * Type utility for extracting the output of a "ctx" function on an
  * EndpointSchema or SocketSchema.
  */
- export type CtxOutput<Schema> = (
-  "ctx" extends keyof Schema ? (
-    Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
-    : Schema extends { ctx?: undefined | null } ? undefined
-    : never
-  )
-  : Schema extends Record<string, unknown> ? undefined
-  : unknown
-);
+//  export type CtxOutput<Schema> = (
+//   "ctx" extends keyof Schema ? (
+//     Schema extends { ctx: (x: any) => infer C } ? Awaited<C>
+//     : Schema extends { ctx?: undefined | null } ? undefined
+//     : never
+//   )
+//   : Schema extends Record<string, unknown> ? undefined
+//   : unknown
+// );
 
 /**
  * Type utility for extracting the output of a "query" parser on an
  * EndpointSchema or SocketSchema.
  */
-export type QueryOutput<Schema> = (
-  "query" extends keyof Schema ? (
-    Schema extends { query: Parser } ? (
-      ParserOutput<Schema["query"]>
-    )
-    : Schema extends { query?: undefined | null; } ? QueryRecord
-    : never
-  )
-  : Schema extends Record<string, unknown> ? QueryRecord
-  : unknown
-);
+// export type QueryOutput<Schema> = (
+//   "query" extends keyof Schema ? (
+//     Schema extends { query: Parser } ? (
+//       ParserOutput<Schema["query"]>
+//     )
+//     : Schema extends { query?: undefined | null; } ? QueryRecord
+//     : never
+//   )
+//   : Schema extends Record<string, unknown> ? QueryRecord
+//   : unknown
+// );
 
 /**
  * Type utility for extracting the output of a "body" parser on an
  * EndpointSchema or SocketSchema.
  */
-export type BodyOutput<Schema> = (
-  "body" extends keyof Schema ? (
-    Schema extends { body: Parser } ? (
-      ParserOutput<Schema["body"]>
-    )
-    : Schema extends { body?: undefined | null } ? undefined
-    : never
-  )
-  : Schema extends Record<string, unknown> ? undefined
-  : unknown
-);
+// export type BodyOutput<Schema> = (
+//   "body" extends keyof Schema ? (
+//     Schema extends { body: Parser } ? (
+//       ParserOutput<Schema["body"]>
+//     )
+//     : Schema extends { body?: undefined | null } ? undefined
+//     : never
+//   )
+//   : Schema extends Record<string, unknown> ? undefined
+//   : unknown
+// );
 
 /** Arguments available to the resolver of an endpoint. */
-export interface ResolverArg<Schema = unknown> {
-  /**
-   * The schema used to create this resolver's endpoint. If no schema was used,
-   * this will be an empty object.
-   */
-  schema: Schema;
+export interface ResolveArg<
+  Param extends EndpointSchema["param"],
+  Ctx extends EndpointSchema["ctx"],
+  Query extends EndpointSchema["query"],
+  Body extends EndpointSchema["body"],
+> {
   /** The Request being handled. */
   req: Request;
   /**
@@ -249,13 +252,13 @@ export interface ResolverArg<Schema = unknown> {
   /** The path that matched the endpoint's `path` schema option. */
   path: string;
   /** The parsed path parameters captured while routing the request. */
-  param: ParamOutput<Schema>;
+  param: EndpointSchema["param"] extends Param ? ParamRecord : ParserOutput<Param>;
   /** The context created after the endpoint matched the Request. */
-  ctx: CtxOutput<Schema>;
+  ctx: EndpointSchema["ctx"] extends Ctx ? undefined : ParserOutput<Ctx>;
   /** The parsed query string parameters. */
-  query: QueryOutput<Schema>;
+  query: EndpointSchema["query"] extends Query ? QueryRecord : ParserOutput<Query>;
   /** The parsed Request body, if any. */
-  body: BodyOutput<Schema>;
+  body: EndpointSchema["body"] extends Body ? undefined : ParserOutput<Body>;
   /**
    * Returns a TypeScript/JavaScript bundle as a response. The bundle is cached
    * into memory and, if possible, watched and rebundled whenever updated.
@@ -273,15 +276,24 @@ export interface ResolverArg<Schema = unknown> {
 }
 
 /** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<Schema = unknown, Result = unknown> = Schema & ((
+export type Endpoint<Schema extends EndpointSchema> = Schema & ((
   req: EndpointRequest<(
     Schema extends { query: Parser } ? ParserInput<Schema["query"]>
     : QueryRecord | undefined
   ), (
     Schema extends { body: Parser } ? ParserInput<Schema["body"]>
-    : Schema extends Record<string, unknown> ? undefined
+    : Schema extends { body?: null } ? undefined
     : unknown
-  ), Result>,
+  ), (
+    unknown extends Schema["result"] ? (
+      Schema extends { resolve: (x: any) => infer R } ? (
+        Awaited<R> extends Response ? unknown : R
+      )
+      : Schema extends { resolve?: null } ? undefined
+      : unknown
+    )
+    : Schema["result"]
+  )>,
   conn: http.ConnInfo,
 ) => Promise<Response>);
 
@@ -291,26 +303,37 @@ export type Endpoint<Schema = unknown, Result = unknown> = Schema & ((
  * endpoint function, so that they can be reused on other endpoint schemas.
  */
 export function endpoint<
-  Schema extends EndpointSchema = {},
+  Schema extends EndpointSchema,
+  Param extends EndpointSchema["param"],
+  Ctx extends EndpointSchema["ctx"],
+  Query extends EndpointSchema["query"],
+  Body extends EndpointSchema["body"],
   Result = undefined,
 >(
-  schema: (Schema & EndpointSchema) | null,
-  resolver: ((x: ResolverArg<Schema>) => Result) | null,
-): Endpoint<(
-  EndpointSchema extends Schema ? {}
-  : { [K in keyof Schema]: Schema[K] }
-), (
-  unknown extends Schema["result"] ? (
-    Awaited<Result> extends Response ? unknown : Awaited<Result>
-  )
-  : Schema["result"]
-)>;
+  schema: Schema & EndpointSchema & {
+    param?: Param;
+    ctx?: Ctx;
+    query?: Query;
+    body?: Body;
+    resolve?: ((x: ResolveArg<Param, Ctx, Query, Body>) => Result) | null;
+  },
+): Endpoint<Schema>;
+// ): Endpoint<(
+//   EndpointSchema extends Schema ? {}
+//   : Schema
+// ), (
+//   unknown extends Schema["result"] ? (
+//     Awaited<Result> extends Response ? unknown : Awaited<Result>
+//   )
+//   : Schema["result"]
+// )>;
 export function endpoint(
-  _schema: EndpointSchema | null,
-  _resolver: ((x: ResolverArg<any>) => any) | null,
+  _schema: EndpointSchema & {
+    resolve?: ((x: ResolveArg<any, any, any, any>) => void) | null;
+  },
 ) {
   const schema = _schema || {};
-  const resolver = _resolver || (() => {});
+  const resolver = _schema.resolve || (() => {});
 
   const checkMethod = methodChecker(schema.body);
   const matchPath = pathMatcher({
@@ -389,7 +412,6 @@ export function endpoint(
 
       const { query, body } = await parseInput(req);
       output = await resolver({
-        schema: schema as any,
         req,
         res,
         url,
@@ -681,8 +703,10 @@ export type AssetsInit = Omit<ServeAssetOptions, "path">;
  * specified.
  */
 export function assets(init?: AssetsInit) {
-  return endpoint({ path: "*" as const }, x => {
-    return x.asset(init);
+  return endpoint({
+    path: "*" as const,
+    param: ({ id }: ParamRecord) => id,
+    resolve: x => x.asset(init),
   });
 }
 
@@ -698,8 +722,10 @@ export function bundle(init: BundleInit) {
   // Warm up the cache
   serveBundle(new Request("http://_"), init).catch(() => {});
 
-  return endpoint(null, x => {
-    return x.bundle(init);
+  return endpoint({
+    resolve: x => {
+      return x.bundle(init);
+    },
   });
 }
 
@@ -712,13 +738,13 @@ export function bundle(init: BundleInit) {
  * get the final redirect path. The default status is 302.
  */
 export function redirect(to: string, status?: number) {
-  return endpoint(null, x => x.redirect(to, status || 302));
+  return endpoint({ resolve: x => x.redirect(to, status || 302) });
 }
 
 /** Schema options for creating a `socket()` handler. */
 export interface SocketSchema extends Omit<
   EndpointSchema,
-  "maxBodySize" | "body"
+  "maxBodySize" | "body" | "result"
 > {
   /**
    * Incoming message parser. Without this, received messages will be typed as
@@ -734,7 +760,7 @@ export interface SocketSchema extends Omit<
 }
 
 /** Cav endpoint handler for connecting web sockets. */
-export type Socket<Schema = null> = (
+export type Socket<Schema extends SocketSchema> = (
   Schema extends null ? {} : Schema
 ) & ((
   req: SocketRequest<(
@@ -753,25 +779,35 @@ export type Socket<Schema = null> = (
  * Type utility for extracting the type of message a socket expects to send from
  * its SocketSchema.
  */
-export type SendType<Schema extends SocketSchema | null> = (
-  Schema extends { send: infer S } ? S
-  : unknown
-);
+// export type SendType<Schema extends SocketSchema | null> = (
+//   Schema extends { send: infer S } ? S
+//   : unknown
+// );
 
 /**
  * Type utility for extracting the type of message a socket expects to receive
  * from its SocketSchema.
  */
-export type RecvType<Schema extends SocketSchema | null> = (
-  Schema extends { recv: Parser<infer R> } ? R
-  : unknown
-);
+// export type RecvType<Schema extends SocketSchema | null> = (
+//   Schema extends { recv: Parser<infer R> } ? R
+//   : unknown
+// );
 
 /** Arguments available to the setup function of a socket endpoint. */
-export interface SetupArg<Schema = unknown> extends Omit<
-  ResolverArg<Schema>, "body" | "asset" | "redirect"
+export interface SetupArg<
+  Param extends SocketSchema["param"],
+  Ctx extends SocketSchema["ctx"],
+  Query extends SocketSchema["query"],
+  Send extends SocketSchema["send"],
+  Recv extends SocketSchema["recv"],
+> extends Omit<
+  ResolveArg<Param, Ctx, Query, any>,
+  "body" | "asset" | "redirect"
 > {
-  ws: WS<SendType<Schema>, RecvType<Schema>>;
+  ws: WS<
+    Send,
+    SocketSchema["recv"] extends Recv ? unknown : ParserOutput<Recv>
+  >;
 }
 
 /**
@@ -779,45 +815,61 @@ export interface SetupArg<Schema = unknown> extends Omit<
  * function. The schema properties will be assigned to the returned socket
  * endpoint function, with the setup argument available as the "setup" property.
  */
-export function socket<Schema extends SocketSchema | null>(
-  schema: (Schema & SocketSchema) | null,
-  setup: ((x: SetupArg<Schema>) => Promise<void> | void) | null,
-): Socket<{ [K in keyof Schema]: Schema[K] }>;
+export function socket<
+  Schema extends SocketSchema,
+  Param extends SocketSchema["param"],
+  Ctx extends SocketSchema["ctx"],
+  Query extends SocketSchema["query"],
+  Send extends SocketSchema["send"],
+  Recv extends SocketSchema["recv"],
+>(
+  schema: Schema & SocketSchema & {
+    param?: Param;
+    ctx?: Ctx;
+    query?: Query;
+    send?: Send;
+    recv?: Recv;
+    setup?: ((x: SetupArg<Param, Ctx, Query, Send, Recv>) => Promise<void> | void),
+  },
+): Socket<Schema>;
 export function socket(
-  _schema: SocketSchema | null,
-  _setup: ((x: SetupArg) => Promise<void> | void) | null,
+  _schema: SocketSchema & {
+    setup?: ((x: SetupArg<any, any, any, any, any>) => Promise<void> | void)
+  },
+  // _setup: ((x: SetupArg) => Promise<void> | void) | null,
 ) {
   const schema = _schema || {};
-  const setup = _setup || (() => {});
+  const setup = _schema.setup || (() => {});
   const recv = normalizeParser(schema.recv || ((m) => m));
 
   return endpoint({
     ...schema,
-  }, async x => {
-    let socket: WebSocket;
-    let response: Response;
-    try {
-      ({ socket, response } = Deno.upgradeWebSocket(x.req, {
-        protocol: "json"
-      }));
-    } catch {
-      x.res.headers.set("upgrade", "websocket");
-      throw new HttpError("426 upgrade required", { status: 426 });
+    resolve: async x => {
+      let socket: WebSocket;
+      let response: Response;
+      try {
+        ({ socket, response } = Deno.upgradeWebSocket(x.req, {
+          protocol: "json"
+        }));
+      } catch {
+        x.res.headers.set("upgrade", "websocket");
+        throw new HttpError("426 upgrade required", { status: 426 });
+      }
+  
+      const ws = webSocket(socket, {
+        recv,
+        serializers: schema.serializers,
+      });
+      
+      // TODO: It would be nice if the onsetup can return a response to serialize
+      // in case of a problem. Don't merge socket with endpoint, even though it
+      // seems like that would be the right thing to do here; they function
+      // differently and don't use the exact same schema structure
+      if (setup) {
+        await setup({ ...x, ws });
+      }
+  
+      return response;
     }
-
-    const ws = webSocket(socket, {
-      recv,
-      serializers: schema.serializers,
-    });
-    
-    // TODO: It would be nice if the onsetup can return a response to serialize
-    // in case of a problem. Don't merge socket with endpoint, even though it
-    // seems like that would be the right thing to do here; they function
-    // differently and don't use the exact same schema structure
-    if (setup) {
-      await setup({ ...x, schema, ws });
-    }
-
-    return response;
-  }) as Socket;
+  });
 }
