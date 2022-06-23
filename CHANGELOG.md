@@ -28,8 +28,7 @@
 - No more plural(s) in filenames
 - When a string is specified on a router, it'll serve that string with a
   content-type based on the extension of the route. If there isn't an extension,
-  it defaults to html. Supported extensions are: .txt, .js, .css, .html, .json,
-  .svg, .xml, .rss
+  it defaults to html. Supported extensions are: .html, .md, .css, .json, .js, .svg, .txt, .rss, .xml,
 - Added the `bundle` endpoint type and related utility functions
 - Removed asset bundling
 - Managed to get the resolver and setup function to fit onto the schemas without

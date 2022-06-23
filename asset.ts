@@ -117,18 +117,41 @@ export async function serveAsset(
       throw new HttpError("404 not found", { status: 404 });
     }
 
-    const originalResponse = await fileServer.serveFile(req, filePath);
+    const res = await fileServer.serveFile(req, filePath);
+
+    // Set the charset for same types of files that are supported as static
+    // string routes on the router
+    const type = res.headers.get("content-type");
+    switch (type) {
+      case "text/html": {
+        res.headers.set("content-type", "text/html; charset=UTF-8");
+        break;
+      }
+      case "text/markdown": {
+        res.headers.set("content-type", "text/markdown; charset=UTF-8");
+        break;
+      }
+      case "text/css": {
+        res.headers.set("content-type", "text/css; charset=UTF-8");
+        break;
+      }
+      case "text/plain": {
+        res.headers.set("content-type", "text/plain; charset=UTF-8");
+        break;
+      }
+    }
+
     if (
       !wasAutoIndexed || // It wasn't an index file from a nested directory
-      !originalResponse.body // It was a 304 response
+      !res.body // It was a 304 response
     ) {
-      return originalResponse;
+      return res;
     }
 
     // Index relative link rebasing for index.html files inside nested folders
 
     const basename = path.basename(url.pathname);
-    let content = await originalResponse.text();
+    let content = await res.text();
 
     content = content.replaceAll(htmlRelativeLinks, (match, group) => {
       const newGroup = group.replace(
@@ -150,8 +173,8 @@ export async function serveAsset(
       return match.replace(group, newGroup);
     });
 
-    originalResponse.headers.delete("content-length");
-    return new Response(content, { headers: originalResponse.headers });
+    res.headers.delete("content-length");
+    return new Response(content, { headers: res.headers });
   } catch (e1) {
     if (e1 instanceof HttpError && e1.status === 404) {
       return noMatch(new Response("404 not found", { status: 404 }));

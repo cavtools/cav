@@ -85,9 +85,9 @@ export async function chatInit() {
         inputText.value = "";
         inputLabel.dataset.value = "";
       } catch (err) {
-        inputText.disabled = false;
         console.error(err);
       }
+      inputText.disabled = false;
     }
   };
 
