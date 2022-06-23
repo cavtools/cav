@@ -3,10 +3,10 @@
 Cav is a collection of powerful primitives for building full stack web apps with
 [Deno](https://deno.land). Guiding principles:
 
+- [POLA](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
 - Modular, maintainable server definitions
 - No-fuss data serialization
 - Automatic end-to-end typesafety
-- Clarity > brevity
 - Use The Platform
 
 **Status:** Ready to play with, but not ready for production.
@@ -23,7 +23,7 @@ Cav is a collection of powerful primitives for building full stack web apps with
   - [x] De/serialization of most data types, including Files, Dates, Maps, etc.
   - [x] Dev-time bundling for TypeScript assets
   - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
-- "Hello world" should be as easy as `deno run`ning a tiny `main.ts`
+- "Hello world" should be as easy as `deno run`ning a tiny `server.ts`
   - [x] Zero config
   - [x] Zero CLI commands
 - The client-side API should use types imported from the server to fully type

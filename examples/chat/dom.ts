@@ -1,9 +1,9 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-only.
 
-import { $ } from "./deps_dom.ts";
-
 export * as room from "./room/dom.ts";
+
+import { $ } from "./deps_dom.ts";
 
 export function indexInit() {
   const newChat = $<HTMLAnchorElement>(".chat")!;

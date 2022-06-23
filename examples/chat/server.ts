@@ -1,5 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
+export * as room from "./room/server.ts";
+
 import * as api from "./api.ts";
 import * as html from "./html.ts";
 import {
@@ -11,9 +13,7 @@ import {
 } from "./deps.ts";
 import { roomRouter } from "./room/server.ts";
 
-export * as room from "./room/server.ts";
-
-export function chatRouter() {
+export function mainRouter() {
   return router({
     "*": assets(),
     "dom.ts": bundle({ url: "./dom.ts" }),
@@ -30,6 +30,6 @@ export function chatRouter() {
 }
 
 if (import.meta.main) {
-  serve(chatRouter(), { port: 8080 });
+  serve(mainRouter(), { port: 8080 });
   console.log("listening on port 8080");
 }

@@ -705,8 +705,7 @@ export type AssetsInit = Omit<ServeAssetOptions, "path">;
 export function assets(init?: AssetsInit) {
   return endpoint({
     path: "*" as const,
-    param: ({ id }: ParamRecord) => id,
-    resolve: x => x.asset(init),
+    resolve: ({ asset }) => asset(init),
   });
 }
 
@@ -723,9 +722,7 @@ export function bundle(init: BundleInit) {
   serveBundle(new Request("http://_"), init).catch(() => {});
 
   return endpoint({
-    resolve: x => {
-      return x.bundle(init);
-    },
+    resolve: ({ bundle }) => bundle(init),
   });
 }
 
@@ -734,11 +731,13 @@ export function bundle(init: BundleInit) {
  * i.e. the whole request path should have been consumed by the containing
  * router(s) before the request reaches a redirect endpoint. If the redirect
  * path doesn't specify an origin, the origin of the request is used. If the
- * path starts with a ".", it's joined with the pathname of the Request url to
- * get the final redirect path. The default status is 302.
+ * path starts with a "./" or a "../", it's joined with the pathname of the
+ * Request url to get the final redirect path. The default status is 302.
  */
 export function redirect(to: string, status?: number) {
-  return endpoint({ resolve: x => x.redirect(to, status || 302) });
+  return endpoint({
+    resolve: ({ redirect }) => redirect(to, status || 302),
+  });
 }
 
 /** Schema options for creating a `socket()` handler. */
@@ -804,10 +803,9 @@ export interface SetupArg<
   ResolveArg<Param, Ctx, Query, any>,
   "body" | "asset" | "redirect"
 > {
-  ws: WS<
-    Send,
+  ws: WS<Send, (
     SocketSchema["recv"] extends Recv ? unknown : ParserOutput<Recv>
-  >;
+  )>;
 }
 
 /**
@@ -849,7 +847,7 @@ export function socket(
       let response: Response;
       try {
         ({ socket, response } = Deno.upgradeWebSocket(x.req, {
-          protocol: "json"
+          protocol: "json",
         }));
       } catch {
         x.res.headers.set("upgrade", "websocket");
@@ -861,10 +859,10 @@ export function socket(
         serializers: schema.serializers,
       });
       
-      // TODO: It would be nice if the onsetup can return a response to serialize
-      // in case of a problem. Don't merge socket with endpoint, even though it
-      // seems like that would be the right thing to do here; they function
-      // differently and don't use the exact same schema structure
+      // TODO: It would be nice if the onsetup can return a response to
+      // serialize in case of a problem. Don't merge socket with endpoint, even
+      // though it seems like that would be the right thing to do here; they
+      // function differently and don't use the exact same schema structure
       if (setup) {
         await setup({ ...x, ws });
       }
