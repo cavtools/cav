@@ -35,6 +35,7 @@
   breaking the types (!!!! "the big problem". Haven't tested this fully yet, it might not be working lol. This problem has been hard for me)
 - Whenever Cav sets a content-type of "text/*", it also sets the "utf-8"
   charset. This applies for static string routes and asset files
+- Created the `util.ts` file and put a `cx` utility in there
 
 ## June 16, 2022: [0.1.0](https://deno.land/x/cav@0.1.0)
 

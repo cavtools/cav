@@ -17,7 +17,7 @@
 	// }
 	"Copyright TS/X": {
 		"scope": "typescript,typescriptreact",
-		"prefix": "//c",
+		"prefix": "/c",
 		"body": [
 			"// Copyright 2022 Connor Logan. All rights reserved. MIT License.",
 			"$0"
@@ -25,7 +25,7 @@
 	},
 	"Copyright CSS": {
 		"scope": "css",
-		"prefix": "/*c",
+		"prefix": "/c",
 		"body": [
 			"/* Copyright 2022 Connor Logan. All rights reserved. MIT License. */",
 			"$0"
@@ -33,7 +33,7 @@
 	},
 	"Copyright HTML": {
 		"scope": "html",
-		"prefix": "<!--c",
+		"prefix": "/c",
 		"body": [
 			"<!-- Copyright 2022 Connor Logan. All rights reserved. MIT License. -->",
 			"$0"
@@ -41,7 +41,7 @@
 	},
 	"Browser-only": {
 		"scope": "typescript,typescriptreact",
-		"prefix": "//bo",
+		"prefix": "/bo",
 		"body": [
 			"// This module is browser-only.",
 			"$0"
@@ -49,7 +49,7 @@
 	},
 	"Browser-compatible": {
 		"scope": "typescript,typescriptreact",
-		"prefix": "//bc",
+		"prefix": "/bc",
 		"body": [
 			"// This module is browser-compatible.",
 			"$0"

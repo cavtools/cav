@@ -49,3 +49,6 @@ Cav is a collection of powerful primitives for building full stack web apps with
 - [superjson](https://github.com/blitz-js/superjson) /
   [devalue](https://github.com/Rich-Harris/devalue) /
   [json-dry](https://github.com/11ways/json-dry)
+
+Cav's description on GitHub is inspired by the [Weird Wide
+Webring](https://weirdwidewebring.net) 🤙
