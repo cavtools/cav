@@ -1,6 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { path, emit, graph } from "./deps.ts";
+import { createEtagHash, should304 } from "./_etag.ts";
 
 // TODO: Add option for source maps for prepared bundles  
 // TODO: ETag calculation
@@ -32,7 +33,14 @@ export interface ServeBundleOptions {
   url: string;
 }
 
-const bundleCache = new Map<string, Promise<string>>();
+interface BundleCache {
+  code: string;
+  headers: Headers;
+  etag: string;
+  modified: Date;
+}
+
+const bundleCache = new Map<string, Promise<BundleCache>>();
 
 async function bundle(url: string): Promise<string> {
   const code = (await emit.bundle(path.fromFileUrl(url), {
@@ -63,7 +71,7 @@ async function bundle(url: string): Promise<string> {
   // TODO: Currently, the source map options are ignored by deno_emit.
   // (deno_emit is still new and v0). We need to manually remove the inline
   // source maps until those options get implemented
-  return code.split("//# sourceMappingUrl=")[0];
+  return code.split("//# sourceMappingURL=")[0];
 }
 
 /**
@@ -88,17 +96,32 @@ export async function serveBundle(
 
   let cache = bundleCache.get(url);
   if (cache) {
-    return new Response(await cache, {
-      headers: { "content-type": "application/javascript" },
-    });
+    const { code, headers, etag, modified } = await cache;
+    if (should304({ req, etag, modified })) {
+      return new Response(null, { status: 304, headers });
+    }
+    return new Response(code, { headers });
   }
 
+  const createCache = async (): Promise<BundleCache> => {
+    try {
+      const code = await bundle(url);
+      const etag = await createEtagHash(code); // TODO: Use the modified date + file size?
+      const modified = new Date(); // TODO: Use the real modified date?
+    
+      const headers = new Headers();
+      headers.set("content-type", "application/javascript");
+      headers.set("etag", etag);
+      headers.set("last-modified", modified.toUTCString());
+  
+      return { code, headers, etag, modified };
+    } catch (err) {
+      bundleCache.delete(url);
+      throw err;
+    }
+  };
 
-  cache = bundle(url).catch(reason => {
-    console.error("Failed to bundle", url, reason);
-    bundleCache.delete(url);
-    throw reason;
-  });
+  cache = createCache();
   bundleCache.set(url, cache);
 
   // If possible, start an async fs watcher loop that regenerates the cached
@@ -117,11 +140,7 @@ export async function serveBundle(
           break;
         }
 
-        cache = bundle(url).catch(reason => {
-          console.error("Failed to bundle", url, reason);
-          bundleCache.delete(url);
-          throw reason;
-        });
+        cache = createCache();
         bundleCache.set(url, cache);
       }
     } catch {
@@ -130,7 +149,6 @@ export async function serveBundle(
     }
   })();
 
-  return new Response(await cache, {
-    headers: { "content-type": "application/javascript" },
-  });
+  const { code, headers } = await cache;
+  return new Response(code, { headers });
 }

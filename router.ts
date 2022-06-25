@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import { http, path } from "./deps.ts";
-import { packResponse } from "./serial.ts";
+import { createEtagHash, should304 } from "./_etag.ts";
 import type {
   RouterShape,
   RouterRequest,
@@ -136,7 +136,13 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
         default: type = "text/html; charset=UTF-8";
       }
 
-      v = (req: Request) => {
+      // Because there's no file info to work with, we generate the etag using
+      // the entire string. It's a static string, therefore we only have to do
+      // this once
+      const etag = createEtagHash(staticStr);
+      const modified = new Date();
+
+      v = async (req: Request) => {
         if (req.method === "OPTIONS") {
           return new Response(null, {
             status: 204,
@@ -149,10 +155,22 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
             headers: { "allow": "OPTIONS, GET, HEAD" },
           });
         }
+
+        const headers = new Headers();
+        headers.set("etag", await etag);
+        headers.set("last-modified", modified.toUTCString());
+        headers.set("content-type", type);
+
+        // This works similarly to how the std lib does it in their file server
+        if (should304({
+          req,
+          etag: await etag,
+          modified,
+        })) {
+          return new Response(null, { status: 304, headers });
+        }
         
-        const res = new Response(staticStr, {
-          headers: { "content-type": type },
-        });
+        const res = new Response(staticStr, { headers });
         if (req.method === "HEAD") {
           return new Response(null, { headers: res.headers });
         }
@@ -161,7 +179,6 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     }
 
     const old = shape[k];
-
     if (!old) {
       if (typeof v === "function" || Array.isArray(v)) {
         shape[k] = v;
