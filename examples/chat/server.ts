@@ -15,7 +15,7 @@ import { roomRouter } from "./room/server.ts";
 
 export function mainRouter() {
   return router({
-    "*": assets(),
+    "*": assets({ cwd: import.meta.url }),
     "dom.ts": bundle({ url: "./dom.ts" }),
     "/": html.index(),
     ":roomId": roomRouter(),
@@ -31,5 +31,4 @@ export function mainRouter() {
 
 if (import.meta.main) {
   serve(mainRouter(), { port: 8080 });
-  console.log("listening on port 8080");
 }
