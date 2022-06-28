@@ -2,4 +2,5 @@
 
 Shortcut: https://cav.bar/examples
 
-- [Chat](./chat): An ephemeral real-time chat application
+- 📍 Examples
+  - [Chat](./chat): An ephemeral real-time chat server

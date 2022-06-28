@@ -1,7 +1,12 @@
 # Cav
 
-Cav is a collection of primitives for building full stack web apps with
-[Deno](https://deno.land). Guiding principles:
+Cav is a collection of powerful primitives for building full-stack web apps with
+[Deno](https://deno.land).
+
+**Status:** Ready to play with, but not ready for production. The tests are
+currently outdated as of 0.2.0-alpha.*. Most will probably fail.
+
+## Guiding principles
 
 - [Least
   Astonishment](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
@@ -10,8 +15,24 @@ Cav is a collection of primitives for building full stack web apps with
 - Automatic end-to-end typesafety
 - Use The Platform
 
-**Status:** Ready to play with, but not ready for production. The tests are
-currently outdated as of 0.2.0-alpha.*. Most will probably fail.
+## [Examples](./examples/README.md)
+
+- [Chat](./examples/chat): An ephemeral real-time chat server
+
+## [Docs](./docs/README.md)
+
+- [Getting started](./docs/getting-started.md)
+- [Routers](./docs/routers.md)
+- [Endpoints](./docs/endpoints.md)
+- [Request parsing](./docs/request-parsing.md)
+- [Response resolution](./docs/response-resolution.md)
+- [Context](./docs/context.md)
+- [Error handling](./docs/error-handling.md)
+- [Client fetch](./docs/client-fetch.md)
+- [Assets](./docs/assets.md)
+- [Bundles](./docs/bundles.md)
+- [Web sockets](./docs/web-sockets.md)
+- [API](./docs/api.md)
 
 ## Goals
 
@@ -23,7 +44,7 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
   - [x] Web sockets
   - [x] Form and JSON parsing / validation
   - [x] De/serialization of most data types, including Files, Dates, Maps, etc.
-  - [x] Dev-time bundling for TypeScript assets
+  - [x] Runtime bundling for browser-side TypeScript
   - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
 - "Hello world" should be as easy as `deno run`ning a tiny `server.ts`
   - [x] Zero config

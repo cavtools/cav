@@ -1,11 +1,9 @@
 # Chat
 
-An ephemeral real-time chat application.
+- [Examples](../README.md)
+  - 📍 Chat: An ephemeral real-time chat server
 
-Deps:
-
-- Deno (+stdlib)
-- Cav
+---
 
 ## Setup
 
@@ -31,6 +29,8 @@ it's present, the "/dev" chat room is active.
 The structure of this example is meant to serve as a starting point when
 creating any moderately complex project, such as a chat server. Everything in
 this app was typed manually; no custom CLI commands or boilerplate were used.
+
+No third-party dependencies were used.
 
 ### Assets
 
