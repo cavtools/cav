@@ -13,6 +13,3 @@
   - [Bundles](./bundles.md)
   - [Web sockets](./web-sockets.md)
   - [API](./api.md)
-
----
-

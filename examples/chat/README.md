@@ -3,8 +3,6 @@
 - [Examples](../README.md)
   - 📍 Chat: An ephemeral real-time chat server
 
----
-
 ## Setup
 
 Install the latest version of [Deno](https://deno.land). This app was created
