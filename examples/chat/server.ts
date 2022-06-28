@@ -1,7 +1,5 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-export * as room from "./room/server.ts";
-
 import * as api from "./api.ts";
 import * as html from "./html.ts";
 import {
@@ -12,6 +10,8 @@ import {
   assets,
 } from "./deps.ts";
 import { roomRouter } from "./room/server.ts";
+
+export * as room from "./room/server.ts";
 
 export function mainRouter() {
   return router({

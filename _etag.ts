@@ -83,7 +83,8 @@ export function compareEtag(a: string, b: string): boolean {
   return false;
 }
 
-// This function is adapted from https://deno.land/std@0.145.0/http/file_server.ts
+// This function is adapted from
+// https://deno.land/std@0.145.0/http/file_server.ts
 
 /** Checks if a response to a request should 304 based on etag headers. */
 export function should304({ req, etag, modified }: {
