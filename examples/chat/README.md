@@ -78,21 +78,21 @@ server state will be lost.
 
 In development mode, the "/dev" chat room is enabled, providing a stable room ID
 for testing changes. This is a lot faster than creating a new room every time
-the CSS changes.
+the HTML changes.
 
 When updates are made to the `dom.ts` code, the cached bundle will be evicted
 and regenerated. The changes will take effect when the browser window is
-reloaded.
+reloaded. (Live-reload is on the feature radar.)
 
 ## Production
 
 To start the server in production mode, run `deno task prod`.
 
-In production, the "/dev" chat room is disabled. Another difference between
-development mode and production mode is the absence of the `--watch` Deno flag
-in production, which disables server module watching / reloading. Updates to the
-`dom.ts` bundle will still take effect, but on-the-fly updates to server code
-won't. A restart would be required.
+In production, the "/dev" chat room is disabled. The only other difference
+between development mode and production mode is the absence of the `--watch`
+Deno flag in production, which disables server module watching / reloading.
+Updates to the `dom.ts` bundles will still take effect, but on-the-fly updates
+to server code won't. A manual restart would be required.
 
 Note: This app doesn't work well with Deno Deploy because it requires temporary
 server state that isn't synced between every Deploy data center. Each chat room

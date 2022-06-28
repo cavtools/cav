@@ -1,6 +1,6 @@
 # Cav
 
-Cav is a collection of powerful primitives for building full stack web apps with
+Cav is a collection of primitives for building full stack web apps with
 [Deno](https://deno.land). Guiding principles:
 
 - [Least
@@ -10,7 +10,8 @@ Cav is a collection of powerful primitives for building full stack web apps with
 - Automatic end-to-end typesafety
 - Use The Platform
 
-**Status:** Ready to play with, but not ready for production.
+**Status:** Ready to play with, but not ready for production. The tests are
+currently outdated as of 0.2.0-alpha.*. Most will probably fail.
 
 ## Goals
 
@@ -35,7 +36,6 @@ Cav is a collection of powerful primitives for building full stack web apps with
   - [x] Immutable, schema-like Router and Endpoint definitions
   - [x] No hidden context
   - [x] No middleware
-  - [x] ~~No magic~~ Yes magic 🧙‍♂️
 - Production deployments should be a simple git-commit-push
   - [x] [Deno Deploy](https://deno.com) without a build step
 - It should minimize the threat of supply chain attacks
