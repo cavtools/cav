@@ -15,10 +15,6 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
 - Automatic end-to-end typesafety
 - Use The Platform
 
-## [Examples](./examples/README.md)
-
-- [Chat](./examples/chat): An ephemeral real-time chat server
-
 ## [Docs](./docs/README.md)
 
 - [Getting started](./docs/getting-started.md)
@@ -33,6 +29,10 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
 - [Bundles](./docs/bundles.md)
 - [Web sockets](./docs/web-sockets.md)
 - [API](./docs/api.md)
+
+## [Examples](./examples/README.md)
+
+- [Chat](./examples/chat): An ephemeral real-time chat server
 
 ## Goals
 
