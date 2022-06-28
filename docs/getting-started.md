@@ -1,6 +1,6 @@
 # Getting started
 
-- [Docs](./)
+- [Docs](./README.md)
   - 📍 Getting started
   - [Routers](./routers.md)
   - [Endpoints](./endpoints.md)

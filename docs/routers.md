@@ -1,6 +1,6 @@
 # Routers
 
-- [Docs](./)
+- [Docs](./README.md)
   - [Getting started](./getting-started.md)
   - 📍 Routers
   - [Endpoints](./endpoints.md)
