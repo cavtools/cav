@@ -3,8 +3,6 @@
 
 import { $ } from "./deps_dom.ts";
 
-export * as room from "./room/dom.ts";
-
 export function indexInit() {
   const newChat = $<HTMLAnchorElement>(".chat")!;
   newChat.onclick = () => {

@@ -1,11 +1,11 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
+import * as baseHtml from "../base/html.ts";
 import { cx } from "../deps_html.ts";
-import { base } from "../base/html.ts";
 
-export function auth() {
-  return base({
+export function authPage() {
+  return baseHtml.page({
     head: /*html*/`
       <link rel="stylesheet" href="/auth.css">
       <script type="module">
@@ -27,8 +27,8 @@ export function auth() {
   });
 }
 
-export function chat() {
-  return base({
+export function chatPage() {
+  return baseHtml.page({
     head: /*html*/`
       <link rel="stylesheet" href="/chat.css">
       <script type="module">

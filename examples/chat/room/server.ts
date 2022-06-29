@@ -1,17 +1,17 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
+import * as api from "./api.ts";
+import * as html from "./html.ts";
 import {
   HttpError,
   router,
   endpoint,
   socket,
 } from "../deps.ts";
-import * as api from "./api.ts";
-import * as html from "./html.ts";
 
-export type RoomRouter = ReturnType<typeof roomRouter>;
+export type App = ReturnType<typeof app>;
 
-export function roomRouter() {
+export function app() {
   const base = endpoint({
     param: ({ roomId }) => {
       if (typeof roomId !== "string") {
@@ -35,7 +35,7 @@ export function roomRouter() {
           return redirect("./auth");
         }
         res.headers.set("content-type", "text/html; charset=UTF-8");
-        return html.chat();
+        return html.chatPage();
       }
     }),
 
@@ -73,7 +73,7 @@ export function roomRouter() {
         // If it's a GET request, serve the auth page
         if (!body) {
           res.headers.set("content-type", "text/html; charset=UTF-8");
-          return html.auth();
+          return html.authPage();
         }
   
         // If it's a POST request, try to reserve the name
@@ -117,7 +117,7 @@ export function roomRouter() {
         }
         return body;
       },
-      resolve: ({ param, ctx, query, body }) => {
+      resolve: ({ param, ctx, body }) => {
         const name = ctx.name;
         if (!name) {
           throw new HttpError("401 unauthorized", { status: 401 });

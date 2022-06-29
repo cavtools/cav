@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-export function base({ head, body }: {
+export function page({ head, body }: {
   head: string;
   body: string;
 }) {

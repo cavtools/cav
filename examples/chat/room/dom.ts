@@ -2,11 +2,8 @@
 // This module is browser-only.
 
 import * as html from "./html.ts";
+import type * as server from "./server.ts";
 import { $, make, client } from "../deps_dom.ts";
-import { scrolledToBottom } from "../base/dom.ts";
-import type { RoomRouter } from "./server.ts";
-
-const roomClient = client<RoomRouter>(self.location.pathname);
 
 export function authInit() {
   const name = $<HTMLInputElement>(".name")!;
@@ -21,6 +18,18 @@ export function authInit() {
   name.dispatchEvent(new Event("input"));
   name.focus();
 }
+
+function scrolledToBottom() {
+  const bottomPos = Math.round(window.innerHeight + window.scrollY);
+  return bottomPos >= document.body.offsetHeight;
+}
+
+// function isVisible(elt: HTMLElement) {
+//   const { top, bottom } = elt.getBoundingClientRect();
+//   return (top >= 0) && (bottom <= window.innerHeight);
+// }
+
+const appClient = client<server.App>(self.location.pathname);
 
 export async function chatInit() {
   const inputLabel = $<HTMLLabelElement>(".input")!;
@@ -43,7 +52,7 @@ export async function chatInit() {
 
   // Feature: Messages received on the web socket are escaped and rendered to
   // the message list
-  const ws = roomClient.ws({ socket: true });
+  const ws = appClient.ws({ socket: true });
   ws.onopen = () => {
     console.log("socket opened");
   };
@@ -81,7 +90,7 @@ export async function chatInit() {
       ev.preventDefault();
       inputText.disabled = true;
       try {
-        await roomClient.send({ body: inputText.value });
+        await appClient.send({ body: inputText.value });
         inputText.value = "";
         inputLabel.dataset.value = "";
       } catch (err) {

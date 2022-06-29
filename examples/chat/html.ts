@@ -1,12 +1,10 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-import { base } from "./base/html.ts";
-
-export * as room from "./room/html.ts";
+import * as baseHtml from "./base/html.ts";
 
 export function index() {
-  return base({
+  return baseHtml.page({
     head: /*html*/`
       <link rel="stylesheet" href="/index.css">
       <script type="module">
