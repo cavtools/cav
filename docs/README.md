@@ -1,6 +1,10 @@
-# Cav Docs
+# Docs
+
+Detailed walkthroughs for [Cav](https://cav.bar)'s main capabilities.
 
 Shortcut: https://cav.bar/docs
+
+## Index
 
 - 📍 Docs
   - [Getting started](./getting-started.md)
