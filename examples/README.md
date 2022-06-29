@@ -1,6 +1,6 @@
 # Examples
 
-Feature-complete examples demonstrating how to use [Cav](https://cav.bar) to
+Feature-complete examples demonstrating how to use [Cav](../) to
 build a variety of projects.
 
 Shortcut: https://cav.bar/examples

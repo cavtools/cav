@@ -1,6 +1,6 @@
 # Docs
 
-Detailed walkthroughs for [Cav](https://cav.bar)'s main capabilities.
+Detailed walkthroughs for [Cav](../)'s main capabilities.
 
 Shortcut: https://cav.bar/docs
 
