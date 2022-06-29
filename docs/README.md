@@ -5,8 +5,6 @@ capabilities.
 
 Shortcut: https://cav.bar/docs
 
-## Index
-
 - 📍 Docs
   - [Getting started](./getting-started.md)
   - [Routers](./routers.md)
