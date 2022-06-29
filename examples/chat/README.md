@@ -25,10 +25,10 @@ it's present, the "/dev" chat room is active.
 ## Architecture
 
 The structure of this example is meant to serve as a starting point when
-creating any moderately complex project, such as a chat server. Everything in
-this app was typed manually; no custom CLI commands or boilerplate were used.
+creating any moderately complex project, such as a chat server.
 
-No third-party dependencies were used.
+Everything in this app was typed out by hand. No third-party dependencies were
+used.
 
 ### Assets
 
