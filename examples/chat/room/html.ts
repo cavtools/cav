@@ -1,6 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
+import { cx } from "../deps_html.ts";
 import { base } from "../base/html.ts";
 
 export function auth() {
@@ -57,10 +58,7 @@ export function messageGroup(x: {
   self: boolean;
 }) {
   return /*html*/`
-    <section class="${[
-      "group",
-      x.self && "right",
-    ].filter(c => !!c).join(" ")}">
+    <section class="${cx("group", x.self && "right")}">
       <header class="user">${x.from}</header>
       ${message(x.text)}
     </section>

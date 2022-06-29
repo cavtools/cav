@@ -49,14 +49,15 @@ cached copy.
 Module names were chosen to be memorized. Here's the purpose of every module in
 this project given its filename:
 
-- `deps.ts`: Server-side dependencies. (Server-only)
+- `deps.ts`: Server-only dependencies
+- `deps_dom.ts`: Browser-only dependencies
+- `deps_html.ts`: HTML dependencies. (Browser-compatible)
 - `server.ts`: Server-side code, where handlers are defined. (Server-only)
-- `api.ts`: Pure business logic. (Server-only)
+- `api.ts`: Business logic. (Server-only)
 - `html.ts`: HTML templates. (Browser-compatible)
-- `deps_dom.ts`: Browser-side dependencies. (Browser-only)
 - `dom.ts`: Browser-side code, where DOM manipulation happens. While these
   shouldn't import server code directly, they are allowed and encouraged to
-  `import type` from server-only modules. The type imports are stripped during
+  `import type` from server-only modules. Type imports are stripped during
   bundling. (Browser-only)
 
 Initially, everything was squeezed into just the top-level modules. When it got

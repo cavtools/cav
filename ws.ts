@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
-import { HttpError, serialize, deserialize } from "./serial.ts";
+import { serialize, deserialize } from "./serial.ts";
 import { normalizeParser } from "./parser.ts";
 import type { Parser } from "./parser.ts";
 import type { Serializers } from "./serial.ts";
