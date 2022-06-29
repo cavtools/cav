@@ -1,6 +1,7 @@
 # Docs
 
-Detailed walkthroughs for [Cav](../)'s main capabilities.
+Detailed walkthroughs for [Cav](https://github.com/connorlogin/cav)'s main
+capabilities.
 
 Shortcut: https://cav.bar/docs
 
