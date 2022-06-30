@@ -2,8 +2,8 @@
 // This module is browser-only.
 
 import * as html from "./html.ts";
-import type * as server from "./server.ts";
-import { $, make, client } from "../deps_dom.ts";
+import * as rpc from "./rpc.ts";
+import { $, make } from "../deps_dom.ts";
 
 export function authInit() {
   const name = $<HTMLInputElement>(".name")!;
@@ -29,8 +29,6 @@ function scrolledToBottom() {
 //   return (top >= 0) && (bottom <= window.innerHeight);
 // }
 
-const appClient = client<server.App>(self.location.pathname);
-
 export async function chatInit() {
   const inputLabel = $<HTMLLabelElement>(".input")!;
   const inputText = $<HTMLTextAreaElement>("textarea", inputLabel)!;
@@ -52,7 +50,7 @@ export async function chatInit() {
 
   // Feature: Messages received on the web socket are escaped and rendered to
   // the message list
-  const ws = appClient.ws({ socket: true });
+  const ws = rpc.connect();
   ws.onopen = () => {
     console.log("socket opened");
   };
@@ -90,7 +88,7 @@ export async function chatInit() {
       ev.preventDefault();
       inputText.disabled = true;
       try {
-        await appClient.send({ body: inputText.value });
+        await rpc.send(inputText.value);
         inputText.value = "";
         inputLabel.dataset.value = "";
       } catch (err) {

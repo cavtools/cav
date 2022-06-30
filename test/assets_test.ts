@@ -140,7 +140,10 @@ Deno.test("serveAsset()", async t => {
     req = new Request("http://_/js.js");
     const res4 = await serveAsset(req);
     await res4.text();
-    assertEquals(res4.headers.get("content-type"), "application/javascript");
+    assertEquals(
+      res4.headers.get("content-type"), 
+      "text/javascript; charset=UTF-8"
+    );
   });
 
   await t.step("etag", async () => {

@@ -25,6 +25,7 @@ export function app() {
     ctx: ({ param, cookie }) => ({
       name: cookie.get(param.roomId, { signed: true }),
     }),
+    resolve: ({ ctx }) => true,
   });
 
   return router({
