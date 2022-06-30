@@ -110,7 +110,7 @@ export async function serveBundle(
       const modified = new Date(); // TODO: Use the real modified date?
     
       const headers = new Headers();
-      headers.set("content-type", "application/javascript");
+      headers.set("content-type", "text/javascript; charset=UTF-8");
       headers.set("etag", etag);
       headers.set("last-modified", modified.toUTCString());
   

@@ -95,7 +95,7 @@ export function routerContext(request: Request): RouterContext {
 
 /** Cav Router handlers, for routing requests. */
 // deno-lint-ignore ban-types
-export type Router<S extends RouterShape = {}>  = S & ((
+export type Router<S extends RouterShape = {}> = S & ((
   req: RouterRequest<S>,
   conn: http.ConnInfo,
 ) => Promise<Response>);
@@ -127,12 +127,12 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
         case ".html": type = "text/html; charset=UTF-8"; break;
         case ".md": type = "text/markdown; charset=UTF-8"; break;
         case ".css": type = "text/css; charset=UTF-8"; break;
-        case ".json": type = "application/json"; break;
-        case ".js": type = "application/javascript"; break;
-        case ".svg": type = "image/svg+xml"; break;
         case ".txt": type = "text/plain; charset=UTF-8"; break;
-        case ".rss": type = "application/rss+xml"; break;
-        case ".xml": type = "application/xml"; break;
+        case ".js": type = "text/javascript; charset=UTF-8"; break;
+        case ".json": type = "application/json"; break;
+        case ".svg": type = "image/svg+xml; charset=UTF-8"; break;
+        case ".rss": type = "application/rss+xml; charset=UTF-8"; break;
+        case ".xml": type = "application/xml; charset=UTF-8"; break;
         default: type = "text/html; charset=UTF-8";
       }
 

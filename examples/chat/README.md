@@ -51,7 +51,7 @@ this project given its filename:
 
 - `deps.ts`: Server-only dependencies
 - `deps_dom.ts`: Browser-only dependencies
-- `deps_html.ts`: HTML dependencies. (Browser-compatible)
+- `deps_iso.ts`: HTML dependencies. (Browser-compatible)
 - `server.ts`: Server-side code, where handlers are defined. (Server-only)
 - `api.ts`: Business logic. (Server-only)
 - `html.ts`: HTML templates. (Browser-compatible)
