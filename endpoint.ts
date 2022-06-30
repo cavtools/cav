@@ -30,7 +30,7 @@ export interface EndpointSchema {
   path?: string | null;
   /**
    * Parses any path parameters captured during routing. The result is available
-   * as the "param" resolver argument.
+   * as the "param" resolve argument.
    *
    * If an error is thrown during parsing, the endpoint won't match with the
    * request and the router will continue looking for matching handlers.
@@ -38,12 +38,12 @@ export interface EndpointSchema {
   param?: Parser<ParamRecord> | null;
   /**
    * Keys to use when signing cookies. The cookies are available as the
-   * "cookie" resolver argument.
+   * "cookie" resolve argument.
    */
   keys?: [string, ...string[]] | null;
   /**
    * Factory function endpoints for creating a custom request context, which is
-   * available to resolvers as the `ctx` property on the resolver argument.
+   * available to resolves as the `ctx` property on the resolve argument.
    *
    * Context handling happens after the endpoint matched with the Request but
    * before input validation begins.
@@ -51,7 +51,7 @@ export interface EndpointSchema {
   ctx?: ((c: ContextArg) => any) | null;
   /**
    * Parses the query string parameters passed into the URL. Parsed query
-   * parameters are available as the "query" resolver argument.
+   * parameters are available as the "query" resolve argument.
    *
    * If parsing fails, `undefined` will be parsed to check for a default value.
    * If that also fails, a 400 bad request error will be sent to the client.
@@ -66,14 +66,9 @@ export interface EndpointSchema {
    */
   maxBodySize?: number | null;
   /**
-   * Serializers to use when serializing and deserializing Request and
-   * Response bodies.
-   */
-  // serializers?: Serializers | null;
-  /**
    * Parses the POSTed body, if there is one. The behavior of this parser
    * determines the methods allowed for this endpoint. The output from parsing
-   * is available as the "body" resolver argument.
+   * is available as the "body" resolve argument.
    *
    * If there is no parser, only GET and HEAD requests will be allowed. If there
    * is one and it successfully parses `undefined`, POST will also be allowed.
@@ -163,7 +158,7 @@ export interface ErrorArg {
   redirect: (to: string, status?: number) => Response;
 }
 
-/** Arguments available to the resolver of an endpoint. */
+/** Arguments available to the resolve of an endpoint. */
 export interface ResolveArg<
   Param extends EndpointSchema["param"],
   Ctx extends EndpointSchema["ctx"],
@@ -210,7 +205,10 @@ export interface ResolveArg<
 }
 
 /** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<Schema extends EndpointSchema> = Schema & ((
+export type Endpoint<Schema extends EndpointSchema | null> = (
+  Schema extends null ? {}
+  : Schema
+) & ((
   req: EndpointRequest<{
     socket?: false;
     query: (
@@ -235,28 +233,27 @@ export type Endpoint<Schema extends EndpointSchema> = Schema & ((
  * other endpoint schemas.
  */
 export function endpoint<
+  Schema extends EndpointSchema | null,
   Ctx extends EndpointSchema["ctx"],
   Param extends EndpointSchema["param"],
   Query extends EndpointSchema["query"],
   Body extends EndpointSchema["body"],
-  Schema extends EndpointSchema,
   Result = undefined,
 >(
-  schema: {
+  schema: Schema & ({
     param?: Param;
     ctx?: Ctx;
     query?: Query;
     body?: Body;
-    resolve?: ((x: ResolveArg<Param, Ctx, Query, Body>) => Result) | null;
-  } & Schema & EndpointSchema,
+  } | null),
+  resolve: ((x: ResolveArg<Param, Ctx, Query, Body>) => Result) | null,
 ): Endpoint<Schema>;
 export function endpoint(
-  _schema: EndpointSchema & {
-    resolve?: ((x: ResolveArg<any, any, any, any>) => void) | null;
-  },
+  _schema: EndpointSchema | null,
+  _resolve: ((x: ResolveArg<any, any, any, any>) => any) | null,
 ) {
   const schema = _schema || {};
-  const resolver = _schema.resolve || (() => {});
+  const resolve = _resolve || (async () => {});
 
   const checkMethod = methodChecker(schema.body);
   const matchPath = pathMatcher({
@@ -333,7 +330,7 @@ export function endpoint(
       }
 
       const { query, body } = await parseInput(req);
-      output = await resolver({
+      output = await resolve({
         req,
         res,
         url,
@@ -511,7 +508,6 @@ function inputParser(opt: {
   query?: Parser | null;
   body?: Parser | null;
   maxBodySize?: number | null;
-  serializers?: Serializers | null;
 }): (req: Request) => Promise<{
   query: unknown;
   body: unknown;
@@ -555,7 +551,6 @@ function inputParser(opt: {
           typeof opt.maxBodySize === "number" ? opt.maxBodySize
           : undefined
         ),
-        serializers: opt.serializers || undefined,
       });
 
       try {
@@ -587,10 +582,7 @@ export type AssetsInit = Omit<ServeAssetOptions, "path">;
  * specified.
  */
 export function assets(init?: AssetsInit) {
-  return endpoint({
-    path: "*" as const,
-    resolve: ({ asset }) => asset(init),
-  });
+  return endpoint({ path: "*" as const }, ({ asset }) => asset(init));
 }
 
 /** Initializer options for creating a `bundle()` endpoint. */
@@ -604,10 +596,7 @@ export type BundleInit = ServeBundleOptions;
 export function bundle(init: BundleInit) {
   // Warm up the cache
   serveBundle(new Request("http://_"), init).catch(() => {});
-
-  return endpoint({
-    resolve: ({ bundle }) => bundle(init),
-  });
+  return endpoint({}, ({ bundle }) => bundle(init));
 }
 
 /**
@@ -619,9 +608,7 @@ export function bundle(init: BundleInit) {
  * Request url to get the final redirect path. The default status is 302.
  */
 export function redirect(to: string, status?: number) {
-  return endpoint({
-    resolve: ({ redirect }) => redirect(to, status || 302),
-  });
+  return endpoint({}, ({ redirect }) => redirect(to, status || 302));
 }
 
 /** Schema options for creating a `socket()` handler. */
@@ -643,7 +630,10 @@ export interface SocketSchema extends Omit<
 }
 
 /** Cav endpoint handler for connecting web sockets. */
-export type Socket<Schema extends SocketSchema> = Schema & ((
+export type Socket<Schema extends SocketSchema | null> = (
+  Schema extends null ? {}
+  : Schema
+) & ((
   req: EndpointRequest<{
     socket: true;
     query: (
@@ -660,8 +650,11 @@ export type Socket<Schema extends SocketSchema> = Schema & ((
       Schema extends { recv: Parser } ? ParserInput<Schema["recv"]>
       : unknown
     ), (
-      null | undefined extends Schema["send"] ? unknown
-      : Schema["send"]
+      Schema extends SocketSchema ? (
+        null | undefined extends Schema["send"] ? unknown
+        : Schema["send"]
+      )
+      : unknown
     )>;
   }>,
   conn: http.ConnInfo,
@@ -689,52 +682,54 @@ export interface SetupArg<
  * endpoint function, with the setup argument available as the "setup" property.
  */
 export function socket<
-  Schema extends SocketSchema,
   Param extends SocketSchema["param"],
   Ctx extends SocketSchema["ctx"],
   Query extends SocketSchema["query"],
   Send extends SocketSchema["send"],
   Recv extends SocketSchema["recv"],
+  Schema extends SocketSchema = {},
 >(
-  schema: Schema & SocketSchema & {
+  schema: Schema & {
     param?: Param;
     ctx?: Ctx;
     query?: Query;
     send?: Send;
     recv?: Recv;
-    setup?: ((x: SetupArg<Param, Ctx, Query, Send, Recv>) => Promise<void> | void),
-  },
+  } | null,
+  setup: (
+    | ((x: SetupArg<Param, Ctx, Query, Send, Recv>) => Promise<void> | void)
+    | null
+  ),
 ): Socket<Schema>;
 export function socket(
-  _schema: SocketSchema & {
-    setup?: ((x: SetupArg<any, any, any, any, any>) => Promise<void> | void)
-  },
+  _schema: SocketSchema | null,
+  _setup: (
+    | ((x: SetupArg<any, any, any, any, any>) => Promise<void> | void)
+    | null
+  ),
 ) {
   const schema = _schema || {};
-  const setup = _schema.setup || (() => {});
+  const setup = _setup || (() => {});
   const recv = normalizeParser(schema.recv || ((m) => m));
 
-  return endpoint({
-    ...schema,
-    resolve: async x => {
-      let socket: WebSocket;
-      let response: Response;
-      try {
-        ({ socket, response } = Deno.upgradeWebSocket(x.req, {
-          protocol: "json",
-        }));
-      } catch {
-        x.res.headers.set("upgrade", "websocket");
-        throw new HttpError("426 upgrade required", { status: 426 });
-      }
-  
-      const ws = webSocket(socket, { recv });
-
-      if (setup) {
-        await setup({ ...x, ws });
-      }
-  
-      return response;
+  return endpoint(schema, async x => {
+    let socket: WebSocket;
+    let response: Response;
+    try {
+      ({ socket, response } = Deno.upgradeWebSocket(x.req, {
+        protocol: "json",
+      }));
+    } catch {
+      x.res.headers.set("upgrade", "websocket");
+      throw new HttpError("426 upgrade required", { status: 426 });
     }
+
+    const ws = webSocket(socket, { recv });
+
+    if (setup) {
+      await setup({ ...x, ws });
+    }
+
+    return response;
   });
 }

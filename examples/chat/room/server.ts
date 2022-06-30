@@ -25,19 +25,15 @@ export function app() {
     ctx: ({ param, cookie }) => ({
       name: cookie.get(param.roomId, { signed: true }),
     }),
-    resolve: ({ ctx }) => true,
-  });
+  }, null);
 
   return router({
-    "/": endpoint({
-      ...base,
-      resolve: ({ res, ctx, redirect }) => {
-        if (!ctx.name) {
-          return redirect("./auth");
-        }
-        res.headers.set("content-type", "text/html; charset=UTF-8");
-        return html.chatPage();
+    "/": endpoint(base, ({ res, ctx, redirect }) => {
+      if (!ctx.name) {
+        return redirect("./auth");
       }
+      res.headers.set("content-type", "text/html; charset=UTF-8");
+      return html.chatPage();
     }),
 
     "auth": endpoint({
@@ -65,44 +61,42 @@ export function app() {
         }
         return { name };
       },
-      resolve: ({ res, cookie, param, ctx, body, redirect }) => {
-        // If they're already signed in, redirect them
-        if (ctx.name) {
-          return redirect("..");
-        }
-  
-        // If it's a GET request, serve the auth page
-        if (!body) {
-          res.headers.set("content-type", "text/html; charset=UTF-8");
-          return html.authPage();
-        }
-  
-        // If it's a POST request, try to reserve the name
-        if (api.nameTaken(param.roomId, body.name)) {
-          throw new HttpError("409 name taken", { status: 409 });
-        }
-        api.newUser(param.roomId, body.name);
-        cookie.set(param.roomId, body.name, { signed: true });
+    }, ({ res, cookie, param, ctx, body, redirect }) => {
+      // If they're already signed in, redirect them
+      if (ctx.name) {
         return redirect("..");
-      },
+      }
+
+      // If it's a GET request, serve the auth page
+      if (!body) {
+        res.headers.set("content-type", "text/html; charset=UTF-8");
+        return html.authPage();
+      }
+
+      // If it's a POST request, try to reserve the name
+      if (api.nameTaken(param.roomId, body.name)) {
+        throw new HttpError("409 name taken", { status: 409 });
+      }
+      api.newUser(param.roomId, body.name);
+      cookie.set(param.roomId, body.name, { signed: true });
+      return redirect("..");
     }),
 
     "ws": socket({
       ...base,
       send: {} as api.Message,
-      setup: ({ param, ctx, ws }) => {
-        const name = ctx.name;
-        if (!name) {
-          throw new HttpError("401 unauthorized", { status: 401 });
-        }
-  
-        ws.onopen = () => {
-          api.connect(param.roomId, { name, ws });
-        };
-        ws.onclose = () => {
-          api.disconnect(param.roomId, { name, ws });
-        };
-      },
+    }, ({ param, ctx, ws }) => {
+      const name = ctx.name;
+      if (!name) {
+        throw new HttpError("401 unauthorized", { status: 401 });
+      }
+
+      ws.onopen = () => {
+        api.connect(param.roomId, { name, ws });
+      };
+      ws.onclose = () => {
+        api.disconnect(param.roomId, { name, ws });
+      };
     }),
 
     "send": endpoint({
@@ -118,17 +112,16 @@ export function app() {
         }
         return body;
       },
-      resolve: ({ param, ctx, body }) => {
-        const name = ctx.name;
-        if (!name) {
-          throw new HttpError("401 unauthorized", { status: 401 });
-        }
-  
-        api.broadcast(param.roomId, {
-          from: name,
-          text: body,
-        });
-      },
+    }, ({ param, ctx, body }) => {
+      const name = ctx.name;
+      if (!name) {
+        throw new HttpError("401 unauthorized", { status: 401 });
+      }
+
+      api.broadcast(param.roomId, {
+        from: name,
+        text: body,
+      });
     }),
   });
 }

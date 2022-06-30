@@ -4,7 +4,6 @@
 import { serialize, deserialize } from "./serial.ts";
 import { normalizeParser } from "./parser.ts";
 import type { Parser } from "./parser.ts";
-import type { Serializers } from "./serial.ts";
 
 // TODO: When a socket event is cancelled, stop calling listeners
 
@@ -117,11 +116,6 @@ export interface WSInit<Recv = any> {
    * message event will be triggered.
    */
   recv?: Parser<any, Recv> | null;
-  /**
-   * Additional serializers to use when serializing and deserializing
-   * sent/received messages.
-   */
-  serializers?: Serializers | null;
 }
 
 /**
@@ -160,7 +154,7 @@ export function webSocket<
     raw,
     send: (data) => {
       try {
-        raw.send(JSON.stringify(serialize(data, init?.serializers)));
+        raw.send(JSON.stringify(serialize(data)));
       } catch (err) {
         console.error("Failed to send message:", err);
       }
@@ -207,14 +201,11 @@ export function webSocket<
         throw new Error(`Invalid data received: ${ev.data}`);
       }
 
-      recv = deserialize(
-        JSON.parse(
-          typeof ev.data === "string" ? ev.data
-          : ArrayBuffer.isView(ev.data) ? decoder.decode(ev.data)
-          : await ev.data.text() // Blob
-        ),
-        init?.serializers,
-      );
+      recv = deserialize(JSON.parse(
+        typeof ev.data === "string" ? ev.data
+        : ArrayBuffer.isView(ev.data) ? decoder.decode(ev.data)
+        : await ev.data.text() // Blob
+      ));
 
       if (init?.recv) {
         const parseRecv = normalizeParser(init.recv);
