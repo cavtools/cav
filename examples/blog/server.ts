@@ -1,18 +1,16 @@
 #!/usr/bin/env deno run --no-check --watch --allow-env --allow-net --allow-read
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
+import * as gfm from "https://deno.land/x/gfm@0.1.22/mod.ts";
+import * as fm from "https://deno.land/std@0.146.0/encoding/front_matter.ts";
 import {
   router,
   endpoint,
   serve,
 } from "../../mod.ts";
-import { CSS, render } from "https://deno.land/x/gfm@0.1.22/mod.ts";
-import {
-  extract
-} from "https://deno.land/std@0.146.0/encoding/front_matter.ts";
 
 serve(router({
-  "gfm.css": CSS,
+  "gfm.css": gfm.CSS,
   "/": endpoint(null, async ({ res }) => res({
     headers: { "content-type": "text/html" } as const,
     body: markdown(await Deno.readTextFile("./header.md")),
@@ -20,7 +18,7 @@ serve(router({
 }));
 
 function markdown(content: string) {
-  let { attrs, body } = extract<Record<string, string>>(content);
+  let { attrs, body } = fm.extract<Record<string, string>>(content);
 
   return /*html*/`
     <!DOCTYPE html><html lang="en"><head>
@@ -37,7 +35,7 @@ function markdown(content: string) {
 
     </head><body>
 
-      <main>${render(body)}</main>
+      <main>${gfm.render(body)}</main>
 
     </body></html>
   `;
