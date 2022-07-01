@@ -129,7 +129,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
         case ".css": type = "text/css; charset=UTF-8"; break;
         case ".txt": type = "text/plain; charset=UTF-8"; break;
         case ".js": type = "text/javascript; charset=UTF-8"; break;
-        case ".json": type = "application/json"; break;
+        case ".json": type = "application/json; charset=UTF-8"; break;
         case ".svg": type = "image/svg+xml; charset=UTF-8"; break;
         case ".rss": type = "application/rss+xml; charset=UTF-8"; break;
         case ".xml": type = "application/xml; charset=UTF-8"; break;

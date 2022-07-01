@@ -119,26 +119,17 @@ export async function serveAsset(
 
     const res = await fileServer.serveFile(req, filePath);
 
-    // Set the charset for same types of files that are supported as static
-    // string routes on the router
-    const type = res.headers.get("content-type");
-    switch (type) {
-      case "text/html": {
-        res.headers.set("content-type", "text/html; charset=UTF-8");
-        break;
-      }
-      case "text/markdown": {
-        res.headers.set("content-type", "text/markdown; charset=UTF-8");
-        break;
-      }
-      case "text/css": {
-        res.headers.set("content-type", "text/css; charset=UTF-8");
-        break;
-      }
-      case "text/plain": {
-        res.headers.set("content-type", "text/plain; charset=UTF-8");
-        break;
-      }
+    // FIXME: The media_types module the file_server uses is behind a little, it
+    // uses application/javascript but that's no longer the standard:
+    // https://2ality.com/2022/05/rfc-9239.html. Deno relies on a vendored copy
+    // of https://github.com/jshttp/mime-db to determine the correct type, and
+    // Doug Wilson hasn't been able to update it because nginx and apache are
+    // being slow to update. There's an issue open about this, when it closes
+    // and Deno pulls the updates it should be safe to remove this next
+    // conditional (not that it's really needed in the first place):
+    // https://github.com/jshttp/mime-db/issues/266
+    if (res.headers.get("content-type")?.startsWith("application/javascript")) {
+      res.headers.set("content-type", "text/javascript; charset=UTF-8");
     }
 
     if (
