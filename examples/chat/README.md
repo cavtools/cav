@@ -1,7 +1,7 @@
 # Chat
 
 - [Examples](../README.md)
-  - 📍 Chat: An ephemeral real-time chat server
+  - 📍 Chat: Ephemeral real-time chat server
 
 ## Setup
 
@@ -25,25 +25,22 @@ it's present, the "/dev" chat room is active.
 ## Architecture
 
 The structure of this example is meant to serve as a starting point when
-creating any moderately complex project, such as a chat server. There's a lot of
-modules, but most don't have very much in them.
+creating any moderately complex project, such as a chat server.
 
-Everything in this app was typed out by hand. No third-party dependencies were
-used.
+Everything was typed out by hand. No third-party dependencies were used.
 
 ### Assets
 
 The `assets/` directory is served with an `assets()` endpoint on the main app.
-This folder is where the CSS is stored. We could serve the CSS as static strings
-on the main app router if we wanted, but this would cause the server to reload
-on every CSS change, which is unnecessary work.
+We could serve the CSS as static strings on the main app router if we wanted,
+but this would cause the server to reload on every CSS change, which is
+annoying in practice.
 
-Assets aren't served in the room app because if they were, users who log into
-multiple rooms would need to download multiple copies of the same asset. i.e.
-the room CSS would be served at `/:roomId/room.css`, which would mean the CSS
-gets downloaded for every room visited. Serving the CSS at `/room.css` (in the
-main app) requires only one download, with subsequent requests using a cached
-copy.
+Assets aren't served on the room app because if they were, users who log into
+multiple rooms would need to download multiple copies of the same asset. The
+room CSS would be served at `/:roomId/room.css`, so each room gets its own copy
+of the same stylesheet. Serving the CSS at `/room.css` (in the main app)
+requires only a single cached stylesheet.
 
 ### Modules
 
@@ -52,7 +49,7 @@ this project given its filename:
 
 - `deps.ts`: Server-only dependencies
 - `deps_dom.ts`: Browser-only dependencies
-- `deps_iso.ts`: HTML dependencies. (Browser-compatible)
+- `deps_iso.ts`: Isormorphic dependencies. (Browser-compatible)
 - `server.ts`: Server-side code, where handlers are defined. (Server-only)
 - `api.ts`: Business logic. (Server-only)
 - `html.ts`: HTML templates. (Browser-compatible)

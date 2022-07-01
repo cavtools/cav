@@ -13,6 +13,7 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
 - Modular, maintainable server definitions
 - No-fuss data serialization
 - Automatic end-to-end typesafety
+- Developer freedom
 - Use The Platform
 
 ## [Docs](./docs/README.md)
@@ -32,7 +33,7 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
 
 ## [Examples](./examples/README.md)
 
-- [Chat](./examples/chat): An ephemeral real-time chat server
+- [Chat](./examples/chat): Ephemeral real-time chat server
 
 ## Goals
 
@@ -53,7 +54,8 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
   requests and responses
   - [x] End-to-end typesafety
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
-- Its syntax should be functional and declarative
+- Its syntax should be functional and declarative, for maximal organization
+  flexibility
   - [x] Immutable, schema-like Router and Endpoint definitions
   - [x] No hidden context
   - [x] No middleware

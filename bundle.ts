@@ -3,8 +3,7 @@
 import { path, emit, graph } from "./deps.ts";
 import { createEtagHash, should304 } from "./_etag.ts";
 
-// TODO: Add option for source maps for prepared bundles  
-// TODO: ETag calculation
+// TODO: Add option for source maps
 
 function parseCwd(cwd: string): string {
   if (cwd.startsWith("https://") || cwd.startsWith("http://")) {
