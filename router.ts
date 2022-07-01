@@ -180,26 +180,18 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
 
     const old = shape[k];
     if (!old) {
-      if (typeof v === "function" || Array.isArray(v)) {
-        shape[k] = v;
-      } else {
-        shape[k] = router(v);
-      }
+      shape[k] = v;
     } else if (Array.isArray(old)) {
       if (typeof v === "function") {
         shape[k] = [...old, v];
-      } else if (Array.isArray(v)) {
-        shape[k] = [...old, ...v];
       } else {
-        shape[k] = [...old, router(v)];
+        shape[k] = [...old, ...v];
       }
     } else {
       if (typeof v === "function") {
         shape[k] = [old, v];
-      } else if (Array.isArray(v)) {
-        shape[k] = [old, ...v];
       } else {
-        shape[k] = [old, router(v)];
+        shape[k] = [old, ...v];
       }
     }
   }

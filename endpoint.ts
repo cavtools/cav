@@ -11,11 +11,11 @@ import { serveBundle } from "./bundle.ts";
 import type { EndpointRequest } from "./client.ts";
 import type { Parser, ParserInput, ParserOutput } from "./parser.ts";
 import type { CookieJar } from "./cookie.ts";
-import type { Serializers } from "./serial.ts";
 import type { ServeAssetOptions } from "./asset.ts";
 import type { WS } from "./ws.ts";
 import type { QueryRecord, ParamRecord } from "./router.ts";
 import type { ServeBundleOptions } from "./bundle.ts";
+import type { PackedResponse } from "./serial.ts";
 
 /** Options for processing requests, used to construct Endpoints. */
 export interface EndpointSchema {
@@ -43,7 +43,7 @@ export interface EndpointSchema {
   keys?: [string, ...string[]] | null;
   /**
    * Factory function endpoints for creating a custom request context, which is
-   * available to resolves as the `ctx` property on the resolve argument.
+   * available to resolves as the `ctx` argument.
    *
    * Context handling happens after the endpoint matched with the Request but
    * before input validation begins.
@@ -51,7 +51,7 @@ export interface EndpointSchema {
   ctx?: ((c: ContextArg) => any) | null;
   /**
    * Parses the query string parameters passed into the URL. Parsed query
-   * parameters are available as the "query" resolve argument.
+   * parameters are available to resolvers as the "query" argument.
    *
    * If parsing fails, `undefined` will be parsed to check for a default value.
    * If that also fails, a 400 bad request error will be sent to the client.
@@ -68,18 +68,13 @@ export interface EndpointSchema {
   /**
    * Parses the POSTed body, if there is one. The behavior of this parser
    * determines the methods allowed for this endpoint. The output from parsing
-   * is available as the "body" resolve argument.
+   * is available to resolvers as the "body" argument.
    *
    * If there is no parser, only GET and HEAD requests will be allowed. If there
    * is one and it successfully parses `undefined`, POST will also be allowed.
    * If the parser throws when parsing `undefined`, *only* POST will be allowed. 
    */
   body?: Parser | null;
-  /**
-   * Resolves a successfully matching request into result data to serialize back
-   * to the client.
-   */
-  resolve?: ((x: ResolveArg<any, any, any, any>) => any) | null;
   /**
    * If specified, an error thrown during request processing will be processed
    * with this function, which can return a value to send back to the client
@@ -93,10 +88,10 @@ export interface ContextArg {
   /** The Request being handled. */
   req: Request;
   /**
-   * A ResponseInit applied to the Endpoint's resolved value when packing it
-   * into a Response. The Headers are always available.
+   * Headers that'll be appended to the returned response after processing has
+   * finished.
    */
-  res: ResponseInit & { headers: Headers };
+  headers: Headers;
   /** new URL(req.url) */
   url: URL;
   /** The Deno-provided ConnInfo describing the connection for the request. */
@@ -126,10 +121,10 @@ export interface ErrorArg {
   /** The Request being processed. */
   req: Request;
   /**
-   * A ResponseInit applied to the Endpoint response after resolving and packing
-   * the value to send to the client. The Headers object is always available.
+   * Headers that'll be appended to the returned response after processing has
+   * finished.
    */
-  res: ResponseInit & { headers: Headers };
+  headers: Headers;
   /** new URL(req.url) */
   url: URL;
   /** Connection information provided by Deno. */
@@ -142,6 +137,13 @@ export interface ErrorArg {
   param: ParamRecord;
   /** The offending error. */
   error: unknown;
+  /**
+   * Packs a given body into a Response before resolving, which can be useful in
+   * cases where the deserialized value doesn't match the body type because of
+   * explicit content-type headers. Be sure to declare the headers init option
+   * `as const`.
+   */
+  res: typeof packResponse;
   /**
    * Returns a TypeScript/JavaScript bundle as a response. The bundle is cached
    * into memory and, if possible, watched and rebundled whenever updated.
@@ -168,10 +170,10 @@ export interface ResolveArg<
   /** The Request being handled. */
   req: Request;
   /**
-   * A ResponseInit applied to the endpoint response after resolving and packing
-   * the value to send to the client. The Headers object is always available.
+   * Headers that'll be appended to the returned response after processing has
+   * finished.
    */
-  res: ResponseInit & { headers: Headers };
+  headers: Headers;
   /** new URL(req.url) */
   url: URL;
   /** Connection information provided by Deno. */
@@ -189,6 +191,13 @@ export interface ResolveArg<
   /** The parsed Request body, if any. */
   body: EndpointSchema["body"] extends Body ? undefined : ParserOutput<Body>;
   /**
+   * Packs a given body into a Response before resolving, which can be useful if
+   * you want to set the response status or in cases where the deserialized
+   * value doesn't match the body type because of explicit content-type headers.
+   * Be sure to declare the headers init option `as const`.
+   */
+  res: typeof packResponse;
+  /**
    * Returns a TypeScript/JavaScript bundle as a response. The bundle is cached
    * into memory and, if possible, watched and rebundled whenever updated.
    */
@@ -205,7 +214,10 @@ export interface ResolveArg<
 }
 
 /** Cav Endpoint handler, for responding to requests. */
-export type Endpoint<Schema extends EndpointSchema | null> = (
+export type Endpoint<
+  Schema extends EndpointSchema | null,
+  Result,
+> = (
   Schema extends null ? {}
   : Schema
 ) & ((
@@ -220,8 +232,8 @@ export type Endpoint<Schema extends EndpointSchema | null> = (
       : undefined
     );
     result: (
-      Schema extends { resolve: (...a: any[]) => infer R } ? Awaited<R>
-      : undefined
+      Result extends PackedResponse<any, any, any> ? Result
+      : PackedResponse<Result>
     );
   }>,
   conn: http.ConnInfo,
@@ -246,8 +258,10 @@ export function endpoint<
     query?: Query;
     body?: Body;
   } | null),
-  resolve: ((x: ResolveArg<Param, Ctx, Query, Body>) => Result) | null,
-): Endpoint<Schema>;
+  resolve: (
+    (x: ResolveArg<Param, Ctx, Query, Body>) => Promise<Result> | Result
+  ) | null,
+): Endpoint<Schema, Result>;
 export function endpoint(
   _schema: EndpointSchema | null,
   _resolve: ((x: ResolveArg<any, any, any, any>) => any) | null,
@@ -288,7 +302,7 @@ export function endpoint(
       });
     };
 
-    const res: ResponseInit & { headers: Headers } = { headers: new Headers() };
+    const headers = new Headers();
     const { url } = routerCtx;
     const cleanupTasks: (() => Promise<void> | void)[] = [];
     let output: unknown = undefined;
@@ -310,13 +324,13 @@ export function endpoint(
       }
 
       const cookie = await cookieJar(req, schema.keys || undefined);
-      cleanupTasks.push(() => cookie.setCookies(res.headers));
+      cleanupTasks.push(() => cookie.setCookies(headers));
 
       let ctx: unknown = undefined;
       if (schema.ctx) {
         ctx = await schema.ctx({
           req,
-          res,
+          headers,
           url,
           conn,
           cookie,
@@ -332,7 +346,7 @@ export function endpoint(
       const { query, body } = await parseInput(req);
       output = await resolve({
         req,
-        res,
+        headers,
         url,
         conn,
         cookie,
@@ -341,6 +355,7 @@ export function endpoint(
         ctx: ctx as any,
         query: query as any,
         body: body as any,
+        res: packResponse,
         bundle,
         asset,
         redirect,
@@ -354,13 +369,14 @@ export function endpoint(
         try {
           output = await schema.error({
             req,
-            res,
+            headers,
             url,
             conn,
             error,
             path: routerCtx.path,
             param: routerCtx.param,
             query: routerCtx.query,
+            res: packResponse,
             bundle,
             asset: (opt?: ServeAssetOptions) => serveAsset(req, opt),
             redirect,
@@ -378,18 +394,19 @@ export function endpoint(
       await task();
     }
 
+    let status: number | undefined = undefined;
     if (error instanceof HttpError) {
-      res.status = error.status;
+      status = error.status;
       output = error.expose ? error : error.message;
     } else if (error) {
       // Triggers a 500 HttpError on the client
       const bugtrace = crypto.randomUUID().slice(0, 5);
       console.error(`ERROR: Uncaught exception [${bugtrace}] -`, error);
-      res.status = 500;
+      status = 500;
       output = `500 internal server error [${bugtrace}]`;
     }
 
-    const response = packResponse(output, res);
+    const response = packResponse({ status, headers, body: output });
     if (req.method === "HEAD") {
       return new Response(null, {
         headers: response.headers,
@@ -596,7 +613,7 @@ export type BundleInit = ServeBundleOptions;
 export function bundle(init: BundleInit) {
   // Warm up the cache
   serveBundle(new Request("http://_"), init).catch(() => {});
-  return endpoint({}, ({ bundle }) => bundle(init));
+  return endpoint(null, ({ bundle }) => bundle(init));
 }
 
 /**
@@ -608,7 +625,7 @@ export function bundle(init: BundleInit) {
  * Request url to get the final redirect path. The default status is 302.
  */
 export function redirect(to: string, status?: number) {
-  return endpoint({}, ({ redirect }) => redirect(to, status || 302));
+  return endpoint(null, ({ redirect }) => redirect(to, status || 302));
 }
 
 /** Schema options for creating a `socket()` handler. */
@@ -669,7 +686,7 @@ export interface SetupArg<
   Recv extends SocketSchema["recv"],
 > extends Omit<
   ResolveArg<Param, Ctx, Query, any>,
-  "body" | "asset" | "bundle" | "redirect"
+  "body" | "asset" | "bundle" | "redirect" | "res"
 > {
   ws: WS<Send, (
     SocketSchema["recv"] extends Recv ? unknown : ParserOutput<Recv>
@@ -720,7 +737,7 @@ export function socket(
         protocol: "json",
       }));
     } catch {
-      x.res.headers.set("upgrade", "websocket");
+      x.headers.set("upgrade", "websocket");
       throw new HttpError("426 upgrade required", { status: 426 });
     }
 

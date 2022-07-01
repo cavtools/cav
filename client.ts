@@ -5,6 +5,7 @@ import { webSocket } from "./ws.ts";
 import { HttpError, packRequest, unpack } from "./serial.ts";
 import type { WS } from "./ws.ts";
 import type { QueryRecord, ParamRecord } from "./router.ts";
+import type { Unpack } from "./serial.ts";
 
 /**
  * Generic handler type for server-defined Request handlers.
@@ -91,7 +92,8 @@ type Paths<T> = (
 );
 
 type KeyInto<T, K extends string> = (
-  K extends `/${infer K0}` | `${infer K0}/` ? KeyInto<T, K0>
+  K extends "/" | "" ? K extends keyof T ? T[K] : never
+  : K extends `/${infer K0}` | `${infer K0}/` ? KeyInto<T, K0>
   : K extends `${infer K1}/${infer K2}` ? (
       K1 extends keyof T ? KeyInto<T[K1], K2>
       : never
@@ -99,6 +101,15 @@ type KeyInto<T, K extends string> = (
   : K extends keyof T ? T[K]
   : never
 );
+
+// When a property on an object is allowed to be undefined, it's key shouldn't
+// be required (I wish typescript did this by default, but javascript
+// differentiates between the two so I get it)
+type FixOptionals<T> = {
+  [K in keyof T as undefined extends T[K] ? never : K]: T[K];
+} & {
+  [K in keyof T as undefined extends T[K] ? K : never]?: T[K];
+}
 
 // TODO: Include any others supported by `fetch()`, example: CORS
 /** Arguments for the Client functions. */
@@ -129,15 +140,6 @@ export interface ClientArg {
   headers?: HeadersInit;
 }
 
-// When a property on an object is allowed to be undefined, it's key shouldn't
-// be required (I wish typescript did this by default, but javascript
-// differentiates between the two so I get it)
-type FixOptionals<T> = {
-  [K in keyof T as undefined extends T[K] ? never : K]: T[K];
-} & {
-  [K in keyof T as undefined extends T[K] ? K : never]?: T[K];
-}
-
 /** Client function for making RPC requests to a Cav server. */
 export type Client<T extends Handler = never> = (
   // T is a Router
@@ -148,7 +150,9 @@ export type Client<T extends Handler = never> = (
     & ClientArg
     & { path: P }
     & (
-      E extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? Omit<FixOptionals<ES>, "result">
+      E extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? (
+        Omit<FixOptionals<ES>, "result">
+      )
       : E extends string ? {
         socket?: false;
         query?: QueryRecord;
@@ -158,15 +162,18 @@ export type Client<T extends Handler = never> = (
     )
   )) => (
     E extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? (
-      ES extends { socket: true; result: infer R } ? R
-      : ES extends { result: infer R } ? Promise<[R, Response]>
+      ES extends { socket?: infer S; result: infer R } ? (
+        S extends true ? R // Assuming R is a WS
+        : Promise<[Unpack<R>, Response]>
+      )
       : never
     )
     : E extends string ? (
       P extends `${string}.txt` ? Promise<[string, Response]>
+      : P extends `${string}.json` ? Promise<[unknown, Response]>
       : Promise<[Blob, Response]>
     )
-    : never
+    : unknown
   )
 
   // T is an Endpoint
@@ -174,8 +181,10 @@ export type Client<T extends Handler = never> = (
     & ClientArg
     & Omit<FixOptionals<ES>, "result">
   )) => (
-    ES extends { socket: true; result: infer R } ? R
-    : ES extends { result: infer R } ? Promise<[R, Response]>
+    ES extends { socket?: infer S; result: infer R } ? (
+      S extends true ? R // Assuming R is a WS
+      : Promise<[Unpack<R>, Response]>
+    )
     : never
   )
 
