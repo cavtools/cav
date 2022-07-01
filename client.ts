@@ -92,7 +92,8 @@ type Paths<T> = (
 );
 
 type KeyInto<T, K extends string> = (
-  K extends `/${infer K0}` | `${infer K0}/` ? KeyInto<T, K0>
+  K extends "/" | "" ? K extends keyof T ? T[K] : never
+  : K extends `/${infer K0}` | `${infer K0}/` ? KeyInto<T, K0>
   : K extends `${infer K1}/${infer K2}` ? (
       K1 extends keyof T ? KeyInto<T[K1], K2>
       : never
@@ -149,7 +150,9 @@ export type Client<T extends Handler = never> = (
     & ClientArg
     & { path: P }
     & (
-      E extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? Omit<FixOptionals<ES>, "result">
+      E extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? (
+        Omit<FixOptionals<ES>, "result">
+      )
       : E extends string ? {
         socket?: false;
         query?: QueryRecord;

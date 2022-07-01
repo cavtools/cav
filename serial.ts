@@ -691,7 +691,7 @@ export function packRequest<B = undefined, CT = undefined, CD = undefined>(
   init?: PackRequestInit & {
     body?: B;
     // NOTE: You should declare the headers object `as const` for this to work
-    headers?: {
+    headers?: HeadersInit & {
       "content-type"?: CT;
       "content-disposition"?: CD;
     };
@@ -707,7 +707,9 @@ export function packRequest<B = undefined, CT = undefined, CD = undefined>(
 }
 
 /** Init options for packing/serializing data into a PackedResponse. */
-export type PackResponseInit = ResponseInit;
+export type PackResponseInit = ResponseInit & {
+  body?: unknown;
+};
 
 declare const _packedResponse: unique symbol;
 
@@ -728,15 +730,16 @@ export interface PackedResponse<
  * body using `unpack()`.
  */
 export function packResponse<B = undefined, CT = undefined, CD = undefined>(
-  body?: B,
   init?: PackResponseInit & {
+    body?: B;
     // NOTE: You should declare the headers object `as const` for this to work
-    headers?: {
+    headers?: HeadersInit & {
       "content-type"?: CT;
       "content-disposition"?: CD;
     };
   },
 ): PackedResponse<B, CT, CD> {
+  const body = init?.body;
   if (body instanceof Response) {
     const mergeHeaders = new Headers(init?.headers);
     for (const [k, v] of mergeHeaders.entries()) {

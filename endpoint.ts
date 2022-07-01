@@ -258,7 +258,9 @@ export function endpoint<
     query?: Query;
     body?: Body;
   } | null),
-  resolve: ((x: ResolveArg<Param, Ctx, Query, Body>) => Result) | null,
+  resolve: (
+    (x: ResolveArg<Param, Ctx, Query, Body>) => Promise<Result> | Result
+  ) | null,
 ): Endpoint<Schema, Result>;
 export function endpoint(
   _schema: EndpointSchema | null,
@@ -404,7 +406,7 @@ export function endpoint(
       output = `500 internal server error [${bugtrace}]`;
     }
 
-    const response = packResponse(output, { status, headers });
+    const response = packResponse({ status, headers, body: output });
     if (req.method === "HEAD") {
       return new Response(null, {
         headers: response.headers,
