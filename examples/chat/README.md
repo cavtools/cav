@@ -25,24 +25,25 @@ it's present, the "/dev" chat room is active.
 ## Architecture
 
 The structure of this example is meant to serve as a starting point when
-creating any moderately complex project, such as a chat server.
+creating any moderately complex project, such as a chat server. There's a lot of
+modules, but most don't have very much in them.
 
 Everything in this app was typed out by hand. No third-party dependencies were
 used.
 
 ### Assets
 
-The `assets/` directory is served with an `assets()` endpoint on the
-`mainRouter`. This folder is where the CSS is stored. We could serve the CSS as
-static strings on the `mainRouter` if we wanted, but this would cause the server
-to reload on every CSS change, which is unnecessary work.
+The `assets/` directory is served with an `assets()` endpoint on the main app.
+This folder is where the CSS is stored. We could serve the CSS as static strings
+on the main app router if we wanted, but this would cause the server to reload
+on every CSS change, which is unnecessary work.
 
-Assets aren't served in the `roomRouter` because if they were, users who log
-into multiple rooms would need to download multiple copies of the same asset.
-i.e. the room CSS would be served at `/:roomId/room.css`, which would mean the
-CSS gets downloaded for every room visited. Serving the CSS at `/room.css` (the
-`mainRouter` level) requires only one download, with subsequent requests using a
-cached copy.
+Assets aren't served in the room app because if they were, users who log into
+multiple rooms would need to download multiple copies of the same asset. i.e.
+the room CSS would be served at `/:roomId/room.css`, which would mean the CSS
+gets downloaded for every room visited. Serving the CSS at `/room.css` (in the
+main app) requires only one download, with subsequent requests using a cached
+copy.
 
 ### Modules
 
@@ -55,6 +56,7 @@ this project given its filename:
 - `server.ts`: Server-side code, where handlers are defined. (Server-only)
 - `api.ts`: Business logic. (Server-only)
 - `html.ts`: HTML templates. (Browser-compatible)
+- `rpc.ts`: Client functions. (Browser-compatible)
 - `dom.ts`: Browser-side code, where DOM manipulation happens. While these
   shouldn't import server code directly, they are allowed and encouraged to
   `import type` from server-only modules. Type imports are stripped during
@@ -65,10 +67,11 @@ messy enough, the code specific to the chat rooms was split off into the `room/`
 folder with the same module structure as the top-level modules. i.e. a "sub-app"
 was created with the same structure as the main app.
 
-The `base/` sub-app was also created to hold code shared between the new sub-app
-and main app. This process of peeling away pieces of the top-level modules and
-sticking them into sub-app folders can be repeated an arbitrary number of times
-to keep the code organized, predictable, and easy to skim through.
+The internal `base/` sub-app was also created to hold code shared between the
+new sub-app and main app. This process of peeling away pieces of the top-level
+modules and sticking them into sub-app folders can be repeated an arbitrary
+number of times to keep the code organized, predictable, and easy to skim
+through.
 
 Note: Cav is just a collection of functions. You can more or less use any folder
 structure or design pattern you want. If this example doesn't work for you,
