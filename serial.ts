@@ -781,6 +781,7 @@ export type Unpack<R> = (
         Record<string, string | File | (string | File)[]>
       )
       : CT extends `application/json${string}` ? unknown
+      : string extends CT ? unknown
       : CT extends string ? Blob
       : B extends string ? string
       : unknown
