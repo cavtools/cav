@@ -6,4 +6,5 @@ Feature-complete examples demonstrating how to use
 Shortcut: https://cav.bar/examples
 
 - 📍 Examples
-  - [Chat](./chat): Ephemeral real-time chat server
+  - [Blog](./blog)
+  - [Chat](./chat)

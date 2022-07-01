@@ -1,7 +1,8 @@
 # Chat
 
 - [Examples](../README.md)
-  - 📍 Chat: Ephemeral real-time chat server
+  - [Blog](../blog)
+  - 📍 Chat
 
 ## Setup
 

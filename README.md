@@ -18,22 +18,23 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
 
 ## [Docs](./docs/README.md)
 
-- [Getting started](./docs/getting-started.md)
-- [Routers](./docs/routers.md)
-- [Endpoints](./docs/endpoints.md)
-- [Request parsing](./docs/request-parsing.md)
-- [Response resolution](./docs/response-resolution.md)
-- [Context](./docs/context.md)
-- [Error handling](./docs/error-handling.md)
-- [Client fetch](./docs/client-fetch.md)
-- [Assets](./docs/assets.md)
-- [Bundles](./docs/bundles.md)
-- [Web sockets](./docs/web-sockets.md)
-- [API](./docs/api.md)
+- [Getting started](./docs/getting-started.md) [TODO]
+- [Routers](./docs/routers.md) [TODO]
+- [Endpoints](./docs/endpoints.md) [TODO]
+- [Request parsing](./docs/request-parsing.md) [TODO]
+- [Response resolution](./docs/response-resolution.md) [TODO]
+- [Context](./docs/context.md) [TODO]
+- [Error handling](./docs/error-handling.md) [TODO]
+- [Client fetch](./docs/client-fetch.md) [TODO]
+- [Assets](./docs/assets.md) [TODO]
+- [Bundles](./docs/bundles.md) [TODO]
+- [Web sockets](./docs/web-sockets.md) [TODO]
+- [API](./docs/api.md) [TODO]
 
 ## [Examples](./examples/README.md)
 
-- [Chat](./examples/chat): Ephemeral real-time chat server
+- [Blog](./examples/blog)
+- [Chat](./examples/chat)
 
 ## Goals
 

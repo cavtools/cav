@@ -15,6 +15,9 @@ export * as room from "./room/server.ts";
 
 export function app() {
   return router({
+    // The cwd isn't really necessary. I'm setting it because a project like
+    // this could reasonably be mounted in the router of a different
+    // application, in which case the Deno process cwd wouldn't be correct
     "*": assets({ cwd: import.meta.url }),
     "dom.ts": bundle({ url: "./dom.ts" }),
     "/": html.index(),
