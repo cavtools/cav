@@ -212,8 +212,11 @@ export function client<T extends Handler = never>(base = "/"): Client<T> {
 
     let path = x.path || "";
     if (path && x.param) {
-      for (const [k, v] of Object.entries(x)) {
-        path = path.replaceAll(new RegExp(`(\/?):${k}(\/?)`, "g"), "$1" + v + "$2");
+      for (const [k, v] of Object.entries(x.param)) {
+        path = path.replaceAll(
+          new RegExp(`(\/?):${k}(\/?)`, "g"),
+          "$1" + v + "$2",
+        );
       }
     }
     path = path.split("/").filter(p => !!p).join("/");
