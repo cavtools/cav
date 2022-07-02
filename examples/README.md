@@ -1,10 +1,11 @@
 # Examples
 
-Feature-complete examples demonstrating how to use
-[Cav](https://github.com/connorlogin/cav) to build a variety [WIP] of projects.
+Feature-complete examples demonstrating how to use Cav for a variety of
+projects.
 
 Shortcut: https://cav.bar/examples
 
 - 📍 Examples
-  - [Blog](./blog)
-  - [Chat](./chat)
+  - [Blog](./blog): Markdown blogging
+  - [Chat](./chat): Ephemeral chat rooms
+  - [Shortcuts](./shortcuts): URL shortening

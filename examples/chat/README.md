@@ -1,8 +1,9 @@
 # Chat
 
 - [Examples](../README.md)
-  - [Blog](../blog)
-  - 📍 Chat
+  - [Blog](../blog): Markdown blogging
+  - 📍 Chat: Ephemeral chat rooms
+  - [Shortcuts](./shortcuts): URL shortening
 
 ## Setup
 
@@ -28,7 +29,7 @@ it's present, the "/dev" chat room is active.
 The structure of this example is meant to serve as a starting point when
 creating any moderately complex project, such as a chat server.
 
-Everything was typed out by hand. No third-party dependencies were used.
+No third-party dependencies were used.
 
 ### Assets
 

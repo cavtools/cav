@@ -2,7 +2,8 @@
 
 import { http, path as stdPath } from "./deps.ts";
 import { serveAsset } from "./asset.ts";
-import { routerContext, noMatch } from "./router.ts";
+import { context } from "./context.ts"
+import { noMatch } from "./router.ts";
 import { HttpError, packResponse, unpack } from "./serial.ts";
 import { cookieJar } from "./cookie.ts";
 import { webSocket } from "./ws.ts";
@@ -13,7 +14,7 @@ import type { Parser, ParserInput, ParserOutput } from "./parser.ts";
 import type { CookieJar } from "./cookie.ts";
 import type { ServeAssetOptions } from "./asset.ts";
 import type { WS } from "./ws.ts";
-import type { QueryRecord, ParamRecord } from "./router.ts";
+import type { QueryRecord, ParamRecord } from "./context.ts";
 import type { ServeBundleOptions } from "./bundle.ts";
 import type { PackedResponse } from "./serial.ts";
 
@@ -213,6 +214,8 @@ export interface ResolveArg<
   redirect: (to: string, status?: number) => Response;
 }
 
+declare const _endpoint: unique symbol;
+
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<
   Schema extends EndpointSchema | null,
@@ -237,7 +240,11 @@ export type Endpoint<
     );
   }>,
   conn: http.ConnInfo,
-) => Promise<Response>);
+) => Promise<Response>) & {
+  // Prevents the type from being shown as a function in the magnifier when the
+  // schema is empty
+  [_endpoint]?: true;
+};
 
 /**
  * Constructs a new Endpoint request handler. The schema properties will be
@@ -281,9 +288,9 @@ export function endpoint(
   });
 
   const handler = async (req: Request, conn: http.ConnInfo) => {
-    const routerCtx = routerContext(req);
-    if (routerCtx.redirect) {
-      return routerCtx.redirect;
+    const cavCtx = context(req);
+    if (cavCtx.redirect) {
+      return cavCtx.redirect;
     }
 
     // Utilities
@@ -303,7 +310,7 @@ export function endpoint(
     };
 
     const headers = new Headers();
-    const { url } = routerCtx;
+    const { url } = cavCtx;
     const cleanupTasks: (() => Promise<void> | void)[] = [];
     let output: unknown = undefined;
     let path: string;
@@ -335,7 +342,7 @@ export function endpoint(
           conn,
           cookie,
           path,
-          query: routerCtx.query,
+          query: cavCtx.query,
           param: unparsedParam,
           cleanup: (task: () => Promise<void> | void) => {
             cleanupTasks.push(task);
@@ -373,9 +380,9 @@ export function endpoint(
             url,
             conn,
             error,
-            path: routerCtx.path,
-            param: routerCtx.param,
-            query: routerCtx.query,
+            path: cavCtx.path,
+            param: cavCtx.param,
+            query: cavCtx.query,
             res: packResponse,
             bundle,
             asset: (opt?: ServeAssetOptions) => serveAsset(req, opt),
@@ -486,8 +493,8 @@ function pathMatcher(opt: {
   );
 
   return async (req: Request) => {
-    const routerCtx = routerContext(req);
-    const path = useFullPath ? routerCtx.url.pathname : routerCtx.path;
+    const cavCtx = context(req);
+    const path = useFullPath ? cavCtx.url.pathname : cavCtx.path;
     const match = pattern.exec(path, "http://_");
 
     if (!match) {
@@ -497,7 +504,7 @@ function pathMatcher(opt: {
     // 0 param should be the path that matched, i.e. the path var already set
     delete match.pathname.groups["0"];
 
-    const unparsedParam = { ...routerCtx.param };
+    const unparsedParam = { ...cavCtx.param };
     for (const [k, v] of Object.entries(match.pathname.groups)) {
       unparsedParam[k] = v;
     }
@@ -533,9 +540,9 @@ function inputParser(opt: {
   const parseBody = opt.body && normalizeParser(opt.body);
 
   return async (req) => {
-    const routerCtx = routerContext(req);
+    const cavCtx = context(req);
 
-    let query: unknown = routerCtx.query;
+    let query: unknown = cavCtx.query;
     if (parseQuery) {
       try {
         query = await parseQuery(query);

@@ -2,6 +2,7 @@
 
 import { http, path } from "./deps.ts";
 import { createEtagHash, should304 } from "./_etag.ts";
+import { context } from "./context.ts";
 import type {
   RouterShape,
   RouterRequest,
@@ -12,93 +13,18 @@ import type {
 // router, create multiple URL patterns so that fewer functions get called when
 // routing a request. i.e. "/foo/bar" is fewer functions than foo: { bar: end }
 
-/**
- * Metadata object for caching and tracking information about how a Request has
- * been routed so far in the handling process.
- */
-export interface RouterContext {
-  /** new URL(req.url) */
-  url: URL;
-  /** The current, unrouted portion of the requested path. */
-  path: string;
-  /** The raw query string parameters, as an object. */
-  query: Record<string, string | string[]>;
-  /** The path parameters captured during the routing process so far. */
-  param: Record<string, string>;
-  /**
-   * If this isn't null, this Response should be returned as soon as possible in
-   * the routing process. It means the path requested wasn't canonical, and this
-   * 302 Response will redirect the client to the canonical URL instead.
-   */
-  redirect: Response | null;
-}
-
-const _routerContext = Symbol("_routerContext");
-
-/** Record representing query string parameters. */
-export type QueryRecord = Record<string, string | string[]>;
-
-/** Record representing path parameters captured during routing. */
-export type ParamRecord = Record<string, string>;
-
-/**
- * Hook for getting routing metadata from a Request. If there isn't already a
- * RouterContext associated with the Request, a new one will be generated. The
- * same RouterContext object is returned on every subsequent call to
- * `routerContext()` with this Request.
- *
- * Use this to get information about how the Request has been routed so far, if
- * at all. Routers read and modify this context internally and Endpoints read
- * from it when determining whether to respond to the Request or not (404).
- */
-export function routerContext(request: Request): RouterContext {
-  const req = request as Request & { [_routerContext]?: RouterContext };
-  if (req[_routerContext]) {
-    return req[_routerContext]!;
-  }
-
-  const url = new URL(req.url);
-  const path = `/${url.pathname.split("/").filter((p) => !!p).join("/")}`;
-  let redirect: Response | null = null;
-  if (path !== url.pathname) {
-    url.pathname = path;
-    // NOTE: Don't use Response.redirect. It prevents modifying headers
-    // redirect = Response.redirect(url.href, 302);
-    redirect = new Response(null, {
-      status: 302,
-      headers: { "location": url.href },
-    });
-  }
-
-  const query: Record<string, string | string[]> = {};
-  for (const [k, v] of url.searchParams.entries()) {
-    const old = query[k];
-    if (typeof old === "string") {
-      query[k] = [old, v];
-    } else if (Array.isArray(old)) {
-      query[k] = [...old, v];
-    } else {
-      query[k] = v;
-    }
-  }
-
-  const ctx: RouterContext = {
-    url,
-    path,
-    param: {},
-    query,
-    redirect,
-  };
-  Object.assign(req, { [_routerContext]: ctx });
-  return ctx;
-}
+declare const _router: unique symbol;
 
 /** Cav Router handlers, for routing requests. */
 // deno-lint-ignore ban-types
 export type Router<S extends RouterShape = {}> = S & ((
   req: RouterRequest<S>,
   conn: http.ConnInfo,
-) => Promise<Response>);
+) => Promise<Response>) & {
+  // Prevents the type from being shown as a function in the magnifier when the
+  // schema is empty
+  [_router]?: true;
+};
 
 /**
  * Constructs a new Router handler using the provided routes. The route
@@ -270,7 +196,7 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     conn: http.ConnInfo,
   ): Promise<Response> => {
     // Check for redirect
-    const ctx = routerContext(req);
+    const ctx = context(req);
     if (ctx.redirect) {
       return ctx.redirect;
     }

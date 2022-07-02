@@ -1,4 +1,4 @@
-#!/usr/bin/env deno run --no-check --watch --allow-env --allow-net --allow-read
+#!/usr/bin/env deno run --watch --allow-env --allow-net --allow-read
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
 import * as gfm from "https://deno.land/x/gfm@0.1.22/mod.ts";
@@ -9,13 +9,15 @@ import {
   serve,
 } from "../../mod.ts";
 
-serve(router({
+const app = router({
   "gfm.css": gfm.CSS,
   "/": endpoint(null, async ({ res }) => res({
     headers: { "content-type": "text/html" } as const,
     body: markdown(await Deno.readTextFile("./header.md")),
   })),
-}));
+});
+
+serve(app);
 
 function markdown(content: string) {
   let { attrs, body } = fm.extract<Record<string, string>>(content);

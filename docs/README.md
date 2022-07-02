@@ -1,7 +1,6 @@
 # Docs
 
-Detailed walkthroughs for [Cav](https://github.com/connorlogin/cav)'s main
-capabilities.
+Walkthroughs for common operations with Cav.
 
 Shortcut: https://cav.bar/docs
 
