@@ -17,11 +17,11 @@ export function app() {
   return router({
     "docs": endpoint({ path: "*" }, ({ path, redirect }) => redirect(
       path === "/" ? base + "/blob/main/docs/README.md"
-      : base + `/blob/main/docs/${path}.md`
+      : base + `/blob/main/docs${path}.md`
     )),
     "examples": endpoint({ path: "*" }, ({ path, redirect }) => redirect(
       path === "/" ? base + "/blob/main/examples/README.md"
-      : base + `/blob/main/examples/${path}`
+      : base + `/blob/main/examples${path}`
     )),
     "*": endpoint({ path: "*" }, ({ path, redirect }) => redirect(
       base + path
