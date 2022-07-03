@@ -4,7 +4,7 @@ Minimalist blogging with a single `server.ts` and some markdown files.
 
 <details><summary>Nav</summary>
 
-- [Home](../..)
+- [Home](https://cav.bar)
 - [Docs](../../docs/README.md)
   - [Getting started](../../docs/getting-started.md)
   - [Routers](../../docs/routers.md)

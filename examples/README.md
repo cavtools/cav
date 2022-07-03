@@ -7,7 +7,7 @@ Shortcut: https://cav.bar/examples
 
 <details><summary>Nav</summary>
 
-- [Home](..)
+- [Home](https://cav.bar)
 - [Docs](../docs/README.md)
   - [Getting started](../docs/getting-started.md)
   - [Routers](../docs/routers.md)

@@ -2,7 +2,7 @@
 
 <details><summary>Nav</summary>
 
-- [Home](..)
+- [Home](https://cav.bar)
 - [Docs](./README.md)
   - 📍 [Getting started](./getting-started.md)
   - [Routers](./routers.md)

@@ -14,11 +14,11 @@ Cav is a collection of powerful primitives for building full-stack web apps with
 - Automatic end-to-end typesafety
 - Developer freedom
 - Use the platform
-- Have [fun](https://www.youtube.com/watch?v=g_y15ozNchY)! 🌈
+- Have [fun](https://www.youtube.com/watch?v=g_y15ozNchY) 🌈
 
 ## Nav
 
-- 📍 [Home](.)
+- 📍 [Home](https://cav.bar)
 - [Docs](./docs/README.md)
   - [Getting started](./docs/getting-started.md)
   - [Routers](./docs/routers.md)
