@@ -32,7 +32,7 @@ Deps:
 ## Setup
 
 Install the latest version of [Deno](https://deno.land). This app was created
-with v1.22.2.
+with v1.23.2.
 
 Recommended:
 

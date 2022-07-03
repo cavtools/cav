@@ -1,6 +1,6 @@
 # Cav
 
-Cav is a collection of powerful primitives for building full-stack web apps with
+Cav is a collection of powerful functions for building full-stack web apps with
 [Deno](https://deno.land).
 
 **Status:** Ready to play with, but not ready for production.

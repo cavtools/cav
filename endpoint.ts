@@ -259,12 +259,12 @@ export function endpoint<
   Body extends EndpointSchema["body"],
   Result = undefined,
 >(
-  schema: Schema & ({
+  schema: EndpointSchema & Schema & {
     param?: Param;
     ctx?: Ctx;
     query?: Query;
     body?: Body;
-  } | null),
+  } | null,
   resolve: (
     (x: ResolveArg<Param, Ctx, Query, Body>) => Promise<Result> | Result
   ) | null,
@@ -706,14 +706,14 @@ export interface SetupArg<
  * endpoint function, with the setup argument available as the "setup" property.
  */
 export function socket<
+  Schema extends SocketSchema | null,
   Param extends SocketSchema["param"],
   Ctx extends SocketSchema["ctx"],
   Query extends SocketSchema["query"],
   Send extends SocketSchema["send"],
   Recv extends SocketSchema["recv"],
-  Schema extends SocketSchema = {},
 >(
-  schema: Schema & {
+  schema: SocketSchema & Schema & {
     param?: Param;
     ctx?: Ctx;
     query?: Query;
