@@ -2,8 +2,6 @@
 
 Detailed breakdowns for Cav's main features.
 
-Shortcut: https://cav.bar/docs
-
 <details><summary>Nav</summary>
 
 - [Home](https://cav.bar)

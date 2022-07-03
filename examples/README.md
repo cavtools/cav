@@ -3,8 +3,6 @@
 Feature-complete examples demonstrating how to use Cav for a variety of
 projects.
 
-Shortcut: https://cav.bar/examples
-
 <details><summary>Nav</summary>
 
 - [Home](https://cav.bar)
