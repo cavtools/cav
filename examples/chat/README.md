@@ -1,33 +1,10 @@
-# Chat
+# [Cav](https://cav.bar) / [Examples](../README.md) / Chat
 
-Anonymous, disposable chat room service using web sockets.
+Anonymous, disposable real-time chat rooms using web sockets.
 
 Deps:
   - https://deno.land/std
   - https://deno.land/x/cav
-
-<details><summary>Nav</summary>
-
-- [Home](https://cav.bar)
-- [Docs](https://cav.bar/docs)
-  - [Getting started](https://cav.bar/docs/getting-started)
-  - [Routers](https://cav.bar/docs/routers)
-  - [Endpoints](https://cav.bar/docs/endpoints)
-  - [Request parsing](https://cav.bar/docs/request-parsing)
-  - [Response resolution](https://cav.bar/docs/response-resolution)
-  - [Context](https://cav.bar/docs/context)
-  - [Error handling](https://cav.bar/docs/error-handling)
-  - [Client fetch](https://cav.bar/docs/client-fetch)
-  - [Assets](https://cav.bar/docs/assets)
-  - [Bundles](https://cav.bar/docs/bundles)
-  - [Web sockets](https://cav.bar/docs/web-sockets)
-  - [API](https://cav.bar/docs/api)
-- [Examples](https://cav.bar/examples)
-  - [Blog](https://cav.bar/examples/blog): Markdown blogging
-  - 📍 [Chat](https://cav.bar/examples/chat): Ephemeral chat rooms
-  - [Shortcuts](https://cav.bar/examples/shortcuts): URL Shortening
-
-</details>
 
 ## Setup
 
@@ -74,7 +51,7 @@ creating any moderately complex project, such as a chat server.
 ### Assets
 
 The `assets/` directory is served with an `assets()` endpoint on the main app.
-We could serve the CSS as static strings on the main app if we wanted, but this
+We could serve the CSS as static strings on the main app if we wanted but that
 would cause the server to reload on every CSS change, which is annoying.
 
 Assets aren't served on the room app because, if they were, users who log into

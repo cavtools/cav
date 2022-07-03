@@ -14,28 +14,27 @@ Cav is a collection of powerful functions for building full-stack web apps with
 - Automatic end-to-end typesafety
 - Developer freedom
 - Use the platform
-- Have [fun](https://www.youtube.com/watch?v=g_y15ozNchY) 🌈
+- Have fun [🌈](https://www.youtube.com/watch?v=g_y15ozNchY)
 
-## Nav
+## Resources
 
-- 📍 [Home](https://cav.bar)
-- [Docs](https://cav.bar/docs)
-  - [Getting started](https://cav.bar/docs/getting-started)
-  - [Routers](https://cav.bar/docs/routers)
-  - [Endpoints](https://cav.bar/docs/endpoints)
-  - [Request parsing](https://cav.bar/docs/request-parsing)
-  - [Response resolution](https://cav.bar/docs/response-resolution)
-  - [Context](https://cav.bar/docs/context)
-  - [Error handling](https://cav.bar/docs/error-handling)
-  - [Client fetch](https://cav.bar/docs/client-fetch)
-  - [Assets](https://cav.bar/docs/assets)
-  - [Bundles](https://cav.bar/docs/bundles)
-  - [Web sockets](https://cav.bar/docs/web-sockets)
-  - [API](https://cav.bar/docs/api)
-- [Examples](https://cav.bar/examples)
-  - [Blog](https://cav.bar/examples/blog): Markdown blogging
-  - [Chat](https://cav.bar/examples/chat): Ephemeral chat rooms
-  - [Shortcuts](https://cav.bar/examples/shortcuts): URL Shortening
+- [Docs](./docs/README.md)
+  - [Getting started](./docs/getting-started.md)
+  - [Routers](./docs/routers.md)
+  - [Endpoints](./docs/request-parsing.md)
+  - [Request parsing](./docs/request-parsing.md)
+  - [Response resolution](./docs/response-resolution.md)
+  - [Context](./docs/context.md)
+  - [Error handling](./docs/error-handling.md)
+  - [Client fetch](./docs/client-fetch.md)
+  - [Assets](./docs/assets.md)
+  - [Bundles](./docs/bundles.md)
+  - [Web sockets](./docs/web-sockets.md)
+  - [API](./docs/api.md)
+- [Examples](./examples/README.md)
+  - [Blog](./examples/blog): Markdown blogging
+  - [Chat](./examples/chat): Ephemeral chat rooms
+  - [Shortcuts](./examples/shortcuts): URL Shortening
 
 ## Goals
 
