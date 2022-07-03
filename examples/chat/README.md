@@ -22,7 +22,7 @@ Deps:
   - [Bundles](https://cav.bar/docs/bundles)
   - [Web sockets](https://cav.bar/docs/web-sockets)
   - [API](https://cav.bar/docs/api)
-- [Examples](https://cav.bar/examples/README)
+- [Examples](https://cav.bar/examples)
   - [Blog](https://cav.bar/examples/blog): Markdown blogging
   - 📍 [Chat](https://cav.bar/examples/chat): Ephemeral chat rooms
   - [Shortcuts](https://cav.bar/examples/shortcuts): URL Shortening
