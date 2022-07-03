@@ -31,9 +31,9 @@ export type ParamRecord = Record<string, string>;
 
 /**
  * Hook for getting routing metadata from a Request. If there isn't already a
- * RouterContext associated with the Request, a new one will be generated. The
- * same RouterContext object is returned on every subsequent call to `context()`
- * with this Request.
+ * Context associated with the Request, a new one will be generated. The same
+ * Context object is returned on every subsequent call to `context()` with this
+ * Request.
  *
  * Use this to get information about how the Request has been routed so far, if
  * at all. Routers read and modify this context internally and Endpoints read

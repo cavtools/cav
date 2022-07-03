@@ -2,7 +2,8 @@
 
 import { fileServer, path } from "./deps.ts";
 import { HttpError } from "./serial.ts";
-import { routerContext, noMatch } from "./router.ts";
+import { noMatch } from "./router.ts";
+import { context } from "./context.ts";
 
 function parseCwd(cwd: string): string {
   if (cwd.startsWith("https://") || cwd.startsWith("http://")) {
@@ -34,8 +35,8 @@ export interface AssetsLocation {
 export interface ServeAssetOptions extends AssetsLocation {
   /**
    * The path of the file to serve inside the assets directory. If this isn't
-   * provided, the routed path from the RouterContext associated with the
-   * request will be used.
+   * provided, the routed path from the Context associated with the request will
+   * be used.
    */
   path?: string;
 }
@@ -56,7 +57,7 @@ export async function serveAsset(
   req: Request,
   opt?: ServeAssetOptions,
 ): Promise<Response> {
-  const ctx = routerContext(req);
+  const ctx = context(req);
   const url = ctx.url;
   let pathname = opt?.path || ctx.path;
 
