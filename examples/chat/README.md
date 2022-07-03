@@ -2,6 +2,8 @@
 
 Anonymous, disposable real-time chat rooms using web sockets.
 
+Shortcut: https://cav.bar/examples/chat
+
 Deps:
   - https://deno.land/std
   - https://deno.land/x/cav

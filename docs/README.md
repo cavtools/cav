@@ -1,3 +1,3 @@
 # [Cav](https://cav.bar) / Docs
 
-Detailed breakdowns for Cav's main features.
+Shortcut: https://cav.bar/docs
