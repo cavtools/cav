@@ -2,6 +2,6 @@
 
 Shortcut: https://cav.bar/examples
 
-- [Blog](./examples/blog): Markdown blogging
-- [Chat](./examples/chat): Ephemeral chat rooms
-- [Shortcuts](./examples/shortcuts): URL Shortening
+- [Blog](./blog): Markdown blogging
+- [Chat](./chat): Ephemeral chat rooms
+- [Shortcuts](./shortcuts): URL Shortening
