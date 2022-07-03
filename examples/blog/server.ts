@@ -9,15 +9,19 @@ import {
   serve,
 } from "../../mod.ts";
 
-const app = router({
-  "gfm.css": gfm.CSS,
-  "/": endpoint(null, async ({ res }) => res({
-    headers: { "content-type": "text/html" } as const,
-    body: markdown(await Deno.readTextFile("./header.md")),
-  })),
-});
+if (import.meta.main) {
+  serve(app());
+}
 
-serve(app);
+export function app() {
+  return router({
+    "gfm.css": gfm.CSS,
+    "/": endpoint(null, async ({ res }) => res({
+      headers: { "content-type": "text/html" } as const,
+      body: markdown(await Deno.readTextFile("./header.md")),
+    })),
+  });
+}
 
 function markdown(content: string) {
   let { attrs, body } = fm.extract<Record<string, string>>(content);

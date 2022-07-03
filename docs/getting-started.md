@@ -1,7 +1,10 @@
 # Getting started
 
+<details><summary>Nav</summary>
+
+- [Home](..)
 - [Docs](./README.md)
-  - 📍 Getting started
+  - 📍 [Getting started](./getting-started.md)
   - [Routers](./routers.md)
   - [Endpoints](./endpoints.md)
   - [Request parsing](./request-parsing.md)
@@ -13,3 +16,9 @@
   - [Bundles](./bundles.md)
   - [Web sockets](./web-sockets.md)
   - [API](./api.md)
+- [Examples](../examples/README.md)
+  - [Blog](../examples/blog): Markdown blogging
+  - [Chat](../examples/chat): Ephemeral chat rooms
+  - [Shortcuts](../examples/shortcuts): URL Shortening
+
+</details>

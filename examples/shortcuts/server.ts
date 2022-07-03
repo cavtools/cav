@@ -8,21 +8,25 @@ import {
   serve,
 } from "../../mod.ts";
 
-const app = router({
-  "docs": redirect(
-    "https://github.com/connorlogin/cav/blob/main/docs/README.md",
-  ),
-  "examples": redirect(
-    "https://github.com/connorlogin/cav/blob/main/examples/README.md",
-  ),
-  // GitHub:
-  // - Issues -> /issues
-  // - Discussions -> /discussions
-  // - Pull requests -> /pulls
-  // - etc.
-  "*": endpoint({ path: "*" }, ({ path, redirect }) => redirect(
-    "https://github.com/connorlogin/cav" + path,
-  )),
-});
+if (import.meta.main) {
+  serve(app());
+}
 
-serve(app);
+export function app() {
+  return router({
+    "docs": redirect(
+      "https://github.com/connorlogin/cav/blob/main/docs/README.md",
+    ),
+    "examples": redirect(
+      "https://github.com/connorlogin/cav/blob/main/examples/README.md",
+    ),
+    // GitHub:
+    // - Issues: /issues
+    // - Discussions: /discussions
+    // - Pull requests: /pulls
+    // - etc.
+    "*": endpoint({ path: "*" }, ({ path, redirect }) => redirect(
+      "https://github.com/connorlogin/cav" + path,
+    )),
+  });
+}

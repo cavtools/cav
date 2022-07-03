@@ -3,8 +3,7 @@
 Cav is a collection of powerful primitives for building full-stack web apps with
 [Deno](https://deno.land).
 
-**Status:** Ready to play with, but not ready for production. The tests are
-currently outdated as of 0.2.0-alpha.*. Most will probably fail.
+**Status:** Ready to play with, but not ready for production.
 
 ## Guiding principles
 
@@ -14,27 +13,29 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
 - No-fuss data serialization
 - Automatic end-to-end typesafety
 - Developer freedom
-- Use The Platform
+- Use the platform
+- Have [fun](https://www.youtube.com/watch?v=g_y15ozNchY)! 🌈
 
-## [Docs](./docs/README.md)
+## Nav
 
-- [Getting started](./docs/getting-started.md) [TODO]
-- [Routers](./docs/routers.md) [TODO]
-- [Endpoints](./docs/endpoints.md) [TODO]
-- [Request parsing](./docs/request-parsing.md) [TODO]
-- [Response resolution](./docs/response-resolution.md) [TODO]
-- [Context](./docs/context.md) [TODO]
-- [Error handling](./docs/error-handling.md) [TODO]
-- [Client fetch](./docs/client-fetch.md) [TODO]
-- [Assets](./docs/assets.md) [TODO]
-- [Bundles](./docs/bundles.md) [TODO]
-- [Web sockets](./docs/web-sockets.md) [TODO]
-- [API](./docs/api.md) [TODO]
-
-## [Examples](./examples/README.md)
-
-- [Blog](./examples/blog)
-- [Chat](./examples/chat)
+- 📍 [Home](.)
+- [Docs](./docs/README.md)
+  - [Getting started](./docs/getting-started.md)
+  - [Routers](./docs/routers.md)
+  - [Endpoints](./docs/endpoints.md)
+  - [Request parsing](./docs/request-parsing.md)
+  - [Response resolution](./docs/response-resolution.md)
+  - [Context](./docs/context.md)
+  - [Error handling](./docs/error-handling.md)
+  - [Client fetch](./docs/client-fetch.md)
+  - [Assets](./docs/assets.md)
+  - [Bundles](./docs/bundles.md)
+  - [Web sockets](./docs/web-sockets.md)
+  - [API](./docs/api.md)
+- [Examples](./examples/README.md)
+  - [Blog](./examples/blog): Markdown blogging
+  - [Chat](./examples/chat): Ephemeral chat rooms
+  - [Shortcuts](./examples/shortcuts): URL Shortening
 
 ## Goals
 
@@ -55,14 +56,14 @@ currently outdated as of 0.2.0-alpha.*. Most will probably fail.
   requests and responses
   - [x] End-to-end typesafety
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
-- Its syntax should be functional and declarative, for maximal organization
-  flexibility
+- Its syntax should be functional and declarative
   - [x] Immutable, schema-like Router and Endpoint definitions
   - [x] No hidden context
   - [x] No middleware
+  - [x] Functions all the way down
 - Production deployments should be a simple git-commit-push
   - [x] [Deno Deploy](https://deno.com) without a build step
-- It should minimize the threat of supply chain attacks
+- It should stand on its own
   - [x] Zero third-party dependencies
 
 ## Inspirations

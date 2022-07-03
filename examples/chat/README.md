@@ -1,9 +1,33 @@
 # Chat
 
+Anonymous, disposable chat room service using web sockets.
+
+Deps:
+  - https://deno.land/std
+  - https://deno.land/x/cav
+
+<details><summary>Nav</summary>
+
+- [Home](../..)
+- [Docs](../../docs/README.md)
+  - [Getting started](../../docs/getting-started.md)
+  - [Routers](../../docs/routers.md)
+  - [Endpoints](../../docs/endpoints.md)
+  - [Request parsing](../../docs/request-parsing.md)
+  - [Response resolution](../../docs/response-resolution.md)
+  - [Context](../../docs/context.md)
+  - [Error handling](../../docs/error-handling.md)
+  - [Client fetch](../../docs/client-fetch.md)
+  - [Assets](../../docs/assets.md)
+  - [Bundles](../../docs/bundles.md)
+  - [Web sockets](../../docs/web-sockets.md)
+  - [API](../../docs/api.md)
 - [Examples](../README.md)
   - [Blog](../blog): Markdown blogging
-  - 📍 Chat: Ephemeral chat rooms
-  - [Shortcuts](./shortcuts): URL shortening
+  - 📍 [Chat](../chat): Ephemeral chat rooms
+  - [Shortcuts](../shortcuts): URL Shortening
+
+</details>
 
 ## Setup
 
@@ -29,20 +53,17 @@ it's present, the "/dev" chat room is active.
 The structure of this example is meant to serve as a starting point when
 creating any moderately complex project, such as a chat server.
 
-No third-party dependencies were used.
-
 ### Assets
 
 The `assets/` directory is served with an `assets()` endpoint on the main app.
-We could serve the CSS as static strings on the main app router if we wanted,
-but this would cause the server to reload on every CSS change, which is
-annoying in practice.
+We could serve the CSS as static strings on the main app if we wanted, but this
+would cause the server to reload on every CSS change, which is annoying.
 
-Assets aren't served on the room app because if they were, users who log into
+Assets aren't served on the room app because, if they were, users who log into
 multiple rooms would need to download multiple copies of the same asset. The
-room CSS would be served at `/:roomId/room.css`, so each room gets its own copy
-of the same stylesheet. Serving the CSS at `/room.css` (in the main app)
-requires only a single cached stylesheet.
+room CSS would be served at `/:roomId/room.css`, therefore each room would get
+its own copy of the same stylesheet. Serving the CSS at `/room.css` (on the main
+app) requires only a single cached stylesheet shared between every room.
 
 ### Modules
 
@@ -55,7 +76,7 @@ this project given its filename:
 - `server.ts`: Server-side code, where handlers are defined. (Server-only)
 - `api.ts`: Business logic. (Server-only)
 - `html.ts`: HTML templates. (Browser-compatible)
-- `rpc.ts`: Client functions. (Browser-compatible)
+- `rpc.ts`: For triggering server routines on the client. (Browser-compatible)
 - `dom.ts`: Browser-side code, where DOM manipulation happens. While these
   shouldn't import server code directly, they are allowed and encouraged to
   `import type` from server-only modules. Type imports are stripped during
@@ -108,12 +129,3 @@ server state that isn't synced between every Deploy data center. Each chat room
 would only be accessible for users connecting to the Deploy server instance that
 created it. (Something like [Supabase](https://supabase.com) could fill the gap
 here. Supabase API calls would get along well in `room/api.ts`.)
-
-## Bugs
-
-- There's a known bug with the Deno extension for VSCode that causes errors to
-  appear in server-side modules whenever a `dom.ts` file is open. This is
-  because of the `/// <reference`s in Cav's `dom.ts` module, causing a TS libs
-  conflict with the Deno-only libs whenever a `dom.ts` file is open in the
-  editor. Simply close the `dom.ts` tabs to make the errors disappear. They
-  don't affect anything, and this problem should eventually be solved upstream

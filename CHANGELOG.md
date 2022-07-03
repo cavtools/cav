@@ -4,7 +4,6 @@
 
 *On deck*
 
-- Docs!
 - Added the `encodeCookie()` and `decodeCookie()` exports to cookies.ts, removed
   the `COOKIE_JWT_HEADER`. Also changed some `const` functions into regular
   functions. Cav shouldn't have any exported variables in the Deno Docs anymore
@@ -40,6 +39,10 @@
   charset. This applies for static string routes and asset files
 - Created the `html.ts` file and put a `cx` utility in there (more later?)
 - Updates to how/when etagging works
+- `res.headers` -> `headers`, plus a new `res()` utility for endpoints
+- `routerContext()` was changed to `context()` and moved to `context.ts`
+- Examples
+- Docs
 
 ## [0.1.0](https://deno.land/x/cav@0.1.0)
 
