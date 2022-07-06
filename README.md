@@ -1,75 +1,58 @@
 # Cav
 
-A collection of powerful primitives for building full-stack web apps with
+A collection of primitives for building full-stack web apps with
 [Deno](https://deno.land).
 
 **Status:** Ready to play with, but not ready for production.
+
+- [Cav](#cav)
+  - [Guiding principles](#guiding-principles)
+  - [Goals](#goals)
+  - [Inspirations](#inspirations)
 
 ## Guiding principles
 
 - [Least
   Astonishment](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
-- Modular, maintainable server definitions
+- Modular, schema-like server definitions
 - No-fuss data serialization
-- Automatic end-to-end typesafety
-- Developer freedom
+- End-to-end typesafety
+- Developer independence
 - Use the platform
 - Have fun [🌈](https://www.youtube.com/watch?v=g_y15ozNchY)
 
-## Resources
-
-- [Docs](./docs/README.md)
-  - [Getting started](./docs/getting-started.md)
-  - [Routers](./docs/routers.md)
-  - [Endpoints](./docs/request-parsing.md)
-  - [Request parsing](./docs/request-parsing.md)
-  - [Response resolution](./docs/response-resolution.md)
-  - [Context](./docs/context.md)
-  - [Error handling](./docs/error-handling.md)
-  - [Client fetch](./docs/client-fetch.md)
-  - [Assets](./docs/assets.md)
-  - [Bundles](./docs/bundles.md)
-  - [Web sockets](./docs/web-sockets.md)
-  - [API](./docs/api.md)
-- [Examples](./examples/README.md)
-  - [Blog](./examples/blog): Markdown blogging
-  - [Chat](./examples/chat): Ephemeral chat rooms
-  - [Shortcuts](./examples/shortcuts): URL Shortening
-
 ## Goals
 
-- It should come with everything a modern web server might need, without relying
-  on third-party services (minus the database)
+- It should do the basics
   - [x] Routing
   - [x] Static asset serving
-  - [x] Signed cookies and JWTs
+  - [x] Signed cookies
   - [x] Web sockets
-  - [x] Form and JSON parsing / validation
-  - [x] De/serialization of most data types, including Files, Dates, Maps, etc.
+  - [x] Form and JSON parsing
+  - [x] De/serialization of most JS data types, including Dates, Maps, Files...
   - [x] Runtime bundling for browser-side TypeScript
   - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
-- "Hello world" should be as easy as `deno run`ning a tiny `server.ts`
-  - [x] Zero config
-  - [x] Zero CLI commands
+- It shouldn't require any special tooling
+  - [x] No config files
+  - [x] No CLI commands
 - The client-side API should use types imported from the server to fully type
   requests and responses
-  - [x] End-to-end typesafety
-  - [x] Compatible with [Zod](https://github.com/colinhacks/zod) data parsers
+  - [x] [End-to-end typesafety](https://colinhacks.com/essays/painless-typesafety)
+  - [x] Compatible with [Zod](https://github.com/colinhacks/zod)
 - Its syntax should be functional and declarative
   - [x] Immutable, schema-like Router and Endpoint definitions
-  - [x] No hidden context
-  - [x] No middleware
+  - [x] No middleware patterns
   - [x] Functions all the way down
+- It should be as independent as possible
+  - [x] Zero third-party dependencies (just Deno)
 - Production deployments should be a simple git-commit-push
   - [x] [Deno Deploy](https://deno.com) without a build step
-- It should stand on its own
-  - [x] Zero third-party dependencies
 
 ## Inspirations
 
-- [Zod](https://github.com/colinhacks/zod) / [tRPC](https://trpc.io)
 - [Express](https://expressjs.com/) / [Koa](https://koajs.com/) /
   [Oak](https://oakserver.github.io/oak/)
+- [Zod](https://github.com/colinhacks/zod) / [tRPC](https://trpc.io)
 - [superjson](https://github.com/blitz-js/superjson) /
   [devalue](https://github.com/Rich-Harris/devalue) /
   [json-dry](https://github.com/11ways/json-dry)

@@ -1,6 +1,6 @@
 # [Cav](https://cav.bar) / [Examples](../README.md) / Chat
 
-Anonymous, disposable real-time chat rooms using web sockets.
+Anonymous, disposable real-time chat rooms.
 
 Shortcut: https://cav.bar/examples/chat
 
@@ -21,10 +21,7 @@ extension](https://marketplace.visualstudio.com/items?itemName=denoland.vscode-d
 
 ## Development
 
-To start the server in development mode, run `deno task dev`. It'll bind to port
-8000.
-
-Notes:
+To start the server in development mode, run `deno task dev`.
 
 - Updates to server-side code will trigger a server reload
 - The "/dev" chat room is active, providing a stable room ID for testing changes
@@ -35,8 +32,6 @@ Notes:
 ## Production
 
 To start the server in production mode, run `deno task prod`.
-
-Notes:
 
 - Updates to server-side code will NOT trigger a server reload
 - The "/dev" chat room is disabled
