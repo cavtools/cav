@@ -1,22 +1,8 @@
 # Cav
 
-A collection of primitives for building full-stack web apps with
-[Deno](https://deno.land).
+Full stack web primitives for [Deno](https://deno.land).
 
-**Status:** Ready to play with, but not ready for production.
-
-## Index
-
-- [Guiding principles](#guiding-principles)
-- [Goals](#goals)
-- [Inspirations](#inspirations)
-- [Examples](#examples)
-- [Setup](#setup)
-- [Getting started](#getting-started)
-- [Conventions](#conventions)
-- [API](#api)
-
-## Guiding principles
+**Guiding principles:**
 
 - [Least
   Astonishment](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
@@ -26,6 +12,17 @@ A collection of primitives for building full-stack web apps with
 - Developer independence
 - Use the platform
 - Have fun [🌈](https://www.youtube.com/watch?v=g_y15ozNchY)
+
+**Status:** Ready to play with, but not ready for production.
+
+**Index:**
+
+- [Goals](#goals)
+- [Inspirations](#inspirations)
+- [Setup](#setup)
+- [Getting started](#getting-started)
+- [Examples](#examples)
+- [Docs](#docs)
 
 ## Goals
 
@@ -39,8 +36,7 @@ A collection of primitives for building full-stack web apps with
   - [x] Runtime bundling for browser-side TypeScript
   - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
 - It shouldn't require special configs, setups, or tooling
-  - [x] No config files
-  - [x] No CLI
+  - [x] No CLI or config files
   - [x] No dictated project structures
 - The client function should use types imported from the server to fully type
   requests and responses
@@ -51,7 +47,7 @@ A collection of primitives for building full-stack web apps with
   - [x] No middleware patterns
   - [x] Functions all the way down
 - It should be as independent as possible
-  - [x] Zero third-party dependencies (just Deno)
+  - [x] No third-party dependencies
 - Production deployments should be a simple git-commit-push
   - [x] [Deno Deploy](https://deno.com) without a build step
 
@@ -67,10 +63,6 @@ A collection of primitives for building full-stack web apps with
 Cav's description on GitHub is inspired by the [Weird Wide
 Webring](https://weirdwidewebring.net) 🤙
 
-## Examples
-
-TODO
-
 ## Setup
 
 TODO
@@ -79,8 +71,10 @@ TODO
 
 TODO
 
-## Conventions
+## Examples
 
 TODO
 
-## API
+## Docs
+
+TODO

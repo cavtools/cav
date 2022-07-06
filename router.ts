@@ -131,21 +131,15 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
 
     const split = k.split("/");
     for (const s of split) {
+      // "" isn't allowed
+      if (!s) {
+        throw new SyntaxError("Route path segments aren't allowed to be empty");
+      }
+      
       // "." and ".." aren't allowed
       if (s === "." || s === "..") {
         throw new SyntaxError(
           "'.' and '..' aren't allowed in route path segments",
-        );
-      }
-
-      if (
-        // If it doesn't match the path capture regex
-        !s.match(/^:[a-zA-Z_$]+[a-zA-Z_$0-9]*$/) &&
-        // And it has at least one unescaped URLPattern character
-        s.match(/[^\\][:*?(){}]/)
-      ) {
-        throw new SyntaxError(
-          `"${k}" isn't a valid Router route. The Router only supports basic path segments and named path segments (param). Wildcards, RegExp, optionals, and other advanced URLPattern syntax isn't supported, with the exception of the solo wildcard "*"`,
         );
       }
     }
