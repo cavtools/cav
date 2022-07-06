@@ -5,15 +5,16 @@ A collection of primitives for building full-stack web apps with
 
 **Status:** Ready to play with, but not ready for production.
 
-- [Cav](#cav)
-  - [Guiding principles](#guiding-principles)
-  - [Goals](#goals)
-  - [Inspirations](#inspirations)
-  - [Examples](#examples)
-  - [Setup](#setup)
-  - [Getting started](#getting-started)
-  - [Conventions](#conventions)
-  - [API](#api)
+## Index
+
+- [Guiding principles](#guiding-principles)
+- [Goals](#goals)
+- [Inspirations](#inspirations)
+- [Examples](#examples)
+- [Setup](#setup)
+- [Getting started](#getting-started)
+- [Conventions](#conventions)
+- [API](#api)
 
 ## Guiding principles
 
