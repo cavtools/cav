@@ -131,11 +131,6 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
 
     const split = k.split("/");
     for (const s of split) {
-      // Empty path segments aren't allowed, unless it's the root path
-      if (k !== "/" && !s) {
-        throw new SyntaxError("Route path segments aren't allowed to be empty");
-      }
-      
       // "." and ".." aren't allowed
       if (s === "." || s === "..") {
         throw new SyntaxError(
