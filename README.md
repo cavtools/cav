@@ -9,6 +9,11 @@ A collection of primitives for building full-stack web apps with
   - [Guiding principles](#guiding-principles)
   - [Goals](#goals)
   - [Inspirations](#inspirations)
+  - [Examples](#examples)
+  - [Setup](#setup)
+  - [Getting started](#getting-started)
+  - [Conventions](#conventions)
+  - [API](#api)
 
 ## Guiding principles
 
@@ -32,10 +37,11 @@ A collection of primitives for building full-stack web apps with
   - [x] De/serialization of most JS data types, including Dates, Maps, Files...
   - [x] Runtime bundling for browser-side TypeScript
   - [x] Works with frontend frameworks like [Preact](https://preactjs.com)
-- It shouldn't require any special tooling
+- It shouldn't require special configs, setups, or tooling
   - [x] No config files
-  - [x] No CLI commands
-- The client-side API should use types imported from the server to fully type
+  - [x] No CLI
+  - [x] No dictated project structures
+- The client function should use types imported from the server to fully type
   requests and responses
   - [x] [End-to-end typesafety](https://colinhacks.com/essays/painless-typesafety)
   - [x] Compatible with [Zod](https://github.com/colinhacks/zod)
@@ -59,3 +65,21 @@ A collection of primitives for building full-stack web apps with
 
 Cav's description on GitHub is inspired by the [Weird Wide
 Webring](https://weirdwidewebring.net) 🤙
+
+## Examples
+
+TODO
+
+## Setup
+
+TODO
+
+## Getting started
+
+TODO
+
+## Conventions
+
+TODO
+
+## API
