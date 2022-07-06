@@ -76,10 +76,9 @@ export async function serveAsset(
   const dir = opt?.dir || "assets";
 
   try {
-    let filePath = path.join(
-      cwd,
-      dir,
-      path.join("/", pathname),
+    let filePath = (
+      dir.startsWith("/") ? path.join(dir, path.join("/", pathname))
+      : path.join(cwd, dir, path.join("/", pathname))
     );
 
     let fileInfo: Deno.FileInfo | null = null;
