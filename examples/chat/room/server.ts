@@ -1,7 +1,7 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 
-import * as api from "./api.ts";
-import * as html from "./html.ts";
+import * as model from "./model.ts";
+import * as view from "./view.ts";
 import {
   HttpError,
   router,
@@ -17,7 +17,7 @@ export function app() {
       if (typeof roomId !== "string") {
         throw new Error("invalid routing setup: roomId required");
       }
-      if (!api.roomExists(roomId)) {
+      if (!model.roomExists(roomId)) {
         throw new Error("room not found");
       }
       return { roomId };
@@ -32,8 +32,10 @@ export function app() {
       if (!ctx.name) {
         return redirect("./auth");
       }
-      res.headers.set("content-type", "text/html; charset=UTF-8");
-      return html.chatPage();
+      return res({
+        headers: { "content-type": "text/html" },
+        body: view.chatPage(),
+      });
     }),
 
     "auth": endpoint({
@@ -69,22 +71,24 @@ export function app() {
 
       // If it's a GET request, serve the auth page
       if (!body) {
-        res.headers.set("content-type", "text/html; charset=UTF-8");
-        return html.authPage();
+        return res({
+          headers: { "content-type": "text/html" },
+          body: view.authPage(),
+        });
       }
 
       // If it's a POST request, try to reserve the name
-      if (api.nameTaken(param.roomId, body.name)) {
+      if (model.nameTaken(param.roomId, body.name)) {
         throw new HttpError("409 name taken", { status: 409 });
       }
-      api.newUser(param.roomId, body.name);
+      model.newUser(param.roomId, body.name);
       cookie.set(param.roomId, body.name, { signed: true });
       return redirect("..");
     }),
 
     "ws": socket({
       ...base,
-      send: {} as api.Message,
+      send: {} as model.Message,
     }, ({ param, ctx, ws }) => {
       const name = ctx.name;
       if (!name) {
@@ -92,10 +96,10 @@ export function app() {
       }
 
       ws.onopen = () => {
-        api.connect(param.roomId, { name, ws });
+        model.connect(param.roomId, { name, ws });
       };
       ws.onclose = () => {
-        api.disconnect(param.roomId, { name, ws });
+        model.disconnect(param.roomId, { name, ws });
       };
     }),
 
@@ -118,7 +122,7 @@ export function app() {
         throw new HttpError("401 unauthorized", { status: 401 });
       }
 
-      api.broadcast(param.roomId, {
+      model.broadcast(param.roomId, {
         from: name,
         text: body,
       });
