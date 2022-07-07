@@ -4,7 +4,7 @@
 import { webSocket } from "./ws.ts";
 import { HttpError, packRequest, unpack } from "./serial.ts";
 import type { WS } from "./ws.ts";
-import type { QueryRecord, ParamRecord } from "./router.ts";
+import type { QueryRecord, ParamRecord } from "./context.ts";
 import type { Unpack } from "./serial.ts";
 
 /**
