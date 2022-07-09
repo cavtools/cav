@@ -3,41 +3,98 @@
 import { http, path } from "./deps.ts";
 import { createEtagHash, should304 } from "./_etag.ts";
 import { context } from "./context.ts";
+import type { ParamRecord } from "./context.ts";
 import type {
   RouterShape,
   RouterRequest,
   Handler,
 } from "./client.ts";
 
-// TODO: Optimization idea: For nested objects, instead of creating a new
-// router, create multiple URL patterns so that fewer functions get called when
-// routing a request. i.e. "/foo/bar" is fewer functions than foo: { bar: end }
+// I was using URLPatterns in the router, but because of how the E2E typesafety
+// works in Cav, it's much easier to use a simpler router syntax while still
+// allowing Endpoints to use the full URLPattern syntax. People won't like this
+// but it saves a lot of work and prevents a lot of edge cases that would create
+// behavior that looks correct and compiles correctly, but shouldn't
+type Pattern = string[];
+function matchPattern(pattern: Pattern, ctxPath: string): {
+  param: ParamRecord;
+  nextPath: string;
+} | null {
+  // The wildcard route forwards its path
+  if (pattern.length === 1 && pattern[0] === "*") {
+    return {
+      param: {},
+      nextPath: ctxPath,
+    };
+  }
 
-declare const _router: unique symbol;
+  const split = ctxPath.split("/");
+  if (pattern.length > split.length) {
+    return null;
+  }
+
+  const param: ParamRecord = {};
+  let i = 0;
+  for (; i < pattern.length; i++) {
+    if (pattern[i].startsWith(":")) {
+      param[pattern[i].slice(1)] = split[i];
+    } else {
+      const r = decodeURIComponent(pattern[i]);
+      const s = decodeURIComponent(split[i]);
+      if (r !== s) {
+        return null;
+      }
+    }
+  }
+
+  return {
+    param,
+    nextPath: split.slice(i).join("/"),
+  }
+}
 
 /** Cav Router handlers, for routing requests. */
 // deno-lint-ignore ban-types
 export type Router<S extends RouterShape = {}> = S & ((
   req: RouterRequest<S>,
   conn: http.ConnInfo,
-) => Promise<Response>) & {
-  // Prevents the type from being shown as a function in the magnifier when the
-  // schema is empty
-  [_router]?: true;
-};
+) => Promise<Response>);
 
 /**
  * Constructs a new Router handler using the provided routes. The route
  * properties are also available on the returned Router function.
  */
-export function router<S extends RouterShape>(routes: S): Router<S> {
+export function router<S extends RouterShape>(
+  routes: S & {
+    // Type errors whenever an invalid path is used on a router
+    [K in keyof S]: (
+      K extends "/" ? S[K]
+      : K extends (
+        // Duplicate slashes
+        | `${string}//${string}`
+        // Leading/trailing slashes
+        | `/${string}`
+        | `${string}/`
+        // '.' or '..' as path segments
+        | `../${string}`
+        | `./${string}`
+        | `${string}/..`
+        | `${string}/.`
+        | `${string}/../${string}`
+        | `${string}/./${string}`
+        // Asterisks that aren't the fallback wildcard route
+        | `${string}*/${string}`
+        | `${string}/*${string}`
+      ) ? never
+      : S[K]
+    );
+  },
+): Router<S> {
   const shape: Record<string, Handler | Handler[]> = {};
-  for (let [k, v] of Object.entries(routes)) {
+  for (let [k, v] of Object.entries(routes as RouterShape)) {
     if (typeof v === "undefined" || v === null) {
       continue;
     }
-
-    k = k.split("/").filter(k2 => !!k2).join("/");
 
     if (typeof v === "string") {
       const staticStr = v;
@@ -104,37 +161,37 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
       };
     }
 
-    const old = shape[k];
-    if (!old) {
-      shape[k] = v;
-    } else if (Array.isArray(old)) {
-      if (typeof v === "function") {
-        shape[k] = [...old, v];
-      } else {
-        shape[k] = [...old, ...v];
-      }
-    } else {
-      if (typeof v === "function") {
-        shape[k] = [old, v];
-      } else {
-        shape[k] = [old, ...v];
-      }
-    }
+    shape[k] = v;
   }
 
   // Check that routes are valid
   for (const k of Object.keys(shape)) {
-    // The wildcard route is allowed
+    // The lone wildcard is allowed
     if (k === "*") {
       continue;
     }
 
     const split = k.split("/");
     for (const s of split) {
+      // Non-lone wildcards aren't allowed
+      if (s === "*") {
+        throw new SyntaxError(
+          "Asterisks aren't permitted in routers",
+        );
+      }
+
+      // Multiple slashes next to each other aren't allowed, and neither are
+      // leading/trailing slashes
+      if (!s) {
+        throw new SyntaxError(
+          "Duplicate and leading/trailing slashes aren't permitted in routers",
+        );
+      }
+
       // "." and ".." aren't allowed
       if (s === "." || s === "..") {
         throw new SyntaxError(
-          "'.' and '..' aren't allowed in route path segments",
+          "'.' and '..' path segments aren't permitted in routers",
         );
       }
     }
@@ -170,14 +227,10 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     return paths.indexOf(b) - paths.indexOf(a);
   });
 
-  const patterns = new Map<URLPattern, Handler | Handler[]>();
+  const patterns = new Map<Pattern, Handler | Handler[]>();
   for (const p of sortedPaths) {
-    const pattern = (
-      p === "*" ? `/:__nextPath*/*?`
-      : !p ? "/"
-      : `/${p}/:__nextPath*/*?`
-    );
-    patterns.set(new URLPattern(pattern, "http://_._"), shape[p]);
+    const pattern = p.split("/");
+    patterns.set(pattern, shape[p]);
   }
   
   const handler = async (
@@ -193,23 +246,13 @@ export function router<S extends RouterShape>(routes: S): Router<S> {
     let lastNoMatch: Response | null = null;
 
     for (const [pattern, fn] of patterns.entries()) {
-      const match = pattern.exec(ctx.path, "http://_._");
+      const match = matchPattern(pattern, ctx.path);
       if (!match) {
         continue;
       }
       
-      const param = { ...ctx.param };
-      for (const [k, v] of Object.entries(match.pathname.groups)) {
-        param[k] = v;
-      }
-
-      // REVIEW: I don't think this delete will ever cause a bug but it might?
-      // The 0 group is always empty I think.
-      // https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API#unnamed_and_named_groups
-      delete param["0"];
-
-      const path = `/${param.__nextPath || ""}`;
-      delete param.__nextPath;
+      const param = { ...ctx.param, ...match.param };
+      const path = `/${match.nextPath}`;
 
       const oPath = ctx.path;
       const oParam = ctx.param;

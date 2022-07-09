@@ -94,14 +94,11 @@ export function should304({ req, etag, modified }: {
 }): boolean {
   const noneMatch = req.headers.get("if-none-match");
   const modifiedSince = req.headers.get("if-modified-since");
-  if (
+  return !!(
     (noneMatch && compareEtag(noneMatch, etag)) ||
     (noneMatch === null && modifiedSince && (
       modified.getTime() < new Date(modifiedSince).getTime() + 1000
     ))
-  ) {
-    return true;
-  }
-  return false;
+  )
 }
 

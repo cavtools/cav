@@ -7,6 +7,8 @@ import type { WS } from "./ws.ts";
 import type { QueryRecord, ParamRecord } from "./context.ts";
 import type { Unpack } from "./serial.ts";
 
+declare const _client: unique symbol;
+
 /**
  * Generic handler type for server-defined Request handlers.
  */
@@ -28,31 +30,30 @@ export type EndpointShape = {
   socket?: true;
   query?: QueryRecord;
   body?: never;
-  result: WS<any, any>;
+  result: WS<unknown, unknown>;
 };
-
-declare const _endpoint: unique symbol;
 
 /**
  * A server endpoint handler can use this Request type to ferry type information
  * to the client about what argument types are acceptable and what the result
  * will be into.
  */
-export interface EndpointRequest<S extends EndpointShape> extends Request {
-  [_endpoint]?: S; // imaginary
+export interface EndpointRequest<Shape = never> extends Request {
+  [_client]?: {
+    endpoint: Shape;
+  };
 }
 
 /** The shape of a RouterRequest, mapping allowed routes to their handlers. */
-export interface RouterShape {
+export type RouterShape = {
+  /** Duplicate slashes aren't allowed. */
   [x: string]: (
     | Handler
     | Handler[]
-    | string
+    | string // static string routes
     | null
   );
-}
-
-declare const _router: unique symbol;
+};
 
 /**
  * A server router handler can use this Request type to ferry type information
@@ -60,47 +61,105 @@ declare const _router: unique symbol;
  * client uses the RouterShape to infer which property accesses are valid and
  * what their response type will be.
  */
-export interface RouterRequest<S extends RouterShape> extends Request {
-  [_router]?: S;
+export interface RouterRequest<Shape = never> extends Request {
+  [_client]?: {
+    router: Shape;
+  };
 }
 
+// TODO: Include any others supported by `fetch()`, example: CORS
+/** Arguments for the Client functions. */
+export interface ClientArg {
+  /**
+   * Extra URL path to include before the request is made. This should only be
+   * used if the endpoint expects it.
+   */
+  path?: string;
+  /**
+   * For opening web sockets. If true, a web socket will be returned instead of
+   * a `[Result, Response]` pair. 
+   */
+  socket?: boolean;
+  /** Query string parameters to append to the request URL. */
+  query?: QueryRecord;
+  /** Extra headers to include when making the request. */
+  headers?: HeadersInit;
+  /**
+   * Body to send with the request. If this isn't undefined, the request method
+   * will be POST.
+   */
+  body?: unknown;
+}
+
+/**
+ * Client function for making requests to a remote Cav handler. If the handler
+ * type is a Router or Endpoint, end-to-end type safety kicks in.
+ */
+export type Client<
+  T = null,
+  Req = T extends Handler<infer R> ? R : null,
+> = (
+  Req extends RouterRequest<infer RS> & EndpointRequest<infer ES> ? (
+    Client<Handler<RouterRequest<RS>>> & Client<Handler<EndpointRequest<ES>>>
+  )
+  : Req extends RouterRequest<infer RS> ? (
+    RS extends RouterShape ? RouterClient<RS>
+    : UnknownClient
+  )
+  : Req extends EndpointRequest<infer ES> ? (
+    ES extends EndpointShape ? EndpointClient<ES>
+    : UnknownClient
+  )
+  : UnknownClient
+);
+
+/** Type of a Client when the handler isn't a Router or Endpoint. */
+export type UnknownClient = (<Socket extends boolean = false>(x: (
+  & ClientArg
+  & { socket?: Socket }
+)) => (
+  Socket extends true ? WS<unknown, unknown>
+  : Promise<[unknown, Response]>
+)) & {
+  [x: string]: UnknownClient;
+};
+
 type ExpandPath<K, T> = (
-  // The "*" route can't be used with the client
-  K extends `*` ? never
-  : K extends `/${infer P}` | `${infer P}/` ? ExpandPath<P, T>
-  : K extends `${infer P1}/${infer P2}` ? { [x in P1]: ExpandPath<P2, T> }
+  K extends `${infer P1}/${infer P2}` ? (
+    P1 extends `:${string}` ? { [x: string]: ExpandPath<P2, T> }
+    : { [x in P1]: ExpandPath<P2, T> }
+  )
+  : K extends `:${string}` ? { [x: string]: T }
   : K extends string ? { [x in K]: T }
   : never
 );
 
-type Expand<T> = (
-  T extends (req: RouterRequest<infer RS>, ...a: any[]) => any ? {
-    [K in keyof RS]: ExpandPath<K, Expand<RS[K]>>;
-  }[keyof RS]
-  : T
-);
+/** https://fettblog.eu/typescript-union-to-intersection/ */
+type UnionToIntersection<U> = (
+  U extends unknown ? (k: U) => void : never
+) extends ((k: infer I) => void) ? I : never;
 
-type Paths<T> = (
-  T extends (...a: any[]) => any ? string
-  : T extends Record<string, unknown> ? {
-    [K in keyof T & string]: (
-      T[K] extends Record<string, unknown> ? `${K}/${Paths<T[K]>}`
-      : K
+/** Type of a Client when the handler is a Router. */
+export type RouterClient<
+  Shape extends RouterShape,
+  // The fallback route is the only route that's special. It can't be relied on
+  // for e2e typesafety, the client ignores it
+  _Shape = Omit<Shape, "*">,
+> = (UnionToIntersection<{
+  [K in keyof _Shape]: (
+    _Shape[K] extends infer S ? (
+      S extends Handler ? ExpandPath<K, Client<S>>
+      : S extends string ? ExpandPath<K, Client>
+      : S extends Handler[] ? ExpandPath<K, UnionToIntersection<
+        Client<S[number]>
+      >>
+      : S // null | undefined, cleaned later
     )
-  }[keyof T & string]
-  : string
-);
-
-type KeyInto<T, K extends string> = (
-  K extends "/" | "" ? K extends keyof T ? T[K] : never
-  : K extends `/${infer K0}` | `${infer K0}/` ? KeyInto<T, K0>
-  : K extends `${infer K1}/${infer K2}` ? (
-      K1 extends keyof T ? KeyInto<T[K1], K2>
-      : never
-  )
-  : K extends keyof T ? T[K]
-  : never
-);
+    : never
+  );
+}[keyof _Shape]> extends infer U ? {
+  [K in keyof U as U[K] extends null | undefined ? never : K]: U[K];
+} : never);
 
 // When a property on an object is allowed to be undefined, it's key shouldn't
 // be required (I wish typescript did this by default, but javascript
@@ -109,24 +168,37 @@ type FixOptionals<T> = {
   [K in keyof T as undefined extends T[K] ? never : K]: T[K];
 } & {
   [K in keyof T as undefined extends T[K] ? K : never]?: T[K];
-}
+};
 
-// TODO: Include any others supported by `fetch()`, example: CORS
-/** Arguments for the Client functions. */
+/** Type of a Client when the handler is an Endpoint. */
+export type EndpointClient<
+  S extends EndpointShape,
+> = (x: ClientArg & FixOptionals<Omit<S, "result">>) => (
+  S extends { socket: true } ? (
+    S extends { result: infer R } ? R : never // Assumes Result is a WS
+  )
+  : Promise<[S extends { result: infer R } ? R : never, Response]>
+);
+
+// TODO: Other fetch options
+/** Arguments for the Client function. */
 export interface ClientArg {
   /**
-   * Request path. Joined with the client's baseUrl to form the final request
-   * URL.
+   * Base URL. Replaces the base URL provided during client construction, if
+   * any.
+   */
+  base?: string;
+  /**
+   * Request path joined with the base URL to form the final request URL. When
+   * end-to-end type safety is activated, this should only be used if the final
+   * endpoint expects it.
    */
   path?: string;
+  /** Extra headers to include when making the request. */
+  headers?: HeadersInit;
   /**
-   * Parameters to place into the path. Each `:pathParam` in the request path
-   * will be replaced with its parameter string in this record.
-   */
-  param?: ParamRecord;
-  /**
-   * For opening web sockets. If true, a web socket will be returned instead of
-   * a `[Result, Response]` pair. 
+   * For opening web sockets. If `true`, a web socket will be synchronously
+   * returned instead of a `[Result, Response]` pair.
    */
   socket?: boolean;
   /** Query string parameters to append to the request URL. */
@@ -136,134 +208,25 @@ export interface ClientArg {
    * be POST.
    */
   body?: unknown;
-  /** Extra headers to include when making the request. */
+}
+
+/** Settings used to initialize a `client()`. */
+export interface ClientInit {
+  /**
+   * Base URL, the location of the handler provided in the type parameter.
+   * Default: `"/"`
+   */
+  base?: string;
+  /** Extra headers to include on all client requests. */
   headers?: HeadersInit;
 }
 
-/** Client function for making RPC requests to a Cav server. */
-export type Client<T extends Handler = never> = (
-  // T is a Router
-  T extends (req: RouterRequest<infer RS>, ...a: any[]) => any ? <
-    P extends Paths<Expand<RS>>,
-    E = KeyInto<Expand<RS>, P>,
-  >(x: (
-    & ClientArg
-    & { path: P }
-    & (
-      E extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? (
-        Omit<FixOptionals<ES>, "result">
-      )
-      : E extends string ? {
-        socket?: false;
-        query?: QueryRecord;
-        body?: undefined;
-      }
-      : never
-    )
-  )) => (
-    E extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? (
-      ES extends { socket?: infer S; result: infer R } ? (
-        S extends true ? R // Assuming R is a WS
-        : Promise<[Unpack<R>, Response]>
-      )
-      : never
-    )
-    : E extends string ? (
-      P extends `${string}.txt` ? Promise<[string, Response]>
-      : P extends `${string}.json` ? Promise<[unknown, Response]>
-      : Promise<[Blob, Response]>
-    )
-    : unknown
-  )
-
-  // T is an Endpoint
-  : T extends (req: EndpointRequest<infer ES>, ...a: any[]) => any ? (x: (
-    & ClientArg
-    & Omit<FixOptionals<ES>, "result">
-  )) => (
-    ES extends { socket?: infer S; result: infer R } ? (
-      S extends true ? R // Assuming R is a WS
-      : Promise<[Unpack<R>, Response]>
-    )
-    : never
-  )
-
-  // T is something else. Generic fallback
-  : <S extends boolean = false>(x: (
-    & ClientArg
-    & { socket?: S }
-  )) => (
-    S extends true ? WS<unknown, unknown>
-    : Promise<[unknown, Response]>
-  )
-);
-
 /**
- * Creates a new Client function tied to a base URL, for triggering RPCs on a
- * Cav server and deserializing the response. If the type parameter is a Cav
- * Router or Endpoint, end-to-end type safety kicks in.
+ * Creates a new client function for making requests to remote Cav handlers. If
+ * the type of the handler is provided and it's a Cav handler, the client will
+ * have end-to-end typesafety turned on.
  */
-export function client<T extends Handler = never>(base = "/"): Client<T> {
-  const baseUrl = new URL(base, self.location?.origin);
-  baseUrl.pathname = baseUrl.pathname.split("/").filter(p => !!p).join("/");
-
-  return ((x: ClientArg) => {
-    const url = new URL(baseUrl.href);
-
-    let path = x.path || "";
-    if (path && x.param) {
-      for (const [k, v] of Object.entries(x.param)) {
-        path = path.replaceAll(
-          new RegExp(`(\/?):${k}(\/?)`, "g"),
-          "$1" + v + "$2",
-        );
-      }
-    }
-    path = path.split("/").filter(p => !!p).join("/");
-    url.pathname += url.pathname.endsWith("/") ? path : "/" + path;
-
-    if (x.query) {
-      for (const [k, v] of Object.entries(x.query)) {
-        if (Array.isArray(v)) {
-          for (const v2 of v) {
-            url.searchParams.append(k, v2);
-          }
-        } else {
-          url.searchParams.append(k, v);
-        }
-      }
-    }
-
-    if (x.socket) {
-      if (url.protocol === "http:") {
-        url.protocol = "ws:";
-      } else {
-        url.protocol = "wss:";
-      }
-      return webSocket(url.href);
-    }
-
-    return (async () => {
-      const req = packRequest(url.href, {
-        headers: x.headers,
-        body: x.body,
-      });
-      const res = await fetch(req);
-      const body = await unpack(res);
-      if (!res.ok && body instanceof HttpError) {
-        body.detail.res = res;
-        body.detail.body = body;
-        throw body;
-      } else if (!res.ok) {
-        throw new HttpError((
-          typeof body === "string" ? body
-          : res.statusText
-        ), {
-          status: res.status,
-          detail: { body, res },
-        });
-      }
-      return [body, res];
-    })();
-  }) as Client<T>;
+export function client<T extends Handler = never>(init: ClientInit): Client<T> {
+  // TODO
+  return null! as any;
 }

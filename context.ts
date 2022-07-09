@@ -10,9 +10,9 @@
   /** The current, unrouted portion of the requested path. */
   path: string;
   /** The raw query string parameters, as an object. */
-  query: Record<string, string | string[]>;
+  query: QueryRecord;
   /** The path parameters captured during the routing process so far. */
-  param: Record<string, string>;
+  param: ParamRecord;
   /**
    * If this isn't null, this Response should be returned as soon as possible in
    * the routing process. It means the path requested wasn't canonical, and this

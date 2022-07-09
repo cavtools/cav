@@ -11,4 +11,5 @@ export * from "./parser.ts";
 export * from "./router.ts";
 export * from "./serial.ts";
 export * from "./serve.ts";
+export * from "./socket.ts";
 export * from "./ws.ts";

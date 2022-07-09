@@ -6,17 +6,14 @@ import { context } from "./context.ts"
 import { noMatch } from "./router.ts";
 import { HttpError, packResponse, unpack } from "./serial.ts";
 import { cookieJar } from "./cookie.ts";
-import { webSocket } from "./ws.ts";
 import { normalizeParser } from "./parser.ts";
 import { serveBundle } from "./bundle.ts";
 import type { EndpointRequest } from "./client.ts";
 import type { Parser, ParserInput, ParserOutput } from "./parser.ts";
 import type { CookieJar } from "./cookie.ts";
 import type { ServeAssetOptions } from "./asset.ts";
-import type { WS } from "./ws.ts";
 import type { QueryRecord, ParamRecord } from "./context.ts";
 import type { ServeBundleOptions } from "./bundle.ts";
-import type { PackedResponse } from "./serial.ts";
 
 /** Options for processing requests, used to construct Endpoints. */
 export interface EndpointSchema {
@@ -31,12 +28,13 @@ export interface EndpointSchema {
   path?: string | null;
   /**
    * Parses any path parameters captured during routing. The result is available
-   * as the "param" resolve argument.
+   * as the "param" resolve argument. This parser will receive ParamRecord
+   * inputs.
    *
    * If an error is thrown during parsing, the endpoint won't match with the
    * request and the router will continue looking for matching handlers.
    */
-  param?: Parser<ParamRecord> | null;
+  param?: Parser | null;
   /**
    * Keys to use when signing cookies. The cookies are available as the
    * "cookie" resolve argument.
@@ -49,15 +47,16 @@ export interface EndpointSchema {
    * Context handling happens after the endpoint matched with the Request but
    * before input validation begins.
    */
-  ctx?: ((c: ContextArg) => any) | null;
+  ctx?: ((c: CtxArg) => any) | null;
   /**
    * Parses the query string parameters passed into the URL. Parsed query
-   * parameters are available to resolvers as the "query" argument.
+   * parameters are available to resolvers as the "query" argument. This parser
+   * will receive QueryRecord inputs.
    *
-   * If parsing fails, `undefined` will be parsed to check for a default value.
-   * If that also fails, a 400 bad request error will be sent to the client.
+   * Parsing fails when an error is thrown. If the error isn't an HttpError,
+   * it'll be wrapped in a 400 HttpError.
    */
-  query?: Parser<QueryRecord> | null;
+  query?: Parser | null;
   /**
    * Limits the size of posted bodies. If a body exceeds the limit, a 413
    * HttpError will be thrown and serialized back to the client.
@@ -69,11 +68,12 @@ export interface EndpointSchema {
   /**
    * Parses the POSTed body, if there is one. The behavior of this parser
    * determines the methods allowed for this endpoint. The output from parsing
-   * is available to resolvers as the "body" argument.
+   * is available to resolvers as the "body" argument. This parser will receive
+   * unknown inputs.
    *
    * If there is no parser, only GET and HEAD requests will be allowed. If there
    * is one and it successfully parses `undefined`, POST will also be allowed.
-   * If the parser throws when parsing `undefined`, *only* POST will be allowed. 
+   * If the parser throws when parsing `undefined`, only POST will be allowed. 
    */
   body?: Parser | null;
   /**
@@ -85,7 +85,7 @@ export interface EndpointSchema {
 }
 
 /** Arguments available to Context functions. */
-export interface ContextArg {
+export interface CtxArg {
   /** The Request being handled. */
   req: Request;
   /**
@@ -163,10 +163,10 @@ export interface ErrorArg {
 
 /** Arguments available to the resolve of an endpoint. */
 export interface ResolveArg<
-  Param extends EndpointSchema["param"],
-  Ctx extends EndpointSchema["ctx"],
-  Query extends EndpointSchema["query"],
-  Body extends EndpointSchema["body"],
+  ParamOut = ParamRecord,
+  CtxOut = undefined,
+  QueryOut = QueryRecord,
+  BodyOut = undefined,
 > {
   /** The Request being handled. */
   req: Request;
@@ -184,13 +184,13 @@ export interface ResolveArg<
   /** The path that matched the endpoint's `path` schema option. */
   path: string;
   /** The parsed path parameters captured while routing the request. */
-  param: EndpointSchema["param"] extends Param ? ParamRecord : ParserOutput<Param>;
+  param: ParamOut;
   /** The context created after the endpoint matched the Request. */
-  ctx: EndpointSchema["ctx"] extends Ctx ? undefined : ParserOutput<Ctx>;
+  ctx: CtxOut;
   /** The parsed query string parameters. */
-  query: EndpointSchema["query"] extends Query ? QueryRecord : ParserOutput<Query>;
+  query: QueryOut;
   /** The parsed Request body, if any. */
-  body: EndpointSchema["body"] extends Body ? undefined : ParserOutput<Body>;
+  body: BodyOut;
   /**
    * Packs a given body into a Response before resolving, which can be useful if
    * you want to set the response status or in cases where the deserialized
@@ -214,8 +214,6 @@ export interface ResolveArg<
   redirect: (to: string, status?: number) => Response;
 }
 
-declare const _endpoint: unique symbol;
-
 /** Cav Endpoint handler, for responding to requests. */
 export type Endpoint<
   Schema extends EndpointSchema | null,
@@ -227,24 +225,31 @@ export type Endpoint<
   req: EndpointRequest<{
     socket?: false;
     query: (
-      Schema extends { query: Parser } ? ParserInput<Schema["query"]>
+      // Here's my thinking: If the query parser can't accept QueryRecord
+      // inputs, the query on the client side should be typed as a generic
+      // QueryRecord. If the input type does extend QueryRecord, the type
+      // narrows to match the type expected
+      Schema extends { query: Parser } ? (
+        ParserInput<Schema["query"]> extends infer I ? (
+          I extends QueryRecord | undefined ? (
+            I extends undefined ? QueryRecord & I | undefined
+            : Record<never, never> extends I ? QueryRecord & I | undefined
+            : QueryRecord & I
+          )
+          : QueryRecord | undefined
+        )
+        : never
+      )
       : QueryRecord | undefined
     );
     body: (
       Schema extends { body: Parser } ? ParserInput<Schema["body"]>
       : undefined
     );
-    result: (
-      Result extends PackedResponse<any, any, any> ? Result
-      : PackedResponse<Result>
-    );
+    result: Result;
   }>,
   conn: http.ConnInfo,
-) => Promise<Response>) & {
-  // Prevents the type from being shown as a function in the magnifier when the
-  // schema is empty
-  [_endpoint]?: true;
-};
+) => Promise<Response>);
 
 /**
  * Constructs a new Endpoint request handler. The schema properties will be
@@ -252,26 +257,27 @@ export type Endpoint<
  * other endpoint schemas.
  */
 export function endpoint<
-  Schema extends EndpointSchema | null,
-  Ctx extends EndpointSchema["ctx"],
-  Param extends EndpointSchema["param"],
-  Query extends EndpointSchema["query"],
-  Body extends EndpointSchema["body"],
+  Schema extends EndpointSchema = {},
   Result = undefined,
 >(
-  schema: EndpointSchema & Schema & {
-    param?: Param;
-    ctx?: Ctx;
-    query?: Query;
-    body?: Body;
-  } | null,
-  resolve: (
-    (x: ResolveArg<Param, Ctx, Query, Body>) => Promise<Result> | Result
-  ) | null,
+  schema?: EndpointSchema & Schema | null,
+  resolve?: (x: ResolveArg<(
+    Schema["param"] extends Parser ? ParserOutput<Schema["param"]>
+    : ParamRecord
+  ), (
+    Schema["ctx"] extends (x: CtxArg) => infer C ? C
+    : undefined
+  ), (
+    Schema["query"] extends Parser ? ParserOutput<Schema["query"]>
+    : QueryRecord
+  ), (
+    Schema["body"] extends Parser ? ParserOutput<Schema["body"]>
+    : undefined
+  )>) => Promise<Result> | Result,
 ): Endpoint<Schema, Result>;
 export function endpoint(
-  _schema: EndpointSchema | null,
-  _resolve: ((x: ResolveArg<any, any, any, any>) => any) | null,
+  _schema?: EndpointSchema | null,
+  _resolve?: ((x: ResolveArg<any, any, any, any>) => any) | null,
 ) {
   const schema = _schema || {};
   const resolve = _resolve || (async () => {});
@@ -486,11 +492,7 @@ function pathMatcher(opt: {
     useFullPath ? opt.path!.slice(1) : opt.path || "/",
     "http://_",
   );
-  const parseParam = (
-    typeof opt.param === "function" ? opt.param
-    : opt.param ? opt.param.parse
-    : null
-  );
+  const parseParam = opt.param ? normalizeParser(opt.param) : null;
 
   return async (req: Request) => {
     const cavCtx = context(req);
@@ -517,11 +519,7 @@ function pathMatcher(opt: {
     try {
       param = await parseParam(param);
     } catch {
-      try {
-        param = await parseParam(undefined);
-      } catch {
-        throw new HttpError("404 not found", { status: 404 });
-      }
+      throw new HttpError("404 not found", { status: 404 });
     }
 
     return { path, param, unparsedParam };
@@ -547,20 +545,16 @@ function inputParser(opt: {
       try {
         query = await parseQuery(query);
       } catch (err) {
-        try {
-          query = await parseQuery(undefined);
-        } catch {
-          if (err instanceof HttpError) {
-            throw err;
-          }
-          throw new HttpError((
-            err instanceof Error ? err.message
-            : "400 bad request"
-          ), {
-            status: 400,
-            detail: { original: err }
-          });
+        if (err instanceof HttpError) {
+          throw err;
         }
+        throw new HttpError((
+          err instanceof Error ? err.message
+          : "400 bad request"
+        ), {
+          status: 400,
+          detail: { original: err }
+        });
       }
     }
 
@@ -633,127 +627,4 @@ export function bundle(init: BundleInit) {
  */
 export function redirect(to: string, status?: number) {
   return endpoint(null, ({ redirect }) => redirect(to, status || 302));
-}
-
-/** Schema options for creating a `socket()` handler. */
-export interface SocketSchema extends Omit<
-  EndpointSchema,
-  "maxBodySize" | "body"
-> {
-  /**
-   * Incoming message parser. Without this, received messages will be typed as
-   * `unknown`. When a message fails to parse, an error message will be sent
-   * back to the client.
-   */
-  recv?: Parser | null;
-  /**
-   * The type of message this Socket expects to send to a connected client. The
-   * value of this property doesn't matter, it's only used for the type.
-   */
-  send?: any;
-}
-
-/** Cav endpoint handler for connecting web sockets. */
-export type Socket<Schema extends SocketSchema | null> = (
-  Schema extends null ? {}
-  : Schema
-) & ((
-  req: EndpointRequest<{
-    socket: true;
-    query: (
-      Schema extends { query: Parser } ? ParserInput<Schema["query"]>
-      : QueryRecord | undefined
-    );
-    body: (
-      Schema extends { body: Parser } ? ParserInput<Schema["body"]>
-      : undefined
-    );
-    // This is the result on the client side. What the socket receives on the
-    // server should go first in the WS, that's what they'll be able to send
-    result: WS<(
-      Schema extends { recv: Parser } ? ParserInput<Schema["recv"]>
-      : unknown
-    ), (
-      Schema extends SocketSchema ? (
-        null | undefined extends Schema["send"] ? unknown
-        : Schema["send"]
-      )
-      : unknown
-    )>;
-  }>,
-  conn: http.ConnInfo,
-) => Promise<Response>);
-
-/** Arguments available to the setup function of a socket endpoint. */
-export interface SetupArg<
-  Param extends SocketSchema["param"],
-  Ctx extends SocketSchema["ctx"],
-  Query extends SocketSchema["query"],
-  Send extends SocketSchema["send"],
-  Recv extends SocketSchema["recv"],
-> extends Omit<
-  ResolveArg<Param, Ctx, Query, any>,
-  "body" | "asset" | "bundle" | "redirect" | "res"
-> {
-  ws: WS<Send, (
-    SocketSchema["recv"] extends Recv ? unknown : ParserOutput<Recv>
-  )>;
-}
-
-/**
- * Constructs a new Socket request handler using the provided schema and setup
- * function. The schema properties will be assigned to the returned socket
- * endpoint function, with the setup argument available as the "setup" property.
- */
-export function socket<
-  Schema extends SocketSchema | null,
-  Param extends SocketSchema["param"],
-  Ctx extends SocketSchema["ctx"],
-  Query extends SocketSchema["query"],
-  Send extends SocketSchema["send"],
-  Recv extends SocketSchema["recv"],
->(
-  schema: SocketSchema & Schema & {
-    param?: Param;
-    ctx?: Ctx;
-    query?: Query;
-    send?: Send;
-    recv?: Recv;
-  } | null,
-  setup: (
-    | ((x: SetupArg<Param, Ctx, Query, Send, Recv>) => Promise<void> | void)
-    | null
-  ),
-): Socket<Schema>;
-export function socket(
-  _schema: SocketSchema | null,
-  _setup: (
-    | ((x: SetupArg<any, any, any, any, any>) => Promise<void> | void)
-    | null
-  ),
-) {
-  const schema = _schema || {};
-  const setup = _setup || (() => {});
-  const recv = normalizeParser(schema.recv || ((m) => m));
-
-  return endpoint(schema, async x => {
-    let socket: WebSocket;
-    let response: Response;
-    try {
-      ({ socket, response } = Deno.upgradeWebSocket(x.req, {
-        protocol: "json",
-      }));
-    } catch {
-      x.headers.set("upgrade", "websocket");
-      throw new HttpError("426 upgrade required", { status: 426 });
-    }
-
-    const ws = webSocket(socket, { recv });
-
-    if (setup) {
-      await setup({ ...x, ws });
-    }
-
-    return response;
-  });
 }

@@ -4,17 +4,15 @@
 import type * as controller from "../mod.ts";
 import { client } from "./deps.ts";
 
-const roomClient = client<controller.RoomRouter>(self.location.pathname);
-
-export function connect() {
-  return roomClient({
+export function roomConnect() {
+  return client<controller.RoomRouter>(self.location.pathname)({
     path: "ws",
     socket: true,
   });
 }
 
-export async function send(msg: string) {
-  return await roomClient({
+export async function roomSend(msg: string) {
+  return await client<controller.RoomRouter>(self.location.pathname)({
     path: "send",
     body: msg,
   });
