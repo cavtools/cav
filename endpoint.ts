@@ -2,7 +2,7 @@
 
 import { http, path as stdPath } from "./deps.ts";
 import { serveAsset } from "./asset.ts";
-import { context } from "./context.ts"
+import { context } from "./context.ts";
 import { noMatch } from "./router.ts";
 import { HttpError, packResponse, unpack } from "./serial.ts";
 import { cookieJar } from "./cookie.ts";

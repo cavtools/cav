@@ -4,6 +4,7 @@ export * from "./asset.ts";
 export * from "./bundle.ts";
 export * from "./client.ts";
 export * from "./cookie.ts";
+export * from "./context.ts";
 export * from "./endpoint.ts";
 export * from "./html.ts";
 export * from "./jwt.ts";

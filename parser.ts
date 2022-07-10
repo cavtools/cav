@@ -1,6 +1,14 @@
 // Copyright 2022 Connor Logan. All rights reserved. MIT License.
 // This module is browser-compatible.
 
+// TODO: Remove ParserObject, replace it with ZodParser, create related utility
+// types  
+// TODO: Make a note in the docs about how ParserFunctions work: They are type
+// guards that also parse. The type of the input is specified explicitly, the
+// first half of the function makes sure the input type is correct, the second
+// half transforms into an output. If the input isn't valid, they should throw
+// errors (unlike a type guard/predicate)
+
 /**
  * An object or function responsible for parsing data or throwing errors if the
  * data isn't shaped as expected. These can either be functions with a single
