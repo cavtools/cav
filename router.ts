@@ -39,9 +39,9 @@ function matchPattern(pattern: Pattern, ctxPath: string): {
     if (pattern[i].startsWith(":")) {
       param[pattern[i].slice(1)] = split[i];
     } else {
-      const r = decodeURIComponent(pattern[i]);
+      const p = decodeURIComponent(pattern[i]);
       const s = decodeURIComponent(split[i]);
-      if (r !== s) {
+      if (p !== s) {
         return null;
       }
     }

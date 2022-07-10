@@ -4,8 +4,7 @@
 import { webSocket } from "./ws.ts";
 import { HttpError, packRequest, unpack } from "./serial.ts";
 import type { WS } from "./ws.ts";
-import type { QueryRecord, ParamRecord } from "./context.ts";
-import type { Unpack } from "./serial.ts";
+import type { QueryRecord } from "./context.ts";
 
 declare const _client: unique symbol;
 
@@ -65,30 +64,6 @@ export interface RouterRequest<Shape = never> extends Request {
   [_client]?: {
     router: Shape;
   };
-}
-
-// TODO: Include any others supported by `fetch()`, example: CORS
-/** Arguments for the Client functions. */
-export interface ClientArg {
-  /**
-   * Extra URL path to include before the request is made. This should only be
-   * used if the endpoint expects it.
-   */
-  path?: string;
-  /**
-   * For opening web sockets. If true, a web socket will be returned instead of
-   * a `[Result, Response]` pair. 
-   */
-  socket?: boolean;
-  /** Query string parameters to append to the request URL. */
-  query?: QueryRecord;
-  /** Extra headers to include when making the request. */
-  headers?: HeadersInit;
-  /**
-   * Body to send with the request. If this isn't undefined, the request method
-   * will be POST.
-   */
-  body?: unknown;
 }
 
 /**
@@ -183,11 +158,8 @@ export type EndpointClient<
 // TODO: Other fetch options
 /** Arguments for the Client function. */
 export interface ClientArg {
-  /**
-   * Base URL. Replaces the base URL provided during client construction, if
-   * any.
-   */
-  base?: string;
+  /** Replaces the base URL provided during client construction, if any. */
+  url?: URL | string;
   /**
    * Request path joined with the base URL to form the final request URL. When
    * end-to-end type safety is activated, this should only be used if the final
@@ -213,10 +185,9 @@ export interface ClientArg {
 /** Settings used to initialize a `client()`. */
 export interface ClientInit {
   /**
-   * Base URL, the location of the handler provided in the type parameter.
-   * Default: `"/"`
+   * The location of the handler provided in the type parameter. Default: `"/"`
    */
-  base?: string;
+  url?: URL | string;
   /** Extra headers to include on all client requests. */
   headers?: HeadersInit;
 }
@@ -226,7 +197,80 @@ export interface ClientInit {
  * the type of the handler is provided and it's a Cav handler, the client will
  * have end-to-end typesafety turned on.
  */
-export function client<T extends Handler = never>(init: ClientInit): Client<T> {
-  // TODO
-  return null! as any;
+export function client<T extends Handler = never>(
+  init?: ClientInit,
+): Client<T> {
+  const doTheFetch = async (url: URL, x: ClientArg) => {
+    const headers = new Headers(init?.headers);
+    for (const [k, v] of new Headers(x.headers).entries()) {
+      headers.append(k, v);
+    }
+
+    if (x.query) {
+      for (const [k, v] of Object.entries(x.query)) {
+        if (Array.isArray(v)) {
+          for (const v2 of v) {
+            url.searchParams.append(k, v2);
+          }
+        } else if (v) {
+          url.searchParams.append(k, v);
+        }
+      }
+    }
+
+    if (x.socket) {
+      if (url.protocol === "http:") {
+        url.protocol = "ws:"
+      } else {
+        url.protocol = "wss:"
+      }
+      return webSocket(url.href);
+    }
+
+
+    return (async () => {
+      const req = packRequest(url.href, { headers, body: x.body });
+      const res = await fetch(req);
+      const body = await unpack(res);
+      if (!res.ok && body instanceof HttpError) {
+        Object.assign(body.detail, { body, res });
+        throw body;
+      } else if (!res.ok) {
+        throw new HttpError(typeof body === "string" ? body : res.statusText, {
+          status: res.status,
+          detail: { body, res },
+        });
+      }
+      return [body, res];
+    })();
+  };
+
+  const proxy = (url: URL) => {
+    const wrapped = (x: ClientArg) => doTheFetch(url, x);
+    
+    return new Proxy(wrapped, {
+      get: (_target, prop, _receiver): unknown => {
+        if (typeof prop === "symbol") {
+          return (wrapped as unknown as Record<symbol, unknown>)[prop];
+        }
+
+        const u = new URL(url.href);
+        u.pathname += "/" + encodeURIComponent(prop);
+        return proxy(u);
+      },
+    });
+  };
+
+  const startUrl = (
+    typeof init?.url === "object" ? init.url
+    : new URL(init?.url || "/", self.location?.origin)
+  );
+  startUrl.pathname = (
+    startUrl.pathname
+    .split("/")
+    .filter(p => !!p)
+    .join("/")
+  );
+
+  return proxy(startUrl) as unknown as Client<T>;
 }
