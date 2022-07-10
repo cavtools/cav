@@ -46,9 +46,9 @@ export function context(request: Request): Context {
   }
 
   const url = new URL(req.url);
-  const path = `/${url.pathname.split("/").filter((p) => !!p).join("/")}`;
+  const path = url.pathname.split("/").filter((p) => !!p).join("/");
   let redirect: Response | null = null;
-  if (path !== url.pathname) {
+  if (path !== url.pathname.slice(1)) {
     url.pathname = path;
     // NOTE: Don't use Response.redirect. It prevents modifying headers
     // redirect = Response.redirect(url.href, 302);

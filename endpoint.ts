@@ -19,8 +19,11 @@ import type { ServeBundleOptions } from "./bundle.ts";
 export interface EndpointSchema {
   /**
    * URLPattern string to match against the Request's routed path. If the string
-   * starts with '^', the full request path will be used instead. The full
+   * starts with '^', the full request path will be used instead.The full
    * URLPattern syntax is supported.
+   *
+   * The default is an empty string, meaning all path segments should've been
+   * routed already before this endpoint is called.
    *
    * Any captured path parameters will be merged into the path parameters
    * captured during routing.
@@ -130,7 +133,7 @@ export interface ErrorArg {
   url: URL;
   /** Connection information provided by Deno. */
   conn: http.ConnInfo;
-  /** The path that matched the Endpoint's path schema option. */
+  /** The routed path. */
   path: string;
   /** The unprocessed query object associated with this request. */
   query: QueryRecord;
@@ -303,7 +306,7 @@ export function endpoint(
     const asset = (opt?: ServeAssetOptions) => serveAsset(req, opt);
     const bundle = (opt: ServeBundleOptions) => serveBundle(req, opt);
     const redirect = (to: string, status?: number) => {
-      if (to.startsWith("../") || to.startsWith(".")) {
+      if (to.startsWith("../") || to.startsWith("./")) {
         to = stdPath.join(url.pathname, to);
       }
       const u = new URL(to, url.origin);
@@ -489,15 +492,16 @@ function pathMatcher(opt: {
 }> {
   const useFullPath = opt.path && opt.path.startsWith("^");
   const pattern = new URLPattern(
-    useFullPath ? opt.path!.slice(1) : opt.path || "/",
+    useFullPath ? opt.path!.slice(1) : opt.path || "",
     "http://_",
   );
   const parseParam = opt.param ? normalizeParser(opt.param) : null;
 
   return async (req: Request) => {
     const cavCtx = context(req);
-    const path = useFullPath ? cavCtx.url.pathname : cavCtx.path;
-    const match = pattern.exec(path, "http://_");
+    const path = cavCtx.path;
+    const matchPath = useFullPath ? cavCtx.url.pathname : path;
+    const match = pattern.exec(matchPath, "http://_");
 
     if (!match) {
       throw new HttpError("404 not found", { status: 404 });

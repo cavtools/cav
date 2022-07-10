@@ -47,10 +47,12 @@ function matchPattern(pattern: Pattern, ctxPath: string): {
     }
   }
 
-  return {
-    param,
-    nextPath: split.slice(i).join("/"),
+  let nextPath = split.slice(i).join("/");
+  if (!nextPath) {
+    nextPath = "/";
   }
+
+  return { param, nextPath };
 }
 
 /** Cav Router handlers, for routing requests. */
@@ -68,8 +70,7 @@ export function router<S extends RouterShape>(
   routes: S & {
     // Type errors whenever an invalid path is used on a router
     [K in keyof S]: (
-      K extends "/" ? S[K]
-      : K extends (
+      K extends (
         // Duplicate slashes
         | `${string}//${string}`
         // Leading/trailing slashes
@@ -182,7 +183,7 @@ export function router<S extends RouterShape>(
 
       // Multiple slashes next to each other aren't allowed, and neither are
       // leading/trailing slashes
-      if (!s) {
+      if (!s && split.length !== 1) {
         throw new SyntaxError(
           "Duplicate and leading/trailing slashes aren't permitted in routers",
         );
