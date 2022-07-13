@@ -125,6 +125,11 @@ export function router<S extends RouterShape>(
       const modified = new Date();
 
       v = async (req: Request) => {
+        const cavCtx = context(req);
+        if (cavCtx.path.length) {
+          return noMatch(new Response("404 not found", { status: 404 }));
+        }
+
         if (req.method === "OPTIONS") {
           return new Response(null, {
             status: 204,
