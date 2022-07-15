@@ -2,12 +2,9 @@
 
 A server framework for [Deno](https://deno.land).
 
-- [Goals](#goals)
-- [Inspirations](#inspirations)
-
 **Status:** Full of bugs but ready to play with. Do NOT use this in production.
 
-## Goals
+<!-- ## Goals
 
 - It should do the basics
   - [x] Routing
@@ -32,13 +29,13 @@ A server framework for [Deno](https://deno.land).
 - It should be as independent as possible
   - [x] No third-party dependencies
 - Deployments should be simple
-  - [x] [Deno Deploy](https://deno.com) without a build step
+  - [x] [Deno Deploy](https://deno.com) without a build step -->
 
-## Inspirations
+<!-- ## Inspirations
 
 - [Express](https://expressjs.com/) / [Koa](https://koajs.com/) /
   [Oak](https://oakserver.github.io/oak/)
 - [Zod](https://github.com/colinhacks/zod) / [tRPC](https://trpc.io)
 - [superjson](https://github.com/blitz-js/superjson) /
   [devalue](https://github.com/Rich-Harris/devalue) /
-  [json-dry](https://github.com/11ways/json-dry)
+  [json-dry](https://github.com/11ways/json-dry) -->
