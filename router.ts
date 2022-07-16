@@ -39,14 +39,14 @@ function matchPattern(pattern: string[], ctxPath: string[]): {
   const param: ParamRecord = {};
   let i = 0;
   for (; i < pattern.length; i++) {
-    if (pattern[i].startsWith(":")) {
-      param[pattern[i].slice(1)] = ctxPath[i];
-    } else {
+    if (!pattern[i].startsWith(":")) {
       const p = decodeURIComponent(pattern[i]);
       const s = decodeURIComponent(ctxPath[i]);
       if (p !== s) {
         return null;
       }
+    } else {
+      param[pattern[i].slice(1)] = ctxPath[i];
     }
   }
 
@@ -203,7 +203,8 @@ export function router<S extends RouterShape>(
 
   // Sort the handlers like this:
   //   1. Solo wildcards are always last
-  //   2. By path depth. Paths with more path segments get tested sooner.
+  //   2. By comparing path segments and path depth. Parameters are sorted after
+  //      concrete segments, and shallower paths are sorted after deeper paths
   //   3. For two paths that have the same depth, index order is used (lower
   //      index === higher priority)
   const paths = Object.keys(shape);
@@ -221,11 +222,34 @@ export function router<S extends RouterShape>(
     }
 
     // #2
-    const la = a.split("/").length;
-    const lb = b.split("/").length;
-    if (la !== lb) {
-      return lb - la;
+    const sa = a.split("/");
+    const sb = b.split("/");
+    for (let i = 0; i < Math.max(sa.length, sb.length); i++) {
+      if (i === sa.length && i === sb.length) {
+        break; // Go on to the next check
+      }
+      if (i === sa.length) {
+        return 1;
+      }
+      if (i === sb.length) {
+        return -1;
+      }
+      if (sa[i].startsWith(":") && sb[i].startsWith(":")) {
+        continue;
+      }
+      if (sa[i].startsWith(":")) {
+        return 1;
+      }
+      if (sb[i].startsWith(":")) {
+        return -1;
+      }
     }
+
+    // const la = a.split("/").length;
+    // const lb = b.split("/").length;
+    // if (la !== lb) {
+    //   return lb - la;
+    // }
 
     // #3
     return paths.indexOf(b) - paths.indexOf(a);
