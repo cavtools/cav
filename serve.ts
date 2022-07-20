@@ -3,6 +3,12 @@
 import { http } from "./deps.ts";
 
 /**
+ * Information about the connection a request arrived on. This is a re-export of
+ * the ConnInfo type from https://deno.land/std/http/server.ts.
+ */
+export type ConnInfo = http.ConnInfo;
+
+/**
  * Options for running an http server. This is a re-export of the ServerInit
  * type from https://deno.land/std/http/server.ts.
  */

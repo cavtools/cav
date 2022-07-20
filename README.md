@@ -3,14 +3,15 @@ making one.
 
 It's called Cav. It runs on [Deno](https://deno.land).
 
-Tidbits:
+Features:
 
-- The Basics: Routers, endpoints, cookies, web sockets, etc.
-- Built-in end-to-end type safety
-- Automatic serialization of most data types
-- Browser-side TypeScript bundling (powered by Deno)
+- The Basics: Routers, endpoints, (signed) cookies, web sockets, etc.
+- Opt-in end-to-end type safety
+- De/serialization of most data types (experimental)
+- Browser-side TypeScript bundling, powered by Deno
 - Functional, declarative syntax
 - Zero third party dependencies
+- Weird
 
 **NOTE:** Definitely **NOT** production ready, but it does power my [personal
 site](https://connor.lol) 🤷‍♂️ 
