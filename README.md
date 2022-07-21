@@ -13,9 +13,6 @@ Features:
 - Zero third party dependencies
 - Weird
 
-**NOTE:** Definitely **NOT** production ready, but it does power my [personal
-site](https://connor.lol) 🤷‍♂️ 
-
 ## Inspirations
 
 - [Express](https://expressjs.com/) / [Koa](https://koajs.com/) /
